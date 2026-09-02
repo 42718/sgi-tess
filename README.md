@@ -3,6 +3,12 @@
 A distributed render framework for **real Silicon Graphics hardware** — IRIX 6.5.30,
 MIPSpro 7.4.4, SGI MPT 1.9 (MPI 4.4), Motif 2.1.20 with libSgm.
 
+![Tess rendering a Mandelbrot across three SGI machines](design/img/tess-replay.gif)
+
+*The design, in motion: 144 tiles dealt centre-out across arthur and aurora while lucy
+shades and blits. Not a screenshot of working software — this is the UI design, rendered
+from the same markup and fractal maths the real thing will use.*
+
 The first module is a Mandelbrot renderer, reviving a set of 2001-era sources. The point
 isn't the fractal — it's the framework underneath: a tile scheduler, a credit-based
 prefetch pipeline, and a two-window Motif UI, all running across a small heterogeneous
