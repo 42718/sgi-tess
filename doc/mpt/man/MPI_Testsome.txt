@@ -1,0 +1,132 @@
+
+
+
+MPI_TESTSOME(3) 					       MPI_TESTSOME(3)
+
+
+
+NAME
+     MPI_Testsome - Tests for specified communications to complete
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Testsome( incount, array_of_requests, outcount,
+	  array_of_indices, array_of_statuses )
+	  int	      incount, *outcount, array_of_indices[];
+	  MPI_Request array_of_requests[];
+	  MPI_Status  array_of_statuses[];
+
+
+     C++:
+
+	  #include <mpi.h>
+
+	  static int Request::Testsome(
+	  int		    incount,
+	  Request	    array_of_requests[],
+	  int		    array_of_indices[])
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER incount, array_of_requests(*), outcount,
+	  array_of_indices(*), array_of_statuses(MPI_STATUS_SIZE,*),
+	  ierror
+
+	  CALL MPI_TESTSOME(incount, array_of_requests(*), outcount,
+	  array_of_indices(*), array_of_statuses(MPI_STATUS_SIZE,*),
+	  ierror)
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Testsome routine tests for specified communications to complete.
+     This routine accepts the following parameters:
+
+     incount   Specifies the length of array_of_requests (integer)
+
+     array_of_requests
+	       Specifies the array of requests (array of handles)
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_TESTSOME(3) 					       MPI_TESTSOME(3)
+
+
+
+     outcount  Returns the number of completed requests (integer)
+
+     array_of_indices
+	       Returns the array of indices of operations that completed
+	       (array of integers)
+
+     array_of_statuses
+	       Returns the array of status objects for operations that
+	       completed (array of status)
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 2
+
+
+

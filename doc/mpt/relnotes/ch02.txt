@@ -1,0 +1,198 @@
+
+
+
+                                  - 1 -
+
+
+
+       2.  MPTInstallationforIRIXSystems
+
+       This chapter provides information that you need to install
+       MPT on IRIX systems.  For details of MPT installation,
+       contact your SGI support analyst.
+
+
+       2.1  MPTSubsystems
+
+       The MPT for IRIX product includes the following subsystems:
+
+
+       Subsystem      Description
+
+          mpi         MPI 4.4 (MPT 1.9)
+
+          sma         SMA 4.2 (MPT 1.9)
+
+
+       MPT release packages version 1.5.2 and prior also contained
+       the PVM subsystem.  As noted in chapter 1 of these relnotes,
+       PVM has been unbundled and is now available as a stand-alone
+       product via DCS (Download Cool Software).
+
+       With MPT release packages between versions 1.4 and 1.5.2,
+       the MPI, SMA, and PVM components enforced mutual
+       prerequisites for each other so that sites could install
+       only complete MPT packages.  However, there is no functional
+       dependency between PVM and either MPI or SMA.
+
+       Installation of MPT 1.6.1 or later on a system that has an
+       older MPT version installed will upgrade the SMA and MPI
+       components.  Installing an MPT 1.6 or later release will not
+       remove previous versions of PVM.
+
+       If you subsequently attempt to uninstall an MPT 1.6.1 or
+       later release, iiiinnnnsssstttt or sssswwwwmmmmggggrrrr will flag a conflict because of
+       the packaging dependency of PVM on MPI and SMA.
+
+       If the intention is to reinstall a previous version of MPT,
+       MPT 1.4.0.2 for example, you should simply remove PVM along
+       with the MPT 1.6 uninstallation.  You will regain PVM upon
+       reinstallation of the previous version of MPT, MPT 1.4.0.2
+       in this example.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+       2.2  DiskSpaceRequirements
+
+       Disk space requirements for the MPT for IRIX product are
+       approximately 21.2 MB, with approximately 1.5 MB overhead
+       during installation.
+
+
+       2.3  Prerequisites
+
+       Prerequisites for the MPT for IRIX product are as follows:
+
+          +o To install the mpi subsystem, you must also install the
+            sma subsystem.
+
+          +o The manuals must have the insightbase.sw.eoe subsystem
+            installed.
+
+          +o The eoe.sw.base (6.5+) must be installed.
+
+          +o The MPI component requires Array Services version 3.4
+            or higher.
+
+
+       2.4  InstallingInanAlternateLocation
+
+       MPT software can be installed in an alternate location for
+       use with the Modules software package. Chapter 4 of the
+       release notes for the Modules product describes how to
+       install MPT for use with Modules. You can obtain these
+       relnotes by using the following command:
+
+                           rrrreeeellllnnnnooootttteeeessss mmmmoooodddduuuulllleeeessss 4444
+
+       If MPT software has been installed on your system for use
+       with Modules, you can access the software with the mmmmoooodddduuuulllleeee
+       command.
+
+       If MPT has not been installed for use with Modules, the
+       software resides in default locations on your system
+       (////uuuussssrrrr////iiiinnnncccclllluuuuddddeeee, ////uuuussssrrrr////lllliiiibbbb, and so on), as in previous
+       releases.
+
+       If you are installing MPT in a nondefault location, you must
+       update the MANPATH environment variable, as in the following
+       example (MPIROOT is the non-default location):
+
+         sssseeeetttteeeennnnvvvv MMMMAAAANNNNPPPPAAAATTTTHHHH $MPIROOT////uuuussssrrrr////mmmmaaaannnn::::////uuuussssrrrr////mmmmaaaannnn::::////uuuussssrrrr////llllooooccccaaaallll////mmmmaaaannnn
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 3 -
+
+
+
+       2.5  SwapConfigurationRecommendations
+
+       To run applications that use the MPI or SHMEM components of
+       this distribution optimally, it might be necessary for your
+       system administrator to configure virtual and logical swap
+       space.
+
+       To enable certain optimization features, 64-bit MPI and
+       SHMEM applications employ shared memory optimization
+       techniques that require large reservations of swap space,
+       although most of the space is not actually used.  However,
+       if sufficient swap space is unavailable, large MPI jobs can
+       fail at job startup. To avoid this problem, virtual swap
+       space should be configured on the system.
+
+       MPI and SHMEM 64-bit applications make use of the
+       MMMMAAAAPPPPAAAAUUUUTTTTOOOORRRREEEESSSSEEEERRRRVVVV feature of mmmmmmmmaaaapppp.  This feature permits the
+       application to allocate large amounts of virtual memory
+       without actually reserving space on swap until pages are
+       faulted in. Long running, memory-intensive MPI applications
+       using large numbers of processors may fault in a significant
+       number of these pages, in addition to pages faulted in for
+       the heap or stack of each process.  This can lead to a
+       significant increase in swap space requirements.  If the
+       operating system begins making significant use of the swap
+       device(s), and sufficient logical swap is unavailable, the
+       operating system will begin to kill processes.
+
+       To avoid this problem, additional logical swap space must be
+       configured. In cases in which MPI jobs are expected to
+       consume most of the available memory on the system, logical
+       swap space should be configured to be at least twice the
+       size of physical memory on the system.
+
+       The sssswwwwaaaapppp(1M) man page provides details for configuring
+       logical and virtual swap space.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

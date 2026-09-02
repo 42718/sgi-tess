@@ -1,0 +1,202 @@
+
+
+
+MPI_SGI_stat(3) 					       MPI_SGI_stat(3)
+
+
+
+NAME
+     MPI_SGI_stat - Returns MPI statistics
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+	  #include <mpi_ext.h>
+
+	  MPI_SGI_stat_resetall();
+
+	  MPI_SGI_stat_reset(int stats_num, unsigned int *stat_types);
+
+	  MPI_SGI_stat_print(int reset, const char *prefix,
+	  const char *file)
+
+	  MPI_SGI_stat_support(unsigned int stats_num,
+	  unsigned int *stat_types, int *stat_support)
+
+	  MPI_SGI_stat_get(unsigned int stats_num,
+	  unsigned int *stat_types, __uint64_t *stat_values,
+	  __uint64_t *stat_gen)
+
+
+     Fortran:
+
+	  INCLUDE "mpi_extf.h"
+
+	  CALL MPI_SGI_STAT_RESETALL()
+
+	  INTEGER reset
+	  CHARACTER*n prefix,file
+	  CALL MPI_SGI_STAT_PRINT(reset, prefix, file)
+
+	  INTEGER stats_num
+	  INTEGER stat_types()
+	  CALL MPI_SGI_STAT_RESET(stats_num, stat_types)
+
+	  INTEGER stats_num
+	  INTEGER stat_types()
+	  INTEGER stat_support()
+	  CALL MPI_SGI_STAT_SUPPORT(stats_num, stat_types, stat_support)
+
+	  INTEGER stats_num
+	  INTEGER stat_types()
+	  INTEGER(KIND=8) stat_values()
+	  INTEGER(KIND=8) stat_gen()
+	  CALL MPI_SGI_STAT_GET(stats_num, stat_types, stat_values,
+	  stat_gen)
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_SGI_stat(3) 					       MPI_SGI_stat(3)
+
+
+
+DESCRIPTION
+     The following MPI_SGI_stat routines return MPI statistics:
+
+     MPI_SGI_stat_get	 Returns the current values for the statistics
+			 described in stat_types.  stats_num gives the number
+			 of elements in stat_types.  stat_values and stat_gen
+			 are assumed to have the same number of elements. Each
+			 element of stat_types describes one of the statistics
+			 to be retrieved.  The possible values for the
+			 elements in stat_types are given in <mpi_ext.h> (for
+			 example, MPI_SGI_STATS_PKT_HDR_CRETRY).  This routine
+			 sets the corresponding element in stat_values equal
+			 to the current value of the statistics counter.  It
+			 also sets the corresponding element in stat_gen.
+			 stat_gen gives the number of times that a particular
+			 statistics counter has been reset or reenabled
+			 (currently, all counters are always enabled).
+
+     MPI_SGI_stat_print()
+			 Prints statistics counters. If reset is nonzero, the
+			 counters are set to 0 after they are printed.
+			 Messages can be prefixed with the character string
+			 that prefix points to.  If prefix is a NULL pointer,
+			 no prefix is added to the message.  If file is a
+			 non-NULL pointer, it specifies the file name to which
+			 messages are printed. In this case, output is written
+			 to the end of the file.  If file is a NULL pointer,
+			 messages are printed to stderr.  Fortran users can
+			 specify a character string of zero length to obtain
+			 functionality equivalent to a NULL pointer.
+
+			 In addition to accounting for data sent by the user's
+			 MPI calls, these statistics include data sent by MPI
+			 library internals. For example, an MPI_Barrier() call
+			 might result in data being sent.  Also, for some
+			 messages, the receiving process sends back an
+			 acknowledgement message.
+
+			 Statistics are categorized by the type of request
+			 (collective or point-to-point).  The following
+			 statistics are currently printed, but this may change
+			 in future releases:
+
+			      *   Number of retries allocating MPI headers.
+				  If a header cannot be allocated immediately
+				  for a message, the library can retry.  MPI
+				  headers can come from two separate pools,
+				  the per-process pool and the per-host pool.
+				  Separate statistics are kept for each.  For
+				  more detail, see the documentation of the
+				  MPI_MSGS_PER_HOST and MPI_MSGS_PER_PROC
+				  environment variables on the MPI(1) man
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_SGI_stat(3) 					       MPI_SGI_stat(3)
+
+
+
+				  page.
+
+			      *   Number of retries allocating MPI buffers.
+				  If a buffer cannot be allocated immediately
+				  for a message, the library can retry. MPI
+				  buffers can come from two separate pools,
+				  the per-process pool and the per-host pool.
+				  Separate statistics are kept for each.  For
+				  more detail, see the documentation of the
+				  MPI_BUFS_PER_HOST and MPI_BUFS_PER_PROC
+				  environment variables on the MPI(1) man
+				  page.
+
+
+
+			 The following statistics are also categorized by
+			 method of transmission, such as shared memory,
+			 TCP/IP, HIPPI-bypass, GSN, or Myrinet.
+
+			      *   Number of send requests made.
+
+			      *   Number of data buffers sent (Each sent
+				  message can use 0 or more data buffers).
+
+			      *   Number of message headers sent (Each sent
+				  message can use 0 or more headers).
+
+			      *   Number of bytes sent.
+
+     MPI_SGI_stat_reset()
+			 Sets all specified statistics counters to 0.
+
+     MPI_SGI_stat_resetall
+			 Resets all statistics counters to zero.
+
+     MPI_SGI_stat_support
+			 Can be used to determine whether a particular
+			 statistic is supported with the current version of
+			 the library.  stats_num gives the number of elements
+			 in stat_types. Each element of stat_types describes
+			 one of the statistics to be queried.  The possible
+			 values are given in <mpi_ext.h> (for example,
+			 MPI_SGI_STATS_HDR_PROC_CRETRY).  This routine sets
+			 the corresponding element in stat_support to one of
+			 the following values:
+
+			      *   MPI_SGI_STAT_SUPPORTED if the statistic is
+				  currently supported
+
+			      *   MPI_SGI_STAT_UNSUPPORTED if the statistic is
+				  unsupported
+
+
+
+
+									Page 3
+
+
+
+
+
+
+MPI_SGI_stat(3) 					       MPI_SGI

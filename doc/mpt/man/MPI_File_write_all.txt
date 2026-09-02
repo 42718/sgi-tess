@@ -1,0 +1,41 @@
+
+
+
+MPI_File_write_all(3)					 MPI_File_write_all(3)
+
+
+
+NAME
+     MPI_File_write_all - Performs a collective write using individual file
+     pointer
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_write_all(MPI_File fh, void *buf, int count,
+	  MPI_Datatype datatype, MPI_Status *status)
+
+
+     Fortran:
+
+	  include "mpif.h" (or USE MPI)
+
+	  <type> BUF(*)
+	  INTEGER fh, count, datatype, status(MPI_STATUS_SIZE),
+	  ierror
+
+	  CALL MPI_FILE_WRITE_ALL(fh, buf, count, datatype,
+	  status, ierror)
+
+
+DESCRIPTION
+     MPI_File_write_all is a collective version of the blocking MPI_File_write
+     interface.
+
+     This routine accepts the following arguments:
+
+     fh        Specifies the file handle (handle)
+
+     buf       Specifies the initial address of the buffer

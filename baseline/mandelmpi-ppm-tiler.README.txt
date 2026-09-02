@@ -1,0 +1,58 @@
+SGI IRIX/MPT Mandelbrot (PPM tiler)
+====================================
+
+Overview
+--------
+This is a tiny MPI program that renders the Mandelbrot set by rows.
+- Rank 0 (controller) runs on your O2 and assembles the final image.
+- Worker ranks run on your Origin200 / Octane2 (or any SGI nodes in your Array).
+- The controller periodically writes a PPM (P6) image so you can preview on the O2.
+
+Build
+-----
+Preferred (if SGI MPT's mpicc is in PATH):
+    mpicc -O3 -o mandelmpi mandelmpi.c
+
+Fallback (MIPSpro cc linking to MPT's libmpi):
+    cc -O3 -o mandelmpi mandelmpi.c -lmpi
+
+Run
+---
+Example with O2 as controller + 6 ranks on Origin200 + 4 on Octane2:
+    mpirun O2host 1 ./mandelmpi : Origin200 6 ./mandelmpi : Octane2 4 ./mandelmpi \
+        -w 1920 -h 1080 -max 1000 -o /cxfs/out/mandel.ppm -preview 10
+
+Important:
+- Make sure Array Services are configured (arrayconfig) and running on all hosts.
+- Use a shared path (/cxfs or NFS) for the output file.
+- If you don't have GLUT/OpenGL in this variant, that's fine; it writes PPM only.
+
+Options
+-------
+    -w <pixels>      : image width   (default 1280)
+    -h <pixels>      : image height  (default 720)
+    -max <iters>     : max iterations (default 1000)
+    -xmin <val>      : viewport xmin (default -2.5)
+    -xmax <val>      : viewport xmax (default 1.0)
+    -ymin <val>      : viewport ymin (default -1.25)
+    -ymax <val>      : viewport ymax (default 1.25)
+    -o <path>        : output PPM path (default ./mandel.ppm)
+    -preview <rows>  : rewrite PPM every N completed rows (0 = only once at end)
+
+Preview on O2
+-------------
+For a live-ish preview, loop an image viewer that can reopen the file:
+    while true; do
+        /usr/sbin/imgview /cxfs/out/mandel.ppm
+        sleep 1
+    done
+
+Tips
+----
+- Increase -max for deeper zooms; performance scales with number of workers.
+- If one node is much faster, give it more ranks in the mpirun stanza.
+- You can change the viewport bounds (-xmin/-xmax/-ymin/-ymax) to zoom.
+
+License
+-------
+Public domain / MIT-like. Do whatever you like.

@@ -1,0 +1,284 @@
+
+
+
+MPI_Info(3)							   MPI_Info(3)
+
+
+
+NAME
+     MPI_Info - Allocates memory for MPI arguments
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  MPI_Fint MPI_Info_c2f(MPI_Info file)
+
+	  MPI_Info_create(info)
+	  int MPI_Info_create(MPI_Info *info)
+
+	  MPI_Info_delete(info, key)
+	  int MPI_Info_delete(MPI_Info info, char *key)
+
+	  MPI_Info_dup(info, newinfo)
+	  int MPI_Info_dup(MPI_Info info, MPI_Info *newinfo)
+
+	  MPI_Info MPI_Info_f2c(MPI_Fint info)
+
+	  MPI_Info_free(info)
+	  int MPI_Info_free(MPI_Info *info)
+
+	  MPI_Info_get(info, key, valuelen, value, flag)
+	  int MPI_Info_get(MPI_Info info, char *key, int valuelen,
+	  char *value, int *flag)
+
+	  MPI_Info_get_nkeys(info, nkeys)
+	  int MPI_Info_get_nkeys(MPI_Info info, int *nkeys)
+
+	  MPI_Info_get_nthkey(info, n, key)
+	  int MPI_Info_get_nthkey(MPI_Info info, int n, char *key)
+
+	  MPI_Info_get_valuelen(info, key, valuelen, flag)
+	  int MPI_Info_get_valuelen(MPI_Info info, char *key,
+	  int *valuelen, int *flag)
+
+	  MPI_Info_set(info, key, value)
+	  int MPI_Info_set(MPI_Info info, char *key, char *value)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER info, ierror
+	  CALL MPI_INFO_CREATE(info, ierror)
+
+	  INTEGER info, ierror
+	  CHARACTER*(*) key
+	  CALL MPI_INFO_DELETE(info, key, ierror)
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Info(3)							   MPI_Info(3)
+
+
+
+	  INTEGER info, newinfo, ierror
+	  CALL MPI_INFO_DUP(info, newinfo, ierror)
+
+	  INTEGER info, ierror
+	  CALL MPI_INFO_FREE(info, ierror)
+
+	  INTEGER info, valuelen, ierror
+	  CHARACTER*(*) key, value
+	  LOGICAL flag
+	  CALL MPI_INFO_GET(info, key, valuelen, value, flag,
+	  ierror)
+
+	  INTEGER info, nkeys, ierror
+	  CALL MPI_INFO_GET_NKEYS(info, nkeys, ierror)
+
+	  INTEGER info, n, ierror
+	  CHARACTER*(*) key
+	  CALL MPI_INFO_GET_NTHKEY(info, n, key, ierror)
+
+	  INTEGER info, valuelen, ierror
+	  LOGICAL flag
+	  CHARACTER*(*) key
+	  CALL MPI_INFO_GET_VALUELEN(info, key, valuelen, flag,
+	  ierror)
+
+	  INTEGER info, ierror
+	  CHARACTER*(*) key, value
+	  CALL MPI_INFO_SET(info, key, value, ierror)
+
+
+DESCRIPTION
+     The following MPI_Info routines allocate memory for MPI arguments:
+
+     MPI_Info_c2f	 Converts information (info) handles from C to
+			 Fortran.  The return value is the converted Fortran
+			 info handle.
+
+     MPI_Info_create	 Creates a new info object. The newly created object
+			 contains no (key,value) pairs.  MPI_Info_create
+			 accepts the following argument:
+
+			 info Returns the info object (handle) created.
+
+
+
+     MPI_Info_delete	 Deletes a (key,value) pair from info. If key is not
+			 defined in info, the call raises an error of class
+			 MPI_ERR_INFO_NOKEY.  MPI_Info_delete accepts the
+			 following arguments:
+
+
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_Info(3)							   MPI_Info(3)
+
+
+
+			 info Indicates and returns the info object (handle).
+
+			 key  Indicates the string to be deleted.
+
+
+
+     MPI_Info_dup	 Duplicates an existing info object, creating a new
+			 object with the same (key,value) pairs and the same
+			 ordering of keys.  MPI_Info_dup accepts the following
+			 arguments:
+
+			 info Indicates the info object (handle).
+
+			 newinfo
+			      Returns the info object (handle).
+
+
+
+     MPI_Info_f2c	 Converts info handles from Fortran to C.  The return
+			 value is the converted C info handle.
+
+     MPI_Info_free	 Frees the info object and sets it to MPI_INFO_NULL.
+			 The value of an info argument is interpreted each
+			 time the info is passed to a routine. Changes to an
+			 info object after return from a routine do not affect
+			 that interpretation. MPI_Info_free accepts the
+			 following arguments:
+
+			 info Indicates and returns the info object (handle).
+
+
+
+     MPI_Info_get	 Retrieves the value associated with the key in a
+			 previous call to MPI_Info_set. MPI_Info_get accepts
+			 the following arguments:
+
+			 info Indicates the info object (handle).
+
+			 key  Indicates the key.  If this string exists, flag
+			      is set to true and value is returned.
+			      Otherwise, the flag is set to false and value is
+			      left unchanged.  If key is larger than
+			      MPI_MAX_INFO_KEY, the call is erroneous.
+
+			 valuelen
+			      Indicates the length of value.  This integer is
+			      the number of characters available in value. If
+			      it is less than the size of value, the value is
+			      truncated. In C, to allow for the null
+			      terminator, valuelen should be one less than the
+			      amount of allocated space.
+
+
+
+
+									Page 3
+
+
+
+
+
+
+MPI_Info(3)							   MPI_Info(3)
+
+
+
+			 value
+			      Returns the value string.
+
+			 flag Returns true if key is defined, false if not
+			      (boolean).
+
+
+
+     MPI_Info_get_nkeys  Returns the number of currently defined keys in info.
+			 MPI_Info_get_nkeys accepts the following arguments:
+
+			 info Indicates the info object (handle).
+
+			 nkeys
+			      Returns the number of defined keys (integer).
+
+
+
+     MPI_Info_get_nthkey Returns the nth defined key in the info object. Keys
+			 are numbered, where N is the value returned by
+			 MPI_INFO_GET_NKEYS. All keys between 0 and N-1 are
+			 guaranteed to be defined. The number of a given key
+			 does not change as long as info is not modified by
+			 using MPI_INFO_SET or MPI_INFO_DELETE.
+			 MPI_Info_get_nthkey accepts the following arguments:
+
+			 info Indicates the info object (handle).
+
+			 n    Indicates the key number (integer).
+
+			 key  Returns the key (string).
+
+
+
+     MPI_Info_get_valuelen
+			 Retrieves the length of the value associated with the
+			 key. If key is defined, valuelen is set to the length
+			 of its associated value and flag is set to true. If
+			 key is not defined, valuelen is not touched and flag
+			 is set to false. The length returned in C or C++ does
+			 not include the end-of-string character. If key is
+			 larger than MPI_MAX_INFO_KEY, the call is erroneous.
+			 MPI_Info_get_valuelen accepts the following
+			 arguments:
+
+
+
+			 info Indicates the info object (handle).
+
+			 key  Indicates the key (string).
+
+
+
+
+
+									Page 4
+
+
+
+
+
+
+MPI_Info(3)							   MPI_Info(3)
+
+
+
+			 valuelen
+			      Returns the length of the value associated with
+			      the key (integer).
+
+			 flag Returns true if the key is defined, false if the
+			      key is not defined (boolean).
+
+
+
+     MPI_Info_set	 Adds the (key,value) pair to the info object and
+			 overrides the value if a value for the same key was
+			 previously set. In C, key and value are null-
+			 terminated strings. In Fortran

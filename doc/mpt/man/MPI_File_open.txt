@@ -1,0 +1,396 @@
+
+
+
+MPI_File_open(3)					      MPI_File_open(3)
+
+
+
+NAME
+     MPI_File_open - Opens a file
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_open(MPI_Comm comm, char *filename, int amode,
+	  MPI_Info info, MPI_File *fh)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  CHARACTER*(*) filename
+	  INTEGER comm, amode, info, fh, ierror
+
+	  CALL MPI_FILE_OPEN(comm, filename, amode, info,
+	  fh, ierror)
+
+
+DESCRIPTION
+     MPI_File_open opens the file identified by filename on all processes in
+     the comm communicator group.
+
+     MPI_File_open accepts the following arguments:
+
+     comm      Specifies the communicator (handle)
+
+     filename  Specifies the name of the file to open (string)
+
+     amode     Specifies the file access mode (integer)
+
+     info      Specifies the information object handle that provides hints.
+	       Hints can include such information as file access patterns and
+	       file system specifics to direct optimization.  For more
+	       details, see the section titled "Reserved File Hints."
+
+     fh 	Returns the file handle (handle)
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+     MPI_File_open is a collective routine.  All processes must provide the
+     same value for amode, and all processes must provide file names that
+     reference the same file.  (Values for info can vary).  comm must be an
+     intracommunicator; you must not pass an intercommunicator to
+     MPI_File_open.  The default file error handler is used to raise errors in
+     MPI_File_open.  A process can open a file independently of other
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_File_open(3)					      MPI_File_open(3)
+
+
+
+     processes by using the MPI_COMM_SELF communicator.  When the file handle
+     is returned, fh can be used to access the file until the file is closed
+     by the use of the MPI_File_close routine.	Before calling MPI_Finalize,
+     the user is required to use MPI_File_close to close all files that were
+     opened by using MPI_File_open.  Note that the communicator, comm, is
+     unaffected by MPI_File_open and continues to be usable in all MPI
+     routines (for example, MPI_Send).	Furthermore, the use of comm does not
+     interfere with I/O behavior.
+
+   Specifying the File Name
+     The file name is an ordinary UNIX path name.  This name might be
+     different from process to process, but it must resolve to the same file
+     on all processes.
+
+     Initially, all processes view the file as a linear byte stream, and each
+     process views data in its own native representation (no data
+     representation conversion is performed). (POSIX files are linear byte
+     streams in the native representation.) You can use the MPI_File_set_view
+     routine to change the file view.
+
+   Reserved File Hints
+     Hints specified through the info argument can enable an implementation to
+     deliver increased I/O performance or minimize the use of system
+     resources. However, hints do not change the semantics of any of the I/O
+     interfaces. In other words, an implementation is free to ignore all
+     hints. The opaque info object specifies hints on a per file basis, in the
+     following commands: MPI_FILE_OPEN, MPI_FILE_DELETE, MPI_FILE_SET_VIEW,
+     and MPI_FILE_SET_INFO.
+
+     This section provides some potentially useful hints (info key values).
+     These key values are reserved. An implementation is not required to
+     interpret these key values, but if it does interpret a key value, it must
+     provide the functionality described.
+
+     The following hints mainly affect access patterns and the layout of data
+     on parallel I/O devices. For each hint name introduced, the purpose of
+     the hint and the type of the hint value are provided. The "[SAME]"
+     annotation specifies that the hint values provided by all participating
+     processes must be identical; otherwise the program is erroneous. In
+     addition, some hints are context dependent, and are used by an
+     implementation only at specific times (for example, file_perm is useful
+     only during file creation).
+
+     access_style (comma separated list of strings)
+			      Specifies the manner in which the file will be
+			      accessed until the file is closed or until the
+			      access_style key value is altered. The hint
+			      value is a comma separated list of the
+			      following:  read_once, write_once, read_mostly,
+			      write_mostly, sequential, reverse_sequential,
+			      and random.
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_File_open(3)					      MPI_File_open(3)
+
+
+
+     collective_buffering (boolean) [SAME]
+			      Specifies whether the application can benefit
+			      from collective buffering. Collective buffering
+			      is an optimization performed on collective
+			      accesses. Accesses to the file are performed on
+			      behalf of all processes in the group by a number
+			      of target nodes.	These target nodes coalesce
+			      small requests into large disk accesses.	Legal
+			      values for this key are true and false.
+			      Collective buffering parameters are further
+			      directed by using the following additional
+			      hints: cb_block_size, cb_buffer_size, and
+			      cb_nodes.
+
+     cb_block_size (integer) [SAME]
+			      Specifies the block size in bytes to be used for
+			      collective buffering file access. Target nodes
+			      access data in chunks of this size. The chunks
+			      are distributed among target nodes in a round-
+			      robin (cyclic) pattern.
+
+     cb_buffer_size (integer) [SAME]
+			      Specifies the total buffer space in bytes that
+			      can be used for collective buffering on each
+			      target node, usually a multiple of
+			      cb_block_size.
+
+     cb_nodes (integer) [SAME]
+			      Specifies the number of target nodes to be used
+			      for collective buffering.
+
+     chunked (comma separated list of integers) [SAME]
+			      Specifies that the file consists of a
+			      multidimensional array that is often accessed by
+			      subarrays. The value for this hint is a comma
+			      separated list of array dimensions, starting
+			      from the most significant one (for an array
+			      stored in row-major order, as in C, the most
+			      significant dimension is the first one; for an
+			      array stored in column-major order, as in
+			      Fortran, the most significant dimension is the
+			      last one, and array dimensions should be
+			      reversed).
+
+     chunked_item (comma separated list of integers) [SAME]
+			      Specifies the size of each array entry, in
+			      bytes.
+
+     chunked_size (comma separated list of integers) [SAME]
+			      Specifies the dimensions of the subarrays. This
+			      is a comma separated list of array dimensions,
+			      starting from the most significant one.
+
+
+
+									Page 3
+
+
+
+
+
+
+MPI_File_open(3)					      MPI_File_open(3)
+
+
+
+     filename (string)	      Specifies the file name used when the file was
+			      opened. If the implementation is capable of
+			      returning the file name of an open file,
+			      MPI_FILE_GET_INFO uses this key to return the
+			      file name. This key is ignored when passed to
+			      MPI_FILE_OPEN, MPI_FILE_SET_VIEW,
+			      MPI_FILE_SET_INFO, and MPI_FILE_DELETE.
+
+     file_perm (string) [SAME]
+			      Specifies the file permissions to use for file
+			      creation.  Setting this hint is useful only when
+			      the hint is passed to MPI_FILE_OPEN with an
+			      amode that includes MPI_MODE_CREATE. The set of
+			      legal values for this key is implementation
+			      dependent.
+
+     io_node_list (comma separated list of strings) [SAME]
+			      Specifies the list of I/O devices that should be
+			      used to store the file. This hint is most
+			      relevant when the file is created.
+
+     nb_proc (integer) [SAME] Specifies the number of parallel processes that
+			      will typically be assigned to run programs that
+			      access this file. This hint is most relevant
+			      when the file is created.
+
+     num_io_nodes (integer) [SAME]
+			      Specifies the number of I/O devices in the
+			      system. This hint is most relevant when the file
+			      is created.
+
+     striping_factor (integer) [SAME]
+			      Specifies the number of I/O devices across which
+			      the file should be striped, and is relevant only
+			      when the file is created.
+
+     striping_unit (integer) [SAME]
+			      Specifies the suggested striping unit to be used
+			      for this file. The striping unit is the amount
+			      of consecutive data assigned to one I/O device
+			      before progressing to the next device, when
+			      striping across a number of devices. It is
+			      expressed in bytes. This hint is relevant only
+			      when the file is created.
+
+   Access Modes
+     The following access modes are supported (specified in amode, a bit
+     vector OR of the following integer constants):
+
+     MPI_MODE_RDONLY		 Specifies read only.
+
+
+
+
+
+									Page 4
+
+
+
+
+
+
+MPI_File_open(3)					      MPI_File_open(3)
+
+
+
+     MPI_MODE_RDWR		 Specifies read and write.
+
+     MPI_MODE_WRONLY		 Specifies write only.
+
+     MPI_MODE_CREATE		 Creates the file if it does not exist.
+
+     MPI_MODE_EXCL		 Specifies error if creating a file that
+				 already exists.
+
+     MPI_MODE_DELETE_ON_CLOSE	 Deletes the file on close (equivalent to
+				 performing an MPI_File_delete command).
+
+     MPI_MODE_UNIQUE_OPEN	 Specifies that the file will not be
+				 concurrently opened elsewhere. This mode
+				 allows an implementation to optimize access
+				 by eliminating the overhead of file locking.
+				 You must not open a file in this mode unless
+				 the file will not be concurrently opened
+				 elsewhere, inside or outside of the MPI
+				 environment. In particular, one needs to be
+				 aware of potential external events that might
+				 open files (for example, automated backup
+				 facilities). When MPI_MODE_UNIQUE_OPEN is
+				 specified, the user is responsible for
+				 ensuring that no such external events occur.
+
+     MPI_MODE_SEQUENTIAL	 NOTE:	This mode is not supported in the MPT
+				 1.3 release.
+
+				 Specifies that the file will be accessed only
+				 sequentially. This mode allows an
+				 implementation to optimize access to some
+				 sequential devices (tapes and network
+				 streams).  You must not attempt nonsequential
+				 access to a file that has been opened in this
+				 mode.
+
+     MPI_MODE_APPEND		 Sets initial position of all file pointers to
+				 end of file.  Specifying this mode only
+				 guarantees that all shared and individual
+				 file pointers are positioned at the initial
+				 end of file when MPI_File_open returns.
+				 Subsequent positioning of file pointers is
+				 application dependent.  In particular, the
+				 implementation does not ensure that all write
+				 operations are appended.
+
+     C/C++ users can use bit vector OR ( ) to combine these constants; Fortran
+     90 users can use the bit vector IOR intrinsic.  Fortran 77 users can use
+     (nonportably) bit vector IOR on systems that support it. Alternatively,
+     Fortran users can use (portably) integer addition to OR the constants.
+     (Each constant should appear at most once in the addition).
+
+
+
+									Page 5
+
+
+
+
+
+
+MPI_File_open(3)					      MPI_File_open(3)
+
+
+
+     The values of these constants must be defined such that the bitwise OR
+     and the sum of any distinct set of these constants is equivalent.
+
+     The modes MPI_MODE_RDONLY, MPI_MODE_RDWR, MPI_MODE_WRONLY,
+     MPI_MODE_CREATE, and MPI_MODE_EXCL have identical semantics to their
+     POSIX counterparts.  You must specify exactly one of MPI_MODE_RDONLY,
+     MPI_MODE_RDWR, or MPI_MODE_WRONLY.  You must not specify MPI_MODE_CREATE
+     or MPI_MODE_EXCL in conjunction with MPI_MODE_RDONLY.
+
+     Errors related to the access mode are raised in the MPI_ERR_AMODE class.
+
+     The info argument provides information regarding file access patterns and
+     file system specifics. The MPI_INFO_NULL constant can be used when no
+     information needs to be specified.
+
+     Some file attributes are inherently implementation dependent (for
+     example, file permissions).  To set these attributes, use either the info
+     argument or facilities outside of the scope of MPI.
+
+     By default, files are opened by the use of nonatomic mode file
+     consistency semantics.  The more stringent atomic mode consistency
+     semantics, required for atomicity of conflicting accesses, can be set by
+     the use of MPI_FILE_SET_ATOMICITY.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_Datatype, MPI_Comm, MPI_File) are of
+     type INTEGER.
+
+SEE ALSO
+     MPI_File_close(3), MPI_File_delete(3), MPI_File_set_atomicity(3),
+     MPI_File_set_view(3), MPI_IO(3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 6
+
+
+

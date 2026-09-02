@@ -1,0 +1,92 @@
+
+
+
+MPI_File_set_size(3)					  MPI_File_set_size(3)
+
+
+
+NAME
+     MPI_File_set_size - Sets the file size
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_set_size(MPI_File fh, MPI_Offset size)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER fh, ierror
+	  INTEGER(KIND=MPI_OFFSET_KIND) size
+
+	  CALL MPI_FILE_SET_SIZE(fh, size, ierror)
+
+
+DESCRIPTION
+     MPI_File_set_size resizes the file associated with the file handle, fh.
+     This routine accepts the following arguments:
+
+     fh        Specifies the file handle (handle).
+
+     size      Specifies the size to which to truncate or expand the file
+	       (nonnegative integer). Size is measured in bytes from the
+	       beginning of the file.
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+     MPI_File_set_size is collective; all processes in the group must pass
+     identical values for size.
+
+     If size is smaller than the current file size, the file is truncated at
+     the position defined by size.  The implementation is free to deallocate
+     file blocks located beyond this position.
+
+     If size is larger than the current file size, the file size becomes size.
+     Regions of the file that have been previously written are unaffected.
+     The values of data in the new regions in the file (those locations with
+     displacements between old file size and size) are undefined.  It is
+     implementation dependent whether the MPI_File_set_size routine allocates
+     file space.  Use MPI_File_preallocate to force file space to be reserved.
+
+     MPI_File_set_size does not affect the individual file pointers or the
+     shared file pointer.  If MPI_MODE_SEQUENTIAL mode was specified when the
+     file was opened, you must not call this routine.
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_File_set_size(3)					  MPI_File_set_size(3)
+
+
+
+     It is possible for the file pointers to point beyond the end of file
+     after a MPI_File_set_size operation truncates a file. This is legal, and
+     equivalent to seeking beyond the current end of file.
+
+     All nonblocking requests and split collective operations on fh must be
+     completed before MPI_File_set_size is called. Otherwise, calling
+     MPI_File_set_size is erroneous.  As far as consistency semantics are
+     concerned, MPI_File_set_size is a write operation that conflicts with
+     operations that access bytes at displacements between the old and new
+     file sizes.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_Datatype, MPI_Comm, MPI_File) are of
+     type INTEGER.
+
+SEE ALSO
+     MPI_File_open(3), MPI_File_preallocate(3), MPI_IO(3)
+
+

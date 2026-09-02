@@ -1,0 +1,141 @@
+
+
+
+MPI_GREQUEST_START(3)					 MPI_GREQUEST_START(3)
+
+
+
+NAME
+     MPI_Grequest_start - Create new generalized request
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  typedef MPI_Grequest_query_function(void *extra_state,
+					      MPI_Status *status);
+	  typedef MPI_Grequest_free_function(void *extra_state);
+	  typedef MPI_Grequest_cancel_function(void *extra_state,
+					       int complete);
+
+	  int MPI_Grequest_start(query_fn, free_fn, cancel_fn,
+				 extra_state, request);
+
+	  MPI_Grequest_query_function	 *query_fn;
+	  MPI_Grequest_free_function	 *free_fn;
+	  MPI_Grequest_cancel_function	 *cancel_fn;
+	  void				 *extra_state;
+	  MPI_Request			 *request;
+
+
+     C++:   (Not currently implemented)
+
+	  #include <mpi.h>
+
+	  typedef int MPI::Grequest::Query_function(void* extra_state,
+						    MPI::Status& status);
+	  typedef int MPI::Grequest::Free_function(void* extra_state);
+	  typedef int MPI::Grequest::Cancel_function(void* extra_state,
+						     bool complete);
+
+	  static MPI::Grequest MPI::Grequest::Start(
+			    const MPI::Grequest::Query_function  query_fn,
+			    const MPI::Grequest::Free_function	 free_fn,
+			    const MPI::Grequest::Cancel_function cancel_fn,
+			    void *extra_state);
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  SUBROUTINE MPI_GREQUEST_START(query_fn, free_fn, cancel_fn, extra_state, request, ierr)
+	  EXTERNAL query_fn, free_fn, cancel_fn
+	  INTEGER (KIND=MPI_ADDRESS_KIND) extra_state
+	  INTEGER request
+	  INTEGER ierr
+	  END
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_GREQUEST_START(3)					 MPI_GREQUEST_START(3)
+
+
+
+	  SUBROUTINE GREQUEST_QUERY_FUNCTION(extra_state, status, ierr)
+	  INTEGER(KIND=MPI_ADDRESS_KIND) extra_state
+	  INTEGER status(MPI_STATUS_SIZE), ierr
+	  END
+
+	  SUBROUTINE GREQUEST_FREE_FUNCTION(extra_state, ierr)
+	  INTEGER(KIND=MPI_ADDRESS_KIND) extra_state
+	  INTEGER ierr
+	  END
+
+	  SUBROUTINE GREQUEST_CANCEL_FUNCTION(extra_state, complete, ierr)
+	  INTEGER(KIND=MPI_ADDRESS_KIND) extra_state
+	  LOGICAL complete
+	  INTEGER ierr
+	  END
+
+
+STANDARDS
+     This release implements the MPI 2.0 standard, as documented by the MPI
+     Forum in the July 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     Calling MPI_Grequest_start() creates a new generalized request.  This
+     routine accepts the following parameters:
+
+     query_fn	 Specifies the user-written callback function invoked when
+		 request status is queried.   (function)
+
+     free_fn	 Specifies the user-written callback function invoked when the
+		 request is freed.   (function)
+
+     cancel_fn	 Specifies the user-written callback function invoked when the
+		 request is cancelled.	 (function)
+
+     extra_state Specifies a void pointer associated with this request.  Each
+		 callback function is passed the extra_state value associated
+		 with the request on which it is operating.    (void pointer)
+
+     request	 Returns the newly-created generalized request.  (handle)
+
+     ierr	 Specifies the error code of the operation.  If no error
+		 occured, MPI_SUCCESS is returned.   (integer)
+
+NOTES
+     All MPI routines in Fortran (except for MPI_Wtime(3) and MPI_Wtick(3))
+     have an additional ierr argument at the end of the argument list.	ierr
+     is an integer and has the same meaning as the return value of the routine
+     in C.  In Fortran, MPI routines are subroutines and are invoked with the
+     CALL statement.  Additionally, in Fortran, all MPI objects (for example,
+     MPI_Datatype and MPI_Comm) are of type integer.
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_GREQUEST_START(3)					 MPI_GREQUEST_START(3)
+
+
+
+SEE ALSO
+     MPI_Grequest_c

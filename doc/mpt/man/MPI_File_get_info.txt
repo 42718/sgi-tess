@@ -1,0 +1,66 @@
+
+
+
+MPI_File_get_info(3)					  MPI_File_get_info(3)
+
+
+
+NAME
+     MPI_File_get_info - Returns a new information object
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_get_info(MPI_File fh, MPI_Info *info_used)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER fh, info_used, ierror
+
+	  CALL MPI_FILE_GET_INFO(fh, info_used, ierror)
+
+
+DESCRIPTION
+     MPI_File_get_info returns a new information object containing the hints
+     of the file associated with fh. The current setting of all hints actually
+     used by the system related to this open file is returned in info_used.
+     The user is responsible for freeing info_used by using MPI_Info_free.
+
+     MPI_File_get_info accepts the following arguments:
+
+     fh 	 Specifies the file handle (handle).
+
+     info_used	 Returns the new information object (handle).  The object
+		 returned in info_used will contain all hints currently active
+		 for this file. Because the system might not recognize some
+		 hints set by the user, and might recognize other hints that
+		 the user has not set, this set of hints can be greater or
+		 smaller than the set of hints passed to MPI_File_open,
+		 MPI_File_set_view, and MPI_File_set_info.
+
+     ierror	 Specifies the return code value for successful completion,
+		 which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		 mpif.h file.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_Datatype, MPI_Comm, MPI_File) are of
+     type INTEGER.
+
+SEE ALSO
+     MPI_File_open(3), MPI_File_set_info(3), MPI_File_set_view(3),
+     MPI_Info_free(3), MPI_IO(3)
+
+
+
+
+
+
+									Page 1
+
+
+

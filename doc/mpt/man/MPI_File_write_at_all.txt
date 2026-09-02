@@ -1,0 +1,75 @@
+
+
+
+MPI_File_write_at_all(3)			      MPI_File_write_at_all(3)
+
+
+
+NAME
+     MPI_File_write_at_all - Performs collective write using explicit offset
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_write_at_all(MPI_File fh, MPI_Offset offset,
+	  void *buf, int count, MPI_Datatype datatype,
+	  MPI_Status *status)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  <type> BUF(*)
+	  INTEGER fh, count, datatype, status(MPI_STATUS_SIZE),
+	  ierror
+	  INTEGER(KIND=MPI_OFFSET_KIND) offset
+
+	  CALL MPI_FILE_WRITE_AT_ALL(fh, offset, buf, count,
+	  datatype, status, ierror)
+
+
+DESCRIPTION
+     MPI_File_write_at_all is a collective version of the blocking
+     MPI_File_write_at interface.
+
+     MPI_File_write_at_all accepts the following arguments:
+
+     fh        Specifies the file handle (handle)
+
+     offset    Specifies the file offset (nonnegative integer)
+
+     buf       Specifies the initial address of the buffer (choice)
+
+     count     Specifies the number of elements in the buffer (nonnegative
+	       integer)
+
+     datatype  Specifies the data type of each buffer element (handle)
+
+     status    Returns the status object (status)
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_Datatype, MPI_Comm, MPI_File) are of
+     type INTEGER.
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_File_write_at_all(3)			      MPI_File_write_at_all(3)
+
+
+
+SEE ALSO
+     MPI_File_

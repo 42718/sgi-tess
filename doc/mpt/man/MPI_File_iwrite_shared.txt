@@ -1,0 +1,132 @@
+
+
+
+MPI_FILE_IWRITE_SHARED(3)			     MPI_FILE_IWRITE_SHARED(3)
+
+
+
+NAME
+     MPI_File_iwrite_shared - Nonblocking write using shared file pointer
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_File_iwrite_shared( fh, buf, count,
+				      datatype, request )
+	  MPI_File	   fh;
+	  void		   *buf;
+	  int		   count;
+	  MPI_Datatype	   datatype;
+	  MPI_Request	   *request;
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  <type> buf(*)
+	  INTEGER fh, count, datatype, request, ierror
+	  CALL MPI_FILE_IWRITE_SHARED(fh, buf, count, datatype,
+	  request, ierror)
+
+
+
+
+STANDARDS
+     This release implements the MPI 2.0 standard, as documented by the MPI
+     Forum in the July 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     MPI_File_iwrite_shared is a nonblocking write using a shared file
+     pointer.  This routine accepts the following parameters:
+
+     fh 	    file handle (handle)
+
+     buf	    initial address of buffer (choice)
+
+     count	    number of elements in buffer (nonnegative integer)
+
+     datatype	    datatype of each buffer element (handle)
+
+     request	    request object (handle)
+
+Fortran Programs
+     All MPI routines in Fortran (except for MPI_WTIME(3F) and MPI_WTICK(3F))
+     have the additional argument ierror at the end of the argument list.
+     ierror is an integer and has the same meaning as the return value of the
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_FILE_IWRITE_SHARED(3)			     MPI_FILE_IWRITE_SHARED(3)
+
+
+
+     routine in C.  In Fortran, MPI routines are subroutines, and are invoked
+     with the CALL statement.
+
+     All MPI objects (such as MPI_Datatype(3) and MPI_Comm(3)) are of type
+     INTEGER in Fortran.
+
+SEE ALSO
+     MPI_Comm(3), MPI_Datatype(3)
+
+     MPI_WTIME(3F), MPI_WTICK(3F)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 2
+
+
+

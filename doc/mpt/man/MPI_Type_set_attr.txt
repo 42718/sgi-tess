@@ -1,0 +1,80 @@
+
+
+
+MPI_TYPE_SET_ATTR(3)					  MPI_TYPE_SET_ATTR(3)
+
+
+
+NAME
+     MPI_Type_set_attr - Stores the data type attribute value associated with
+     a key
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Type_set_attr ( type, type_keyval, attribute_val )
+	  MPI_Datatype type;
+	  int	   type_keyval;
+	  void	   *attribute_val;
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER type, type_keyval, ierror
+	  INTEGER(KIND=MPI_ADDRESS_KIND)  attribute_val
+
+	  CALL MPI_TYPE_SET_ATTR(type, type_keyval, attribute_val,
+	  ierror)
+
+
+STANDARDS
+     This function is defined in the MPI-2 standard.
+
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Type_set_attr routine stores the data type attribute value
+     associated with a key.
+      This routine accepts the following parameters:
+
+     type	    Specifies the data type to which the attribute will be
+		    attached (handle)
+
+     type_keyval    Specifies the key value, as returned by
+		    MPI_Type_create_keyval(3) (integer)
+
+     attribute_val  Specifies the attribute value
+
+     ierror	    Specifies the return code value for successful completion,
+		    which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		    mpif.h file.
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_TYPE_SET_ATTR(3)					  MPI_TYPE_SET_ATTR(3)
+
+
+
+NOTES
+     The type of the attribute value depends on whether C or Fortran is being
+     used.  In C, an attribute value is a pointer (void *).  In Fortran, it is
+     a single integer of kind MPI_ADDRESS_KIND.
+
+     If an attribute is already present, the MPI_Type_delete_attr(3) function
+     (specified w

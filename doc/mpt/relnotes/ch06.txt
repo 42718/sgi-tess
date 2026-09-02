@@ -1,0 +1,132 @@
+
+
+
+                                  - 1 -
+
+
+
+       6.  CompatibilitiesandDependencies
+
+       This chapter describes the compatibility issues that users
+       should consider when purchasing MPT version 1.4 and later.
+       Text that applies to IRIX systems only is marked "IRIX
+       only."
+
+
+       6.1  MPI/Speedshop(IRIXonly)
+
+       For users running Speedshop with MPI jobs on systems running
+       IRIX 6.5.1 or later, it is no longer necessary to set the
+       MMMMPPPPIIIIRRRRLLLLDDDDHHHHAAAACCCCKKKKOOOOFFFFFFFF environment variable.
+
+
+       6.2  ArrayServicesChange(IRIXonly)
+
+       The default authentication for array services has changed
+       from AAAAUUUUTTTTHHHHEEEENNNNTTTTIIIICCCCAAAATTTTIIIIOOOONNNN NNNNOOOONNNNEEEE to AAAAUUUUTTTTHHHHEEEENNNNTTTTIIIICCCCAAAATTTTIIIIOOOONNNN NNNNOOOORRRREEEEMMMMOOOOTTTTEEEE in array
+       services release 3.3.1. For more information, see advisory
+       19990701-01-p at the following URL:
+
+           hhhhttttttttpppp::::////////wwwwwwwwwwww....ssssggggiiii....ccccoooommmm////SSSSuuuuppppppppoooorrrrtttt////sssseeeeccccuuuurrrriiiittttyyyy////sssseeeeccccuuuurrrriiiittttyyyy....hhhhttttmmmmllll
+
+       Users who run MPI jobs over multiple hosts should use the
+       AAAAUUUUTTTTHHHHEEEENNNNTTTTIIIICCCCAAAATTTTIIIIOOOONNNN SSSSIIIIMMMMPPPPLLLLEEEE authentication.
+
+
+       6.3  C++Bindings
+
+       In MPT release 1.4.0.1, the C++ bindings were included in
+       the lllliiiibbbbmmmmppppiiii....ssssoooo file. With the 1.4.0.3 release, the C++
+       bindings reside in the lllliiiibbbbmmmmppppiiii++++++++....ssssoooo file. For this reason,
+       C++ users who have used MPT 1.4.0.1 will need to use the
+       ----llllmmmmppppiiii++++++++ option to relink their programs, as in the following
+       example:
+
+           CCCCCCCC ----33332222 ccccoooommmmppppuuuutttteeee....CCCC ----llllmmmmppppiiii++++++++ ----llllmmmmppppiiii
+
+       6.4  GMDependencies
+
+       A version of GM 1.4 for IRIX is available from SGI. It can
+       be obtained at the following URL:
+
+           hhhhttttttttpppp::::////////wwwwwwwwwwww....ssssggggiiii....ccccoooommmm////pppprrrroooodddduuuuccccttttssss////eeeevvvvaaaalllluuuuaaaattttiiiioooonnnn////6666....5555....11113333mmmmyyyyrrrriiiinnnneeeetttt1111....0000....1111
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+       6.5  JobLimits
+
+       To run MPI jobs on IRIX with job limits enabled, your system
+       should be running IRIX 6.5.9f or greater.  Because of the
+       large number of file descriptors that MPI jobs require, you
+       should increase the jjjjlllliiiimmmmiiiitttt "files" limit for MPI jobs.  For
+       more information on increasing job limits, see the jjjjlllliiiimmmmiiiitttt(1)
+       man page or IRIX Admin: Resource Administration.  You can
+       access this document from the SGI Technical Publications
+       Library at the following URL:
+
+           hhhhttttttttpppp::::////////ddddooooccccssss....ssssggggiiii....ccccoooommmm
+
+       6.6  FileDescriptorLimits
+
+       On Altix systems, because of the large number of file
+       descriptors that MPI jobs require, you might need to
+       increase the system-wide limit on the number of open files.
+       The default value for the file limit resource is 1024.  To
+       change the default value for all users to 8196 file
+       descriptors:
+
+           ((((1111)))) AAAAdddddddd tttthhhheeee ffffoooolllllllloooowwwwiiiinnnngggg lllliiiinnnneeee ttttoooo ////eeeettttcccc////ppppaaaammmm....dddd////llllooooggggiiiinnnn::::
+
+               sssseeeessssssssiiiioooonnnn    rrrreeeeqqqquuuuiiiirrrreeeedddd     ////lllliiiibbbb////sssseeeeccccuuuurrrriiiittttyyyy////ppppaaaammmmlllliiiimmmmiiiittttssss....ssssoooo
+
+
+           ((((2222)))) AAAAdddddddd tttthhhheeee ffffoooolllllllloooowwwwiiiinnnngggg lllliiiinnnneeeessss ttttoooo ////eeeettttcccc////sssseeeeccccuuuurrrriiiittttyyyy////lllliiiimmmmiiiittttssss....ccccoooonnnnffff
+
+               ****     ssssoooofffftttt    nnnnooooffffiiiilllleeee      8888111199996666
+               ****     hhhhaaaarrrrdddd    nnnnooooffffiiiilllleeee      8888111199996666
+
+       The default 1024 file descriptors will allow for
+       approximately 199 MPI processes per host.  Increasing the
+       value to 8196 allows for more than 512 MPI processes per
+       host.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

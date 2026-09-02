@@ -1,0 +1,74 @@
+
+
+
+MPI_Status_set_cancelled(3)			   MPI_Status_set_cancelled(3)
+
+
+
+NAME
+     MPI_Status_set_cancelled - Fills in "cancelled" status variable field
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Status_set_cancelled(status, flag)
+	  MPI_Status		       status;
+	  int			       flag;
+
+
+     C++:   (Not currently implemented)
+
+	  #include <mpi.h>
+
+	  void MPI::Status::Set_cancelled(bool flag)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  MPI_STATUS_SET_CANCELLED(status, flag, ierr)
+	  INTEGER status(MPI_STATUS_SIZE)
+	  LOGICAL flag
+	  INTEGER ierr
+
+
+STANDARDS
+     This release implements the MPI 2.0 standard, as documented by the MPI
+     Forum in the July 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The value passed in flag is returned in outflag by subsequent calls to
+     MPI_Test_cancelled(status, &outflag).
+
+     status    Specifies the status variable to be modified.   (array)
+
+     flag      Specifies the value to be returned by MPI_Test_cancelled.
+	       (logical)
+
+NOTES
+     All MPI routines in Fortran (except for MPI_Wtime(3) and MPI_Wtick(3))
+     have an additional ierr argument at the end of the argument list.	ierr
+     is an integer and has the same meaning as the return value of the routine
+     in C.  In Fortran, MPI routines are subroutines and are invoked with the
+     CALL statement.  Additionally, in Fortran, all MPI objects (for example,
+     MPI_Datatype and MPI_Comm) are of type integer.
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Status_set_cancelled(3)			   MPI_Status_set_cancelled(3)
+
+
+
+SEE ALS

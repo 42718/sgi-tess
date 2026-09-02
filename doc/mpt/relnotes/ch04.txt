@@ -1,0 +1,594 @@
+
+
+
+                                  - 1 -
+
+
+
+       4.  NewFeatures
+
+       This chapter describes MPT features released in  MPT 1.6.1
+       and later releases.  Text that applies to IRIX systems only
+       is marked "IRIX systems only."  Text that applies to Linux
+       systems only is marked "Linux systems only."
+
+
+       4.1  NewFeaturesforMPTRelease1.6.1
+
+       This section describes the features that are new in the MPT
+       1.6.1 release. The MPT 1.6.1 release is a Linux only
+       release, so all of the features described in this section
+       apply to Linux systems. However, some of the features will
+       be available also on IRIX systems in a subsequent release.
+       These are marked, "IRIX systems, subsequent release." The
+       features not marked are already available on IRIX systems
+       and are being introduced for Linux systems with this
+       release.
+
+
+       4.1.1  Generalized Requests (IRIX systems, subsequent
+       release)
+       The following MPI-2 generalized request routines are
+       implemented for Linux in MPT 1.6.1:
+
+         MMMMPPPPIIIIRRRReeeeqqqquuuueeeessssttttggggeeeettttssssttttaaaattttuuuussss
+         MMMMPPPPIIIIGGGGrrrreeeeqqqquuuueeeessssttttccccoooommmmpppplllleeeetttteeee
+         MMMMPPPPIIIIGGGGrrrreeeeqqqquuuueeeessssttttssssttttaaaarrrrtttt
+         MMMMPPPPIIIISSSSttttaaaattttuuuusssssssseeeettttccccaaaannnncccceeeelllllllleeeedddd
+         MMMMPPPPIIIISSSSttttaaaattttuuuusssssssseeeetttteeeelllleeeemmmmeeeennnnttttssss
+
+       Also, the MMMMPPPPIIIISSSSTTTTAAAATTTTUUUUSSSSIIIIGGGGNNNNOOOORRRREEEE or MMMMPPPPIIIISSSSTTTTAAAATTTTUUUUSSSSEEEESSSSIIIIGGGGNNNNOOOORRRREEEE symbol
+       can be passed to any MPT routine in place of a scalar or an
+       array, respectively, of type MMMMPPPPIIIISSSSttttaaaattttuuuussss to indicate that no
+       status information need be returned.
+
+
+       4.1.2  ROMIO1.2.4(IRIXsystems,subsequentrelease)
+       The 1.6.1 version of MPT includes ROMIO version 1.2.4 for
+       Linux systems. New features in this release include
+       aggregation control hints ccccbbbbccccoooonnnnffffiiiigggglllliiiisssstttt, rrrroooommmmiiiiooooccccbbbbrrrreeeeaaaadddd and
+       rrrroooommmmiiiiooooccccbbbbwwwwrrrriiiitttteeee. XFS filesystems are supported under both
+       IRIX and Linux operating systems.
+
+
+       4.1.3  StartupInitialization
+       MPT now initializes during the loading of the MPI library,
+       rather than waiting until the first MMMMPPPPIIIIIIIInnnniiiitttt call.  This
+       allows MPI to control the environment for optimizing
+       purposes when used with other libraries, such as OpenMP. To
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+       initialize MPI first, include the ----llllmmmmppppiiii command last in the
+       list of libraries on the compile line.
+
+
+       4.1.4  ArrayServicesSupport
+       By default on Linux systems, mmmmppppiiiirrrruuuunnnn uses Array Services to
+       launch MPI jobs and clean up stray MPI processes upon
+       abnormal job termination.
+
+       If the mmmmppppiiiirrrruuuunnnn command displays a message that Array Services
+       is not running, check that it is installed correctly, as
+       follows:
+
+         1.  Determine if the Array Services package is installed
+             by invoking the rrrrppppmmmm ----qqqq ssssggggiiii----aaaarrrrrrrraaaayyyyssssvvvvccccssss command.  If it
+             is installed, refer to the aaaarrrrrrrraaaayyyysssseeeerrrrvvvviiiicccceeeessss,
+             aaaarrrrrrrraaaayyyydddd....ccccoooonnnnffff, and aaaarrrrrrrraaaayyyydddd....aaaauuuutttthhhh man pages for proper
+             configuration.
+
+         2.  Determine if the daemon is running by invoking the
+             following command:
+
+             ppppssss ----eeeeffff |||| ggggrrrreeeepppp aaaarrrrrrrraaaayyyydddd
+
+             If the daemon is not running, start it by invoking the
+             following command as root:
+
+             ////eeeettttcccc////iiiinnnniiiitttt....dddd////aaaarrrrrrrraaaayyyy ssssttttaaaarrrrtttt
+
+             If the daemon is running, but you have made
+             configuration changes, as root, restart it by invoking
+             the following command:
+
+             ////eeeettttcccc////iiiinnnniiiitttt....dddd////aaaarrrrrrrraaaayyyy rrrreeeessssttttaaaarrrrtttt
+
+         3.  Determine if your configuration contains any errors by
+             invoking the following command:
+
+             ////uuuussssrrrr////eeeettttcccc////aaaasssscccchhhheeeecccckkkk
+
+             Remember, after making configuration changes, you will
+             need to restart the aaaarrrrrrrraaaayyyydddd daemon, as previously
+             noted.
+
+       Note:  On IRIX systems, mmmmppppiiiirrrruuuunnnn also uses Array Services by
+       default.
+
+
+       4.1.5  MPI-2Attributes(IRIXsystems,subsequentrelease)
+       MPT 1.6.1 supports MPI-2 attributes, as described in section
+       8.8 of the MPI-2 standard.
+
+
+
+
+
+
+
+
+
+
+
+                                  - 3 -
+
+
+
+       4.1.6  Single-CopyModeSupported
+       MPT 1.6.1 supports single-copy mode for MPI communication on
+       Linux systems.  This feature is supported for both single-
+       host MPI jobs and MPI jobs running across partitions.
+
+       The MMMMPPPPIIIIBBBBUUUUFFFFFFFFEEEERRRRMMMMAAAAXXXX environment variable must be set to an
+       appropriate value to enable single-copy transfers.  This is
+       disabled by default.
+
+       On Linux, the single-copy feature uses the xpmem module to
+       map memory from one MPI process onto another during job
+       startup.  The mapped areas include the static region,
+       private heap and stack region.  Single copy is supported for
+       contiguous data types from any of the mapped regions.
+
+       Memory mapping is enabled by default on Linux.  To disable
+       it, set the MMMMPPPPIIIIMMMMEEEEMMMMMMMMAAAAPPPPOOOOFFFFFFFF environment variable.
+
+       The xpmem kernel module must be installed on your system for
+       single-copy mode to be supported.  The xpmem module is
+       released with the OS.
+
+
+       4.1.7  MPI-2One-SidedCommunicationSupport
+       MPT 1.6.1 supports a subset of one-sided communication on
+       Linux systems.  The following MPI-2 functions are supported:
+
+         MMMMPPPPIIIIWWWWiiiinnnnccccrrrreeeeaaaatttteeee
+         MMMMPPPPIIIIWWWWiiiinnnnffffeeeennnncccceeee
+         MMMMPPPPIIIIPPPPuuuutttt
+         MMMMPPPPIIIIGGGGeeeetttt
+
+       These functions are supported for both single-host MPI jobs
+       and MPI jobs running across partitions.
+
+       On Linux, the one-sided functions use the xpmem module to
+       map memory from one MPI process onto another during job
+       startup.  The mapped areas include the static region,
+       private heap, and stack region.  The one-sided functions are
+       supported for windows residing in any of the mapped regions.
+
+       Memory mapping is enabled by default on Linux.  To disable
+       it, set the MMMMPPPPIIIIMMMMEEEEMMMMMMMMAAAAPPPPOOOOFFFFFFFF environment variable.
+
+       The xpmem kernel module must be installed on your system to
+       support the MPI one-sided functions.  The xpmem module is
+       released with the OS.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 4 -
+
+
+
+       4.1.8  XPMEMDriverSupportedforPartitionedSystems
+       MPT 1.6.1 supports the XPMEM (cross partition) device driver
+       for Linux systems.  This feature allows MPI processes
+       running on one partition to communicate with MPI processes
+       running on a different partition via the NUMAlink network.
+
+       The MPI/XPMEM driver for Linux supports the standard
+       send/receive model in both buffered and single-copy modes,
+       in addition to the MPI-2 one-sided functions
+       (MMMMPPPPIIIIWWWWiiiinnnnccccrrrreeeeaaaatttteeee,,,, MMMMPPPPIIIIWWWWiiiinnnnffffeeeennnncccceeee, MMMMPPPPIIIIPPPPuuuutttt, and MMMMPPPPIIIIGGGGeeeetttt).
+
+       The use of the XPMEM driver allows MPI to extend the cache
+       coherency domain of the system to include all the partitions
+       being used, up to a 512 process limit.  This allows MPI to
+       maintain very low latency and high bandwidth across
+       partitioned systems.
+
+       The MPI/XPMEM driver requires the xpmem kernel module to be
+       installed on your system.  The xpmem module is released with
+       the OS.
+
+       When running an MPI job across partitions, MPI automatically
+       selects the XPMEM interconnect, if available.  For more
+       information, see "Default Interconnect Selection" in the MMMMPPPPIIII
+       man page.
+
+       If MPI is successful in configuring the XPMEM driver on a
+       partitioned system, the following message appears at startup
+       when using the ----vvvv (verbose) option:
+
+           MMMMPPPPIIII:::: UUUUssssiiiinnnngggg tttthhhheeee XXXXPPPPMMMMEEEEMMMM NNNNUUUUMMMMAAAAlllliiiinnnnkkkk iiiinnnntttteeeerrrrccccoooonnnnnnnneeeecccctttt....
+
+       4.1.9  MPIAllocmemandMPIFreememSupported
+       The MPT 1.6.1 release supports the MPI-2 functions
+       MMMMPPPPIIIIAAAAllllllllooooccccmmmmeeeemmmm and MMMMPPPPIIIIFFFFrrrreeeeeeeemmmmeeeemmmm on Linux systems.
+       MMMMPPPPIIIIAAAAllllllllooooccccmmmmeeeemmmm allocates memory from the private heap, and is
+       used in conjunction with MMMMPPPPIIIIFFFFrrrreeeeeeeemmmmeeeemmmm, which frees the
+       dynamically allocated memory.
+
+
+       4.1.10  NumaPlacementSupport
+       Users have used environment variables to enable nonuniform
+       memory access (NUMA) optimization placement on IRIX systems.
+       Some of this functionality is now available on Linux
+       systems.
+
+       You can now use the MMMMPPPPIIIIDDDDSSSSMMMMCCCCPPPPUUUULLLLIIIISSSSTTTT to link MPI ranks to the
+       specified CPUs.  You can also use the MMMMPPPPIIIIDDDDSSSSMMMMMMMMUUUUSSSSTTTTRRRRUUUUNNNN
+       environment variable when running on a dedicated system or
+       within a restricted set of CPUs (either with ccccppppuuuusssseeeettttssss or
+       rrrruuuunnnnoooonnnn) to ensure the MPI ranks are linked to those CPUs.
+
+
+
+
+
+
+
+
+
+
+
+                                  - 5 -
+
+
+
+       Other environment variables now supported on Linux systems
+       are MMMMPPPPIIIIDDDDSSSSMMMMOOOOFFFFFFFF and MMMMPPPPIIIIDDDDSSSSMMMMVVVVEEEERRRRBBBBOOOOSSSSEEEE.
+
+
+       4.2  NewFeaturesforMPTRelease1.7
+
+       This section describes the features that are new in the MPT
+       1.7 release. For IRIX customers, the features in the
+       previous section ("New Features for MPT Release 1.6.1) that
+       are marked, "IRIX systems, subsequent release," are also new
+       for this release.
+
+
+       4.2.1  MPIWinlockandMPIWinunlockSupported
+       The MPT 1.7 release supports the MPI-2 functions
+       MMMMPPPPIIIIWWWWiiiinnnnlllloooocccckkkk and MMMMPPPPIIIIWWWWiiiinnnnuuuunnnnlllloooocccckkkk. These functions allow the
+       user to protect access to remote memory windows.
+
+
+       4.2.2  ReducedStartupTimeOverhead
+       Changes have been made to significantly reduce the startup
+       time for MPI and SHMEM jobs.  For more detailed information,
+       see the iiiinnnnttttrrrroooosssshhhhmmmmeeeemmmm man page.
+
+
+       4.2.3  SHMEMSupportedonLinuxSystems
+       The MPT 1.7 release supports the SHMEM programming model for
+       Linux systems.  On Linux, mmmmppppiiiirrrruuuunnnn is required to launch SHMEM
+       programs. For this release, SHMEM is supported for single
+       host jobs only.  For more detailed information, see the
+       iiiinnnnttttrrrroooosssshhhhmmmmeeeemmmm man page.
+
+
+       4.2.4  MPINAPEnvironmentVariable
+       The MPT 1.7 release supports the MMMMPPPPIIIINNNNAAAAPPPP environment
+       variable to control the way in which ranks wait for events
+       to occur.  You can find more information in the MMMMPPPPIIII(1) man
+       page.
+
+
+       4.3  NewFeaturesforMPTRelease1.8
+
+
+
+       4.3.1  SupportforHIPPI-800OSBypassWillCeaseinMPT1.9
+        The OS bypass support for MPI across HIPPI will be removed
+       from MPT feature releases after MPT 1.8.  The MPT
+       engineering team will focus future efforts on supporting MPI
+       features on NUMAlink, GSN, and Myrinet-based systems and
+       clusters.
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 6 -
+
+
+
+       4.3.2  SupportforMPIINPLACE
+       The MPT 1.8 release supports the MPI-2 argument
+       MMMMPPPPIIIIIIIINNNNPPPPLLLLAAAACCCCEEEE. Collective communications can occur "in place"
+       for intracommunicators, with the output buffer being
+       identical to the input buffer.  This is specified by
+       providing a special argument value, MMMMPPPPIIIIIIIINNNNPPPPLLLLAAAACCCCEEEE, instead of
+       the send buffer or the receive buffer argument.
+
+
+       4.3.3  SupportofMPIAccumulate
+       The MPT 1.8 release supports the MPI-2 function
+       MMMMPPPPIIIIAAAAccccccccuuuummmmuuuullllaaaatttteeee.  This is a one-sided communication function
+       that combines the data moved to the target process with the
+       data that already resides at that process, rather than
+       replacing the data there.
+
+
+       4.3.4  AdditionalNUMAplacementsupportonLinux
+       NUMA placement can be critical for MPI codes on Linux.  This
+       is also the case for hybrid OpenMP/MPI codes.  Support has
+       been added for "containing" the OpenMP threads near the MPI
+       ranks in this release. Although these threads  are not
+       "pinned," they are restricted to run only on a certain set
+       of CPUs, based on the OOOOMMMMPPPPNNNNUUUUMMMMTTTTHHHHRRRREEEEAAAADDDDSSSS environment variable.
+       The "pinning" of the OpenMP threads will be considered in a
+       future release.
+
+       In addition, support for the MMMMPPPPIIIIDDDDSSSSMMMMPPPPPPPPMMMM environment
+       variable is enabled. The environment variable
+       MMMMPPPPIIIIDDDDSSSSMMMMMMMMUUUUSSSSTTTTRRRRUUUUNNNN has been deprecated in favor of
+       MMMMPPPPIIIIDDDDSSSSMMMMDDDDIIIISSSSTTTTRRRRIIIIBBBBUUUUTTTTEEEE on Linux only.  The displayed information
+       generated by the MMMMPPPPIIIIDDDDSSSSMMMMVVVVEEEERRRRBBBBOOOOSSSSEEEE environment variable has
+       been enhanced to display information related to these new
+       features.
+
+
+       4.3.5  EnhancedMPIBarrierandMPIWinfence
+       An optimized implementation of the MMMMPPPPIIIIBBBBaaaarrrrrrrriiiieeeerrrr and
+       MMMMPPPPIIIIWWWWiiiinnnnffffeeeennnncccceeee functions has been introduced in this release.
+       This optimized path can be used with barriers or fences on
+       arbitrary communicators and windows.  In this release, this
+       optimized implementation is generally not activated by
+       default. The feature can be activated by setting the
+       MMMMPPPPIIIIBBBBAAAARRRRDDDDIIIISSSSSSSSEEEEMMMM or MMMMPPPPIIIIBBBBAAAARRRRTTTTRRRREEEEEEEE environment variables.  For
+       further details on activating this feature, see the MMMMPPPPIIII man
+       page.
+
+
+       4.3.6  ImprovedMPILatency
+       Changes have been made in the MPT 1.8 release to reduce the
+       MPI send/receive latency.  Several of these changes affect
+
+
+
+
+
+
+
+
+
+
+
+                                  - 7 -
+
+
+
+       both IRIX and Linux implementations. The most pronounced
+       improvements can be seen on SGI Altix 3000 systems for
+       send/receive latency  measured between two processes that
+       share the same SHub, and for latency between processes
+       residing on different partitions.
+
+
+       4.3.7  SHMEMSupportforPartitionedLinuxSystems
+       The MPT 1.8 release supports the SHMEM programming model for
+       partitioned Linux systems.  On Linux, the mmmmppppiiiirrrruuuunnnn multiple
+       host syntax is required to launch a SHMEM application on
+       multiple partitions.  SHMEM routines can be used exclusively
+       in an application, or can be used in conjunction with MPI
+       message passing routines in the same application.  For more
+       detailed information, see the iiiinnnnttttrrrroooosssshhhhmmmmeeeemmmm man page.
+
+
+       4.3.8  StackTracebackandCoreDumpControl
+       With MPT 1.8, if a rank aborts, either by calling
+       MPIAbort() or by receiving an unhandled signal which
+       normally results in a core dump, MPT will display a stack
+       traceback showing the location of the abort.
+
+       MPT will limit creation of core files to the first rank on
+       each host to abort, by default.
+
+       More information is located in the MMMMPPPPIIII(1) man page under the
+       MMMMPPPPIIIICCCCOOOORRRREEEEDDDDUUUUMMMMPPPP and MMMMPPPPIIIICCCCOOOORRRREEEEDDDDUUUUMMMMPPPPDDDDEEEEBBBBUUUUGGGGGGGGEEEERRRR environment variable
+       descriptions.
+
+
+       4.3.9  ROMIOModifications
+       With MPT 1.8, the ROMIO software (which supplies the MPI-2
+       File I/O routines) has been modified so that the special
+       MMMMPPPPIIIIOOOORRRReeeeqqqquuuueeeesssstttt datatype and the MMMMPPPPIIIIOOOOWWWWaaaaiiiitttt() and MMMMPPPPIIIIOOOOTTTTeeeesssstttt()
+       routines are no longer required to be used. Instead, the
+       MPI-1 MMMMPPPPIIIIRRRReeeeqqqquuuueeeesssstttt datatype and the MMMMPPPPIIIIWWWWaaaaiiiitttt****() and
+       MMMMPPPPIIIITTTTeeeesssstttt****() series of routines can be used.
+
+       Existing binaries will continue to work properly if they
+       call the older MMMMPPPPIIIIOOOO**** routines.  Source code does not need to
+       be modified to use the MMMMPPPPIIIIRRRReeeeqqqquuuueeeesssstttt datatype and routines.
+       Your existing source will compile without comment.  However,
+       if you do modify your source and recompile, you will be able
+       to call MMMMPPPPIIIIWWWWaaaaiiiittttaaaannnnyyyy(), for example, with a mix of
+       MMMMPPPPIIIIRRRReeeeqqqquuuueeeesssstttt requests returned from communication calls like
+       MMMMPPPPIIIIIIIIsssseeeennnndddd() and requests returned from I/O routines like
+       MMMMPPPPIIIIFFFFiiiilllleeeeiiiiwwwwrrrriiiitttteeee().  This unification of I/O and
+       communication requests can lead to simplification of your
+       code and enhanced overlapping of I/O and program execution.
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 8 -
+
+
+
+       However, if you do modify your source as outlined above, you
+       must execute the program using MPT 1.8 or later only;
+       earlier versions of the MPT library will not correctly run
+       such programs.
+
+
+       4.4  NewFeaturesforMPTRelease1.9
+
+       4.4.1  MPI-2ProcessManagerInterfaceFunctionality
+       MPI-2 functionality for the MMMMPPPPIIIICCCCoooommmmmmmmssssppppaaaawwwwnnnn and related
+       functions and attributes described in sections 5.3, 5.5.1,
+       and 5.5.3 of the MPI-2 standard is enabled for Linux
+       partitioned systems in this release. For further details,
+       see the mmmmppppiiiirrrruuuunnnn(1) and MMMMPPPPIIII(1) man pages.
+
+
+       4.4.2  USE MPI Available for Linux Users of the Intel efc
+       Fortran Compiler
+       The USE MPI statement has been available in IRIX Fortran
+       since MPT 1.4.  With MPT 1.9, this feature has been added
+       for users of efc on Linux as well.  See MMMMPPPPIIII(1) man page for
+       details, including the need for a -I option to efc.
+
+
+       4.4.3  Enhanced MPIBarrier and MPIWinfence by Default on
+       Linux
+       In MPT 1.8, an enhanced barrier algorithm was implemented
+       for the MMMMPPPPIIIIBBBBaaaarrrrrrrriiiieeeerrrr and MMMMPPPPIIIIWWWWiiiinnnnffffeeeennnncccceeee functions.  This
+       optimized algorithm uses the Altix hardware fetch-op
+       synchronization registers, and scales as O(log(n)) as the
+       number of processors increases.  In MPT 1.9, this barrier
+       algorithm is activated by default on Altix systems when the
+       MMMMPPPPIIIIBBBBaaaarrrrrrrriiiieeeerrrr and MMMMPPPPIIIIWWWWiiiinnnnffffeeeennnncccceeee functions are called.
+
+
+       4.4.4  AdditionalNUMAPlacementSupportonLinux
+       MMMMPPPPIIIIDDDDSSSSMMMMDDDDIIIISSSSTTTTRRRRIIIIBBBBUUUUTTTTEEEE has now been enhanced to support multiple
+       executables specified on the same mmmmppppiiiirrrruuuunnnn command. In
+       addition support has been added so that MMMMPPPPIIIIDDDDSSSSMMMMDDDDIIIISSSSTTTTRRRRIIIIBBBBUUUUTTTTEEEE
+       also works for MMMMPPPPIIIICCCCoooommmmmmmmssssppppaaaawwwwnnnn.  This support will ensure
+       that when run on a dedicated machine or within a cpuset that
+       users can get optimal performance.  Users of LSF 5.1 that
+       use dynamic cpusets will cause MMMMPPPPIIIIDDDDSSSSMMMMDDDDIIIISSSSTTTTRRRRIIIIBBBBUUUUTTTTEEEE to be set
+       automatically.
+
+
+       4.4.5  Single-CopyModeEnabledbyDefault
+       MPT 1.9 now supports single-copy mode for MPI communication
+       by default for certain situations.  The eligible MPI
+       functions include MMMMPPPPIIIIIIIIsssseeeennnndddd, MMMMPPPPIIIISSSSeeeennnnddddrrrreeeeccccvvvv, MMMMPPPPIIIIAAAAllllllllttttooooaaaallllllll,
+       MMMMPPPPIIIIBBBBccccaaaasssstttt, MMMMPPPPIIIIAAAAllllllllrrrreeeedddduuuucccceeee and MMMMPPPPIIIIRRRReeeedddduuuucccceeee.  Users that use
+
+
+
+
+
+
+
+
+
+
+
+                                  - 9 -
+
+
+
+       these functions and transfer 2000 bytes or more of data will
+       use the single-copy mode for the transfer.  Users of
+       MMMMPPPPIIIISSSSeeeennnndddd should continue to use the MMMMPPPPIIIIBBBBUUUUFFFFFFFFEEEERRRRMMMMAAAAXXXX
+       environment variable to enable single copy. Users who wish
+       to disable this optimization can set the
+       MMMMPPPPIIIIDDDDEEEEFFFFAAAAUUUULLLLTTTTSSSSIIIINNNNGGGGLLLLEEEECCCCOOOOPPPPYYYYOOOOFFFFFFFF environment variable.
+
+
+       4.4.6  MPI C++ bindings for Intel C++ 8.0 and g++ 3.0
+       compilers on Linux
+       MPT 1.9 now contains two separate MPI C++ binding libraries.
+       The default libmpi++.so (-lmpi++) library is compatible with
+       code generated by the g++ 2.0 versions of the compiler but
+       is not binary compatible with g++ 3.0 versions.  A new
+       library is now also available libg++3mpi++.so (-lg++3mpi++)
+       that is binary compatible with code generated by the g++ 3.0
+       compilers as well as that produced by the Intel 8.0 C++
+       compiler.
+
+
+       4.4.7  HIPPI-800InterconnectNoLongerSupported
+       The MPT 1.9 release no longer supports the HIPPI-800 OS
+       bypass interconnect on IRIX systems.  Support for any
+       remaining HIPPI interconnect users will be limited to
+       patches for MPT 1.8.
+
+
+       4.4.8  MPISupportforLargeAltixSystems
+       The MPT 1.9 release has been enhanced to allow support for
+       more than 200 MPI processes on a single system image for
+       Altix systems.  Please see the FFFFiiiilllleeeeDDDDeeeessssccccrrrriiiippppttttoooorrrrLLLLiiiimmmmiiiittttssss
+       section in Chapter 6 of these Release Notes for information
+       on how to increase the system limit of open file
+       descriptors.
+
+
+       4.4.9  g77ProfilingEntryPoints
+       With the MPT 1.9 release, profiling entry points were added
+       for Fortran codes using the g77 compiler on Altix.
+       Profiling entry points are discussed in Section 4.18 of the
+       MPI-2 Standard, and in Chapter 8 of the MPI-1.1 Standard.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

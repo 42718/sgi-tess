@@ -1,0 +1,86 @@
+
+
+
+MPI_TYPE_CREATE_HVECTOR(3)			    MPI_TYPE_CREATE_HVECTOR(3)
+
+
+
+NAME
+     MPI_Type_create_hvector - Creates a vector (strided) data type with
+     offset in bytes
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Type_create_hvector( count, blocklen, stride,
+	  old_type,
+	  newtype )
+	  int	       count;
+	  int	    blocklen;
+	  MPI_Aint     stride;
+	  MPI_Datatype old_type;
+	  MPI_Datatype *newtype;
+
+     C++:
+
+	  #include <mpi.h>
+
+	  Datatype Datatype::Create_hvector(
+	  int		    count,
+	  int		    blocklength,
+	  Aint		    stride) const
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER count, blocklength, oldtype, newtype,
+	  ierror
+	  INTEGER(KIND=MPI_ADDRESS_KIND) stride
+
+	  CALL MPI_TYPE_CREATE_HVECTOR( count, blocklength, stride,
+	  oldtype, newtype, ierror)
+
+
+DESCRIPTION
+     The MPI_Type_create_hvector routine creates a vector (strided) data type
+     with offset in bytes.  The MPI_Type_create_hvector routine is an MPI-2
+     implementation replacing the MPI-1 MPI_Type_hvector routine which has
+     been deprecated.  This routine differs from the MPI-1 routine in that in
+     the Fortran implementation the stride argument is of type
+     MPI_ADDRESS_KIND, which makes it more suitable for ABI 64.  Currently,
+     the Fortran version of this function is implemented only for ABI 64.
+     This routine accepts the following parameters:
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_TYPE_CREATE_HVECTOR(3)			    MPI_TYPE_CREATE_HVECTOR(3)
+
+
+
+     count	    Specifies the number of blocks (nonnegative integer)
+
+     blocklen	    Specifies the number of elements in each block
+		    (nonnegative integer)
+
+     stride	    Specifies the number of bytes between the start of each
+		    block (integer)
+
+     old_type	    Specifies the old data type (handle)
+
+     newtype	    Returns the new data type (handle)
+
+     ierror	    Specifies the return code value for succes

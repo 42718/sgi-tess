@@ -1,0 +1,84 @@
+
+
+
+MPI_TYPE_HINDEXED(3)					  MPI_TYPE_HINDEXED(3)
+
+
+
+NAME
+     MPI_Type_hindexed - Creates an indexed data type with offsets in bytes
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Type_hindexed( count, blocklens, indices,
+	  old_type, newtype )
+	  int		count;
+	  int		blocklens[];
+	  MPI_Aint	indices[];
+	  MPI_Datatype	old_type;
+	  MPI_Datatype *newtype;
+
+
+     C++:
+
+	  #include <mpi.h>
+
+	  Datatype Datatype::Create_hindexed(
+	  int		    count,
+	  const 	    intarray_of_blocklengths[],
+	  const Aint	    array_of_displacements[]) const
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER count, array_of_blocklengths(*),
+	  array_of_displacements(*), oldtype, newtype, ierror
+
+	  CALL MPI_TYPE_HINDEXED(count, array_of_blocklengths(*),
+	  array_of_displacements(*), oldtype, newtype, ierror)
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Type_hindexed routine creates an indexed data type with offsets
+     in bytes.	This routine accepts the following parameters:
+
+     count     Specifies the number of blocks.	Also specifies the number of
+	       entries in indices and blocklens (integer)
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_TYPE_HINDEXED(3)					  MPI_TYPE_HINDEXED(3)
+
+
+
+     blocklens Specifies the number of elements in each block (array of
+	       nonnegative integers)
+
+     indices   Specifies the byte displacement of each block (array of
+	       integers)
+
+     old_type  Specifies the old data type (handle)
+
+     newtype   Returns the new data type (handle)
+
+     ierror    Specifies the return c

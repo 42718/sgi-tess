@@ -1,0 +1,82 @@
+
+
+
+MPI_GROUP_TRANSLATE_RANKS(3)			  MPI_GROUP_TRANSLATE_RANKS(3)
+
+
+
+NAME
+     MPI_Group_translate_ranks - Translates the ranks of processes in one
+     group to those in another group
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Group_translate_ranks ( group_a, n, ranks_a,
+	  group_b, ranks_b )
+	  MPI_Group group_a;
+	  int n;
+	  int	    *ranks_a;
+	  MPI_Group  group_b;
+	  int	    *ranks_b;
+
+
+     C++:
+
+	  #include <mpi.h>
+
+	  static void Group::Translate_ranks(
+	  const Group&	    group1,
+	  int		    n,
+	  const int	    ranks1[],
+	  const Group&	    group2,
+	  int		    ranks2[])
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER group1, n, ranks1(*), group2, ranks2(*), ierror
+
+	  CALL MPI_GROUP_TRANSLATE_RANKS(group1, n, ranks1(*), group2, ranks2(*), ierror)
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Group_translate_ranks routine translates the ranks of processes
+     in one group to those in another group.  This routine accepts the
+     following parameters:
+
+     group_a   Specifies the first group (handle).
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_GROUP_TRANSLATE_RANKS(3)			  MPI_GROUP_TRANSLATE_RANKS(3)
+
+
+
+     n	       Specifies the number of ranks in ranks_a and ranks_b arrays
+	       (integer).
+
+     ranks_a   Specifies an array of zero or more valid ranks in group_a.
+
+     group_b   Specifies the second group (handle).
+
+     ranks_b   Returns an array of corresponding ranks in group_b.  When no
+	       correspondence exists, returns M

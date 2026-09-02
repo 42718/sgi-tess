@@ -1,0 +1,107 @@
+
+
+
+MPI_Thread(3)							 MPI_Thread(3)
+
+
+
+NAME
+     MPI_Thread - Returns MPI thread information
+
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Init_thread(int *argc, char ***argv, int required,
+	  int *provided);
+
+	  int MPI_Query_thread(int *provided);
+
+	  int MPI_Is_thread_main(int *flag);
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER required, provided, ierror
+	  CALL MPI_INIT_THREAD(required, provided, ierror)
+
+	  INTEGER provided
+	  CALL MPI_QUERY_THREAD(provided)
+
+	  LOGICAL flag
+	  INTEGER ierror
+	  CALL MPI_IS_THREAD_MAIN(flag, ierror)
+
+
+DESCRIPTION
+     The following MPI_Thread routines return MPI thread information:
+
+     MPI_Init_thread	 The MPI_Init_thread routine initializes the MPI
+			 execution environment in the same way that a call to
+			 MPI_INIT would. In addition, it initializes the
+			 thread environment.
+
+			 This routine accepts the following parameters:
+
+			      *   argc, which specifies a pointer to the
+				  number of arguments.
+
+			      *   argv, which specifies a pointer to the
+				  argument vector.
+
+			      *   required, which specifies the desired level
+				  of thread support. The following possible
+				  values are listed in increasing order of
+				  thread support:
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Thread(3)							 MPI_Thread(3)
+
+
+
+				   MPI_THREAD_SINGLE:  Only one thread will
+				   execute.
+
+				   MPI_THREAD_FUNNELED:  The process can be
+				   multithreaded, but only the main thread
+				   will make MPI calls.
+
+				   MPI_THREAD_SERIALIZED:  The process can be
+				   multithreaded, and multiple threads can
+				   make MPI calls, but only one at a time.
+				   MPI calls are not made concurrently from
+				   two distinct threads.
+
+				   MPI_THREAD_MULTIPLE:  Multiple threads can
+				   call MPI.
+
+			      *   provided, which specifies the actual level
+				  of thread support provided by MPI. It can
+				  have one of the four values in the previous
+				  option list.
+
+     MPI_Query_thread	 The MPI_Query_thread routine returns, in provided,
+			 the current level of thread support.
+
+     MPI_Is_thread_main  The MPI_Is_thread_main routine can be called by a
+			 thread to find out whether it is the main thread. The
+			 main thread is the thread that called MPI_Init or
+			 MPI_Init_thread.  The answer is returned in flag.
+
+NOTES
+     MPI statistics (see the MPI_SGI_stat man page) are not thread safe.
+
+SEE ALSO
+     MPI_SGI_

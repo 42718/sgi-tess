@@ -1,0 +1,154 @@
+
+
+
+MPI_DATA_TYPE(3)					      MPI_DATA_TYPE(3)
+
+
+
+NAME
+     MPI_Data_type - Defines C and Fortran data types
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Data_type routine defines special data types for both C and
+     Fortran and data types of type MPI_Datatype for C programs and of type
+     integer for Fortran programs.  The C types should be used only in C
+     programs and the Fortran types should be used only in Fortran programs.
+     For example, it is an error to use MPI_INT for a Fortran integer.
+
+   Special Data Types
+     The following data types can be used in C or Fortran programs:
+
+     MPI_PACKED 	      Used for the  MPI_Pack(3) and MPI_Unpack(3)
+			      routines
+
+     MPI_UB		      Used for the MPI_Type_struct(3) routine (an
+			      upper-bound indicator)
+
+     MPI_LB		      Used for the MPI_Type_struct(3) routine (a
+			      lower-bound indicator)
+
+   C Data Types
+     The following data types can be used in all C programs:
+
+     MPI_CHAR		      Specifies char
+
+     MPI_BYTE		      Specifies unsigned char (see the standard)
+
+     MPI_SHORT		      Specifies short
+
+     MPI_INT		      Specifies int
+
+     MPI_LONG		      Specifies long
+
+     MPI_FLOAT		      Specifies float
+
+     MPI_DOUBLE 	      Specifies double
+
+     MPI_UNSIGNED_CHAR	      Specifies unsigned char
+
+     MPI_UNSIGNED_SHORT       Specifies unsigned short
+
+     MPI_UNSIGNED	      Specifies unsigned int
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_DATA_TYPE(3)					      MPI_DATA_TYPE(3)
+
+
+
+     MPI_UNSIGNED_LONG	      Specifies unsigned long
+
+     MPI_LONG_DOUBLE	      Specifies long double (some systems may not
+			      implement)
+
+     The following data types can be used for the MPI functions MPI_MAXLOC and
+     MPI_MINLOC:
+
+     MPI_FLOAT_INT	      Specifies struct { float, int }
+
+     MPI_LONG_INT	      Specifies struct { long, int }
+
+     MPI_DOUBLE_INT	      Specifies struct { double, int }
+
+     MPI_SHORT_INT	      Specifies struct { short, int }
+
+     MPI_2INT		      Specifies struct { int, int }
+
+     MPI_LONG_DOUBLE_INT      Specifies struct { long double, int } (this is
+			      an optional type and can be set to NULL)
+
+     MPI_LONG_LONG_INT	      Specifies struct { long long, int } (this is an
+			      optional type and can be set to NULL)
+
+   Fortran Data Types
+     The following data types can be used in all Fortran programs:
+
+     MPI_REAL		      Specifies REAL
+
+     MPI_INTEGER	      Specifies INTEGER
+
+     MPI_LOGICAL	      Specifies LOGICAL
+
+     MPI_DOUBLE_PRECISION     Specifies DOUBLE PRECISION
+
+     MPI_COMPLEX	      Specifies COMPLEX
+
+     MPI_DOUBLE_COMPLEX       Specifies COMPLEX*16 (or COMPLEX*32) where
+			      supported
+
+     The following data types are optional:
+
+     MPI_INTEGER1	      Specifies INTEGER*1 if supported
+
+     MPI_INTEGER2	      Specifies INTEGER*2 if supported
+
+     MPI_INTEGER4	      Specifies INTEGER*4 if supported
+
+     MPI_REAL4		      Specifies REAL*4 if supported
+
+
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_DATA_TYPE(3)					      MPI_DATA_TYPE(3)
+
+
+
+     MPI_REAL8		      Specifies REAL*8 if supported
+
+     The following data types are for the MPI functions MPI_MAXLOC and
+     MPI_MINLOC.  In Fortran, these data types always consist of two elements
+     of the same Fortran type.
+
+     MPI_2INTEGER		   Specifies INTEGER, INTEGER
+
+     MPI_2REAL			   Specifies REAL, REAL
+
+     MPI_2DOUBLE_PRECISION	   Specifies DOUBLE PRECISION, DOUBLE
+				   PRECISION
+
+     MPI_2COMPLEX		   Specifies COMPLEX, COMPLEX
+

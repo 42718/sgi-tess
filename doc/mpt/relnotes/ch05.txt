@@ -1,0 +1,132 @@
+
+
+
+                                  - 1 -
+
+
+
+       5.  ClosedPVs
+
+       The PVs listed and described in this chapter represent
+       customer PVs closed in MPT releases 1.6.1 and later.  They
+       are grouped according to the release in which they were
+       closed.
+
+
+       5.1  PVsClosedintheMPT1.6.1Release
+
+       The following PVs were closed:
+
+       852596    MPI gets broken pipe with large stdin file
+
+       848732   SSSSMMMMAAAADDDDSSSSMMMMCCCCPPPPUUUULLLLIIIISSSSTTTT fails with large CPU count
+
+       862437   MMMMPPPPIIIIAAAAllllllllooooccccmmmmeeeemmmm should abort on MMMMPPPPIIIIEEEERRRRRRRRNNNNOOOOMMMMEEEEMMMM errors
+
+       857642   MPT 1.6 encounters internal error when used with Speedshop
+
+       5.2  PVsClosedintheMPT1.7Release
+
+       The following PVs were closed:
+
+       851212   mmmmppppiiiirrrruuuunnnn ----nnnnpppp nn ~~~~////xxxx has large initiation overhead
+                as nn gets large.
+
+       804314   Regression in MMMMPPPPIIIIIIIInnnniiiitttttttthhhhrrrreeeeaaaadddd for ----66664444 compiler option
+                (also dependent on a fix in an upcoming IRIX release)
+
+       867391   MPI programs abort when descriptor limits are low
+
+       865660   MPI-IO has bad file position
+
+       879963   Fortran entrypoints for MPIFILEOPEN are missing on Linux.
+
+       5.3  PVsClosedintheMPT1.8Release
+
+       The following PVs were closed:
+
+       883243   Multi-partition MPI jobs on IRIX fail in single-copy
+                transfers for send-to-self
+
+       881145   MPI "could not create lock" error on multi-host SGI Altix 3000
+                system
+
+       864283   MPI abnormal termination occasionally fails to clean up procs
+                on SGI Altix 3000 systems
+
+       887802   MMMMPPPPIIIIAAAALLLLLLLLTTTTOOOOAAAALLLLLLLL may fail on Linux if linked with ----llllssssmmmmaaaa
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+       887752   MPI statistics are misleading when using XPMEM multihost
+
+       880796   MPI I/O direct-io buffer alignment relaxation code broken
+
+       884550   Fortran mpifinalized and mpitypedup entry points are missing
+
+       5.4  PVsClosedintheMPT1.8.1Release
+
+       The following PVs were closed:
+
+       896116   Occasional optimized MPI/SHMEM barrier hangs on Altix
+
+       5.5  PVsClosedintheMPT1.9Release
+
+       The following PVs were closed:
+
+       896116   Occasional optimized MPI/SHMEM barrier hangs on Altix
+
+       896768   MPIBarrier fails with OpenMP threadprivate
+
+       895337   Use of alloca in collectives can cause abotts with large data counts
+
+       900002   Fix man page for MPIALLGATHER.  Fortran argument order was incorrect.
+
+       877386   MPIBsend of indexed datatype with non-zero lb sends bad data
+
+       900544   "setenv MPICOREDUMP inhibit" should turn off MPIAbort stack
+                traceback, too
+
+       896784   Cannot perform MPIFileiwrite or debugger attaches without -lrt
+
+       901368   Increase MPI's default FDSETSIZE on Altix to 8192
+
+       880795   MPI IO on Altix doesn't recognise when files reside in an xfs
+                filesystem
+
+       882725   mpirun doesn't stay in sleep state when stdin is unreadable
+
+       901714   MPT/ROMIO problem - uninitialized nprocs in adhints.c
+
+       901881   MPI stack traceback output split between stderr, stdout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

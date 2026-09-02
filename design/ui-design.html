@@ -1,0 +1,1316 @@
+<title>Tess — distributed render framework UI design</title>
+<style>
+  /* ---------- page tokens ---------- */
+  :root {
+    --ground: #e4e7ea;
+    --ground-2: #f4f6f7;
+    --ink: #171b1f;
+    --ink-2: #4a545c;
+    --ink-3: #74808a;
+    --rule: #c3cad0;
+    --accent: #22697f;
+    --accent-soft: #d9e6ea;
+    --ok: #35722f;
+    --warn: #8f5f10;
+    --crit: #99271f;
+    --desktop: #4a5a63;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --helv: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+    /* host hues — also the tile-ownership colours */
+    --h-o2: #4f8fbf;
+    --h-oct: #c8863c;
+    --h-ori: #5f9e4a;
+    --h-onx: #9a6cc0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #101519; --ground-2: #171d22; --ink: #e6eaed; --ink-2: #a8b4bc;
+      --ink-3: #7d8a93; --rule: #2b343b; --accent: #6fc0d4; --accent-soft: #17303a;
+      --ok: #6fbf62; --warn: #d9a441; --crit: #e0685c; --desktop: #232e35;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #101519; --ground-2: #171d22; --ink: #e6eaed; --ink-2: #a8b4bc;
+    --ink-3: #7d8a93; --rule: #2b343b; --accent: #6fc0d4; --accent-soft: #17303a;
+    --ok: #6fbf62; --warn: #d9a441; --crit: #e0685c; --desktop: #232e35;
+  }
+  :root[data-theme="light"] {
+    --ground: #e4e7ea; --ground-2: #f4f6f7; --ink: #171b1f; --ink-2: #4a545c;
+    --ink-3: #74808a; --rule: #c3cad0; --accent: #22697f; --accent-soft: #d9e6ea;
+    --ok: #35722f; --warn: #8f5f10; --crit: #99271f; --desktop: #4a5a63;
+  }
+
+  /* ---------- Motif kit — fixed, period-correct, never themed ---------- */
+  :root {
+    --face: #a8abb0;
+    --face-lit: #b6b9be;
+    --hi: #d7dade;
+    --lo: #4e5155;
+    --mtext: #0d0f12;
+    --sunken: #91959a;
+    --title: #26527c;
+    --title-dim: #6f7a85;
+    --select: #8f9aa8;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--serif); font-size: 17px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+  .col { max-width: 68ch; }
+
+  /* ---------- masthead ---------- */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--helv); font-weight: 700; letter-spacing: -.02em;
+    font-size: clamp(30px, 4.6vw, 47px); line-height: 1.04; margin: 0 0 20px;
+    text-wrap: balance; max-width: 30ch;
+  }
+  .standfirst { font-size: 20px; line-height: 1.55; color: var(--ink-2); margin: 0 0 34px; max-width: 62ch; }
+  .standfirst em { color: var(--ink); font-style: italic; }
+
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+    gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+    margin: 0 0 12px;
+  }
+  .fact { background: var(--ground-2); padding: 13px 15px; }
+  .fact dt {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .11em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 5px;
+  }
+  .fact dd { margin: 0; font-family: var(--helv); font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .fact dd small { display: block; font-weight: 400; font-size: 12px; color: var(--ink-3); letter-spacing: 0; margin-top: 2px; }
+  .provenance { font-size: 14px; color: var(--ink-3); margin: 0 0 52px; font-style: italic; }
+
+  h2 {
+    font-family: var(--helv); font-weight: 700; font-size: 13px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink); margin: 64px 0 6px;
+    padding-bottom: 9px; border-bottom: 2px solid var(--ink);
+  }
+  h2 + .sub { font-size: 16px; color: var(--ink-2); margin: 12px 0 26px; max-width: 66ch; }
+  h3 {
+    font-family: var(--helv); font-size: 15px; font-weight: 700; letter-spacing: -.01em;
+    margin: 34px 0 8px;
+  }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+
+  /* ---------- desktop stage ---------- */
+  .stagebar {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    margin: 0 0 12px; font-family: var(--mono); font-size: 11px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .stagebar .grow { flex: 1; }
+  .pbtn {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    background: var(--ground-2); color: var(--ink); border: 1px solid var(--rule);
+    padding: 6px 12px; cursor: pointer;
+  }
+  .pbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .pbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pbtn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  .viewport { overflow: auto; border: 1px solid var(--rule); background: var(--desktop); }
+  .stage {
+    width: 1280px; height: 1024px; position: relative; flex: none;
+    transform-origin: 0 0;
+    background:
+      repeating-conic-gradient(from 0deg at 50% 50%, #46565f 0deg 90deg, #435259 90deg 180deg) 0 0 / 8px 8px;
+  }
+  .stage.fit { }
+
+  /* ---------- Motif window chrome (4Dwm) ---------- */
+  .mw {
+    position: absolute; background: var(--face);
+    border: 2px solid var(--face);
+    box-shadow: 2px 2px 0 rgba(0,0,0,.35);
+    font-family: var(--helv); color: var(--mtext);
+    display: flex; flex-direction: column;
+  }
+  .mw::before { /* outer 4Dwm bevel */
+    content: ""; position: absolute; inset: -2px; pointer-events: none;
+    border-top: 2px solid var(--hi); border-left: 2px solid var(--hi);
+    border-right: 2px solid var(--lo); border-bottom: 2px solid var(--lo);
+  }
+  .titlebar {
+    height: 21px; background: var(--title); color: #fff; display: flex; align-items: center;
+    gap: 4px; padding: 0 2px; margin: 1px 1px 2px; flex: none;
+  }
+  .titlebar.dim { background: var(--title-dim); }
+  .tb-menu, .tb-btn {
+    width: 15px; height: 15px; background: var(--face);
+    border-top: 1px solid var(--hi); border-left: 1px solid var(--hi);
+    border-right: 1px solid var(--lo); border-bottom: 1px solid var(--lo);
+    flex: none; position: relative;
+  }
+  .tb-menu::after {
+    content: ""; position: absolute; left: 2px; right: 2px; top: 6px; height: 3px;
+    background: var(--mtext); border-bottom: 1px solid var(--hi);
+  }
+  .tb-btn.max::after {
+    content: ""; position: absolute; inset: 3px; border: 1px solid var(--mtext);
+    border-top-width: 2px;
+  }
+  .tb-title {
+    flex: 1; font-size: 11px; font-weight: 700; letter-spacing: .01em;
+    text-align: center; white-space: nowrap; overflow: hidden;
+  }
+
+  /* ---------- Motif widgets ---------- */
+  .out { border-top: 2px solid var(--hi); border-left: 2px solid var(--hi);
+         border-right: 2px solid var(--lo); border-bottom: 2px solid var(--lo); }
+  .in  { border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+         border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi); }
+
+  .menubar { display: flex; gap: 0; background: var(--face); padding: 1px 2px; flex: none;
+             border-bottom: 1px solid var(--lo); }
+  .menubar span { font-size: 11px; font-weight: 700; padding: 3px 9px; }
+  .menubar span u { text-decoration: underline; }
+  .menubar span:hover { border-top: 1px solid var(--hi); border-left: 1px solid var(--hi);
+                        border-right: 1px solid var(--lo); border-bottom: 1px solid var(--lo); }
+
+  .body { padding: 5px; display: flex; flex-direction: column; gap: 5px; flex: 1; min-height: 0; }
+
+  .frame { position: relative; padding: 11px 8px 7px; margin-top: 7px;
+           border: 1px solid var(--lo); border-right-color: var(--hi); border-bottom-color: var(--hi); }
+  .frame > legend, .frame > .lgd {
+    position: absolute; top: -7px; left: 7px; background: var(--face);
+    padding: 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  }
+
+  .row { display: flex; align-items: center; gap: 6px; }
+  .row + .row { margin-top: 4px; }
+  .lab { font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .lab.w { width: 86px; }
+  .lab.ww { width: 108px; }
+  .hint { font-size: 10px; color: #3a3d42; }
+
+  .tf { background: var(--sunken); padding: 2px 4px; font-family: var(--mono); font-size: 11px;
+        color: var(--mtext); min-height: 19px; display: flex; align-items: center;
+        border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+        border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi); }
+  .tf.wide { flex: 1; }
+  .tf .caret { width: 1px; height: 12px; background: var(--mtext); margin-left: 1px; }
+
+  .btn { background: var(--face); font-size: 11px; font-weight: 700; padding: 3px 10px;
+         white-space: nowrap; cursor: default;
+         border-top: 2px solid var(--hi); border-left: 2px solid var(--hi);
+         border-right: 2px solid var(--lo); border-bottom: 2px solid var(--lo); }
+  .btn.def { box-shadow: 0 0 0 2px var(--face), 0 0 0 3px var(--lo); }
+  .btn.dis { color: #7c8085; }
+  .btn.sm { padding: 2px 7px; font-size: 10px; }
+
+  .om { background: var(--face); font-size: 11px; padding: 2px 6px 2px 3px; display: flex;
+        align-items: center; gap: 7px;
+        border-top: 2px solid var(--hi); border-left: 2px solid var(--hi);
+        border-right: 2px solid var(--lo); border-bottom: 2px solid var(--lo); }
+  .om::before { content: ""; width: 13px; height: 13px; flex: none; background: var(--face);
+                border-top: 2px solid var(--hi); border-left: 2px solid var(--hi);
+                border-right: 2px solid var(--lo); border-bottom: 2px solid var(--lo); }
+  .om span { font-weight: 700; }
+
+  .tog { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; }
+  .tog::before { content: ""; width: 11px; height: 11px; flex: none; background: var(--face);
+                 border-top: 2px solid var(--hi); border-left: 2px solid var(--hi);
+                 border-right: 2px solid var(--lo); border-bottom: 2px solid var(--lo); }
+  .tog.on::before { background: #f0a020;
+                 border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+                 border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi); }
+
+  /* SgmThumbWheel — the ribbed cylinder */
+  .wheel { height: 15px; width: 92px; flex: none; position: relative; overflow: hidden;
+           background:
+             repeating-linear-gradient(90deg, #8f9298 0 1px, #b9bcc1 1px 2px, #cfd2d6 2px 3px, #b9bcc1 3px 4px, #8f9298 4px 5px);
+           border-top: 1px solid var(--lo); border-left: 1px solid var(--lo);
+           border-right: 1px solid var(--hi); border-bottom: 1px solid var(--hi); }
+  .wheel::after { content: ""; position: absolute; inset: 0;
+           background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(0,0,0,0) 42%, rgba(0,0,0,.30)); }
+
+  /* progress meter */
+  .meter { flex: 1; height: 15px; background: var(--sunken); position: relative;
+           border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+           border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi); }
+  .meter > i { position: absolute; inset: 1px auto 1px 1px; background: var(--title); display: block; }
+  .meter > b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+               font-family: var(--mono); font-size: 10px; color: #fff; text-shadow: 0 0 2px #000; }
+
+  /* cluster table */
+  .tbl { font-family: var(--mono); font-size: 10px; line-height: 1.45; color: var(--mtext);
+         background: #9ea2a7; padding: 3px;
+         border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+         border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi);
+         overflow: hidden; }
+  .tbl table { border-collapse: collapse; width: 100%; }
+  .tbl th { font-size: 9px; letter-spacing: .03em; text-transform: uppercase; text-align: left;
+            padding: 1px 3px 3px; border-bottom: 1px solid var(--lo); white-space: nowrap;
+            font-weight: 700; }
+  .tbl td { padding: 2px 3px; white-space: nowrap; }
+  .tbl tr.sel td { background: var(--select); }
+  .tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px;
+         vertical-align: baseline; }
+  .swatch { display: inline-block; width: 8px; height: 8px; margin-right: 4px; vertical-align: baseline;
+            border: 1px solid rgba(0,0,0,.4); }
+  .bar { display: inline-block; height: 7px; vertical-align: middle; background: var(--title); }
+  .agg { font-family: var(--mono); font-size: 10px; display: flex; gap: 14px; flex-wrap: wrap;
+         padding: 4px 2px 0; }
+  .agg b { font-weight: 700; }
+
+  .logpane { background: #1b1d20; color: #b9d0c8; font-family: var(--mono); font-size: 10px;
+             line-height: 1.5; padding: 4px 6px; height: 74px; overflow: hidden;
+             border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+             border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi); }
+  .logpane .t { color: #6d7d85; }
+  .logpane .w { color: #d9a441; }
+
+  /* render window */
+  .canvaswrap { position: relative; flex: 1; min-height: 0;
+                border-top: 2px solid var(--lo); border-left: 2px solid var(--lo);
+                border-right: 2px solid var(--hi); border-bottom: 2px solid var(--hi); }
+  #fractal { display: block; width: 100%; height: 100%; background: #000; }
+  .statusline { flex: none; display: flex; align-items: center; gap: 10px; margin-top: 3px;
+                padding: 2px 5px; font-family: var(--mono); font-size: 10px;
+                background: var(--face);
+                border-top: 1px solid var(--lo); border-left: 1px solid var(--lo);
+                border-right: 1px solid var(--hi); border-bottom: 1px solid var(--hi); }
+  .statusline .grow { flex: 1; }
+
+  /* callouts */
+  .callout {
+    position: absolute; width: 21px; height: 21px; border-radius: 50%;
+    background: #d8442e; color: #fff; font-family: var(--helv); font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; z-index: 40;
+    box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.5);
+  }
+
+  /* legend + tables */
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 34px; }
+  .legend ol { margin: 0; padding: 0; list-style: none; counter-reset: c; }
+  .legend li {
+    position: relative; padding: 0 0 12px 34px; margin: 0 0 12px;
+    border-bottom: 1px solid var(--rule); font-size: 15px; line-height: 1.5;
+  }
+  .legend li::before {
+    counter-increment: c; content: counter(c);
+    position: absolute; left: 0; top: 1px; width: 21px; height: 21px; border-radius: 50%;
+    background: #d8442e; color: #fff; font-family: var(--helv); font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .legend li b { font-family: var(--helv); font-size: 13px; letter-spacing: -.005em; }
+  .legend h3 { margin-top: 0; }
+
+  .scroller { overflow-x: auto; border: 1px solid var(--rule); background: var(--ground-2); }
+  table.data { border-collapse: collapse; width: 100%; font-family: var(--helv); font-size: 13px; }
+  table.data th {
+    font-size: 10px; letter-spacing: .09em; text-transform: uppercase; text-align: left;
+    padding: 10px 13px; border-bottom: 1px solid var(--ink); color: var(--ink-2); white-space: nowrap;
+  }
+  table.data td { padding: 9px 13px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.data tr:last-child td { border-bottom: 0; }
+  table.data code, .mono { font-family: var(--mono); font-size: 12px; }
+  table.data td.mono { color: var(--ink-2); }
+  .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+         padding: 2px 6px; border: 1px solid currentColor; white-space: nowrap; }
+  .tag.v1 { color: var(--ok); }
+  .tag.later { color: var(--ink-3); }
+  .tag.check { color: var(--warn); }
+
+  .states { display: flex; flex-wrap: wrap; gap: 0; margin: 0 0 20px; font-family: var(--mono);
+            font-size: 11px; }
+  .states div { padding: 9px 15px; border: 1px solid var(--rule); border-right: 0;
+                background: var(--ground-2); white-space: nowrap; }
+  .states div:last-child { border-right: 1px solid var(--rule); }
+  .states div b { color: var(--accent); }
+
+  pre.code {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.62; margin: 0 0 18px;
+    padding: 16px 18px; background: var(--ground-2); border: 1px solid var(--rule);
+    overflow-x: auto; color: var(--ink);
+  }
+  pre.code .c { color: var(--ink-3); }
+  pre.code .k { color: var(--accent); }
+
+  ul.tight { margin: 0 0 18px; padding-left: 22px; }
+  ul.tight li { margin-bottom: 7px; }
+
+  .q { border-left: 3px solid var(--accent); padding: 2px 0 2px 18px; margin: 0 0 24px; }
+  .q h3 { margin: 0 0 6px; }
+  .q p { margin: 0 0 8px; }
+  .q .rec { font-size: 14px; color: var(--ink-2); }
+  .q .rec b { color: var(--ink); font-family: var(--helv); font-size: 13px; }
+
+  footer { margin-top: 76px; padding-top: 22px; border-top: 1px solid var(--rule);
+           font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: .04em; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  @media (max-width: 720px) {
+    .wrap { padding: 34px 16px 64px; }
+    body { font-size: 16px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">IRIX 6.5.30 · MIPSpro 7.4.4 · MPT 1.9 · IRIX IM 2.1</p>
+  <h1>Tess — two windows, one cluster</h1>
+  <p class="standfirst">
+    A UI design for a distributed render framework on real Silicon Graphics hardware.
+    The Mandelbrot set is the first compute module, not the point — the shell, the tile
+    scheduler and the cluster panel are meant to outlive it. <em>Nothing is built yet;
+    this is the drawing to argue with.</em>
+  </p>
+
+  <dl class="facts">
+    <div class="fact"><dt>MPI</dt><dd>MPT 1.9<small>MPI 4.4 · MPI 1.2 + some MPI-2</small></dd></div>
+    <div class="fact"><dt>Launcher</dt><dd>Array Services 3.7<small>arrayd on every host</small></dd></div>
+    <div class="fact"><dt>Toolkit</dt><dd>Motif 2.1.20<small>+ libSgm SGI widgets</small></dd></div>
+    <div class="fact"><dt>Cluster</dt><dd>10 or 26 CPUs<small>4 or 20 of them aurora’s</small></dd></div>
+  </dl>
+  <p class="provenance">
+    Every number above was read out of the install media in ~/Downloads — the MPT 1.9 release notes,
+    the <span class="mono">mpirun(1)</span> and <span class="mono">MPI(1)</span> man pages, and the
+    <span class="mono">motif_eoe</span> product descriptor — rather than recalled. Details in
+    <span class="mono">doc/PLATFORM-FACTS.md</span>.
+  </p>
+
+  <h2>The two windows</h2>
+  <p class="sub">
+    Shown at 1280×1024 — tell me what resolution lucy's head actually runs and this becomes a layout
+    preset chosen for it. The render canvas below is live: it draws a coarse pass first, then real tiles
+    land one by one in the colour of the host that computed them, and the control window's counters move
+    with it. That is the proposed feedback design, not a still.
+  </p>
+
+  <div class="stagebar">
+    <span class="grow">1280 × 1024 · 4Dwm</span>
+    <button class="pbtn" id="replay" type="button">Replay render</button>
+    <button class="pbtn" id="fitbtn" type="button" aria-pressed="true">Fit</button>
+    <button class="pbtn" id="fullbtn" type="button" aria-pressed="false">100%</button>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="stage" id="stage">
+
+      <!-- ===================== RENDER WINDOW ===================== -->
+      <div class="mw" style="left:12px; top:14px; width:748px; height:788px;">
+        <div class="titlebar">
+          <div class="tb-menu"></div>
+          <div class="tb-title" id="tb-render">tess — mandel — render — 1.00e+03× — 62%</div>
+          <div class="tb-btn"></div><div class="tb-btn max"></div>
+        </div>
+        <div class="body" style="padding:4px; gap:0;">
+          <div class="canvaswrap"><canvas id="fractal" width="724" height="716"></canvas></div>
+          <div class="statusline">
+            <span id="sl-pos">re −0.743 643 887 037  im +0.131 825 904 205</span>
+            <span class="grow"></span>
+            <span id="sl-prog">tiles 144/144 · 0.34 Mpix/s · 1.9 s</span>
+            <span id="sl-state">DONE</span>
+          </div>
+        </div>
+        <div class="callout" style="left:318px; top:296px;">1</div>
+        <div class="callout" style="left:556px; top:498px;">2</div>
+        <div class="callout" style="left:-10px; top:752px;">3</div>
+        <div class="callout" style="left:230px; top:-9px;">4</div>
+      </div>
+
+      <!-- ===================== xwsh ===================== -->
+      <div class="mw" style="left:12px; top:818px; width:748px; height:192px;">
+        <div class="titlebar dim">
+          <div class="tb-menu"></div>
+          <div class="tb-title">xwsh — lucy — rutger</div>
+          <div class="tb-btn"></div><div class="tb-btn max"></div>
+        </div>
+        <div class="body" style="padding:3px;">
+          <div class="logpane" style="height:100%;">
+            <div><span class="t">lucy 1%</span> cat ~/.tess/cluster.args</div>
+            <div>&nbsp;&nbsp;-v -a sgicluster -d /work/tess</div>
+            <div>&nbsp;&nbsp;lucy 1, arthur 4, aurora 4 ./tess-node</div>
+            <div>&nbsp;&nbsp;-gui-host lucy -gui-port 5123 -nonce 9f3c1a77c204e18b</div>
+            <div><span class="t">lucy 2%</span> ainfo arrays</div>
+            <div>&nbsp;&nbsp;array sgicluster : lucy arthur aurora</div>
+            <div><span class="t">lucy 3%</span> mpirun -f ~/.tess/cluster.args</div>
+            <div>&nbsp;&nbsp;aurora: 4 ranks, 1 brick · arthur: 4 · lucy: rank 0 only</div>
+          </div>
+        </div>
+        <div class="callout" style="left:-10px; top:150px;">11</div>
+      </div>
+
+      <!-- ===================== CONTROL WINDOW ===================== -->
+      <div class="mw" style="left:772px; top:14px; width:496px; height:996px;">
+        <div class="titlebar">
+          <div class="tb-menu"></div>
+          <div class="tb-title">tess — mandel — control</div>
+          <div class="tb-btn"></div><div class="tb-btn max"></div>
+        </div>
+        <div class="menubar">
+          <span><u>F</u>ile</span><span><u>R</u>ender</span><span><u>E</u>dit</span>
+          <span><u>V</u>iew</span><span><u>C</u>luster</span><span><u>O</u>ptions</span><span><u>H</u>elp</span>
+        </div>
+
+        <div class="body">
+
+          <!-- ---------- TOP HALF: fractal settings ---------- -->
+          <div class="frame">
+            <div class="lgd">View</div>
+            <div class="row">
+              <span class="lab w">Center re</span>
+              <div class="tf wide">-0.74364388703715<span class="caret"></span></div>
+            </div>
+            <div class="row">
+              <span class="lab w">Center im</span>
+              <div class="tf wide">+0.13182590420533</div>
+            </div>
+            <div class="row">
+              <span class="lab w">Magnify</span>
+              <div class="tf" style="width:108px;">1.0000e+03</div>
+              <div class="wheel" title="SgmThumbWheel"></div>
+              <span class="hint">×2 /÷2</span>
+            </div>
+            <div class="row">
+              <span class="lab w">Pixel span</span>
+              <span class="hint mono">4.394e-06 per px · 15 digits left</span>
+            </div>
+          </div>
+
+          <div class="frame">
+            <div class="lgd">Iteration</div>
+            <div class="row">
+              <span class="lab w">Maximum</span>
+              <div class="tf" style="width:74px;">512</div>
+              <div class="wheel" style="width:64px;"></div>
+              <span class="tog on">Auto</span>
+            </div>
+            <div class="row">
+              <span class="lab w">Bailout |z|²</span>
+              <div class="tf" style="width:74px;">4.0</div>
+              <span class="tog on">Periodicity</span>
+            </div>
+            <div class="row">
+              <span class="lab w">Escape used</span>
+              <span class="hint mono">max 512 · mean 71 · 4.1% interior</span>
+            </div>
+          </div>
+
+          <div class="frame">
+            <div class="lgd">Colour <span class="hint" style="font-weight:400;">— applies instantly, no recompute</span></div>
+            <div class="row">
+              <span class="lab w">Palette</span>
+              <div class="om" style="flex:1;"><span>Deep Water</span></div>
+              <div class="btn sm">Edit…</div>
+            </div>
+            <div class="row">
+              <span class="lab w">Cycles</span>
+              <div class="tf" style="width:52px;">3.0</div>
+              <span class="lab">Rotate</span>
+              <div class="wheel" style="width:74px;"></div>
+              <span class="tog on">Smooth</span>
+            </div>
+            <div class="row">
+              <span class="lab w">Interior</span>
+              <div class="tf" style="width:52px;"><span class="swatch" style="background:#000"></span>#000</div>
+              <span class="tog">Histogram equalise</span>
+            </div>
+          </div>
+
+          <div class="frame">
+            <div class="lgd">Quality &amp; image</div>
+            <div class="row">
+              <span class="lab w">Supersample</span>
+              <div class="om" style="width:96px;"><span>off</span></div>
+              <span class="lab">Tile</span>
+              <div class="om" style="width:78px;"><span>64 px</span></div>
+            </div>
+            <div class="row">
+              <span class="lab w">Render size</span>
+              <div class="tf" style="width:62px;">724</div>
+              <span class="lab">×</span>
+              <div class="tf" style="width:62px;">716</div>
+              <span class="tog on">Follow window</span>
+            </div>
+            <div class="row">
+              <span class="lab w">Passes</span>
+              <span class="tog on">Progressive — ⅛ preview, then 1:1</span>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <div class="btn def">Save Image…</div>
+              <div class="btn">Render to File…</div>
+              <div class="om" style="width:96px;"><span>SGI .rgb</span></div>
+            </div>
+          </div>
+
+          <div class="frame">
+            <div class="lgd">Render</div>
+            <div class="row">
+              <div class="btn dis">Start</div>
+              <div class="btn">Pause</div>
+              <div class="btn">Stop</div>
+              <span style="flex:1"></span>
+              <span class="tog on">Auto-apply</span>
+              <div class="btn dis">Apply</div>
+            </div>
+            <div class="row" style="margin-top:7px;">
+              <div class="meter"><i id="m-fill" style="width:100%"></i><b id="m-text">100%</b></div>
+            </div>
+            <div class="row">
+              <span class="hint mono" id="m-detail">156/144 tiles · 1.9 s · 0.34 Mpix/s · done</span>
+            </div>
+          </div>
+
+          <!-- ---------- BOTTOM HALF: cluster ---------- -->
+          <div class="frame" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+            <div class="lgd">Cluster — MPT 1.9 / Array Services</div>
+
+            <div class="tbl">
+              <table>
+                <thead>
+                  <tr>
+                    <th>use</th><th>host</th><th class="num">cpu</th>
+                    <th class="num">mem</th><th class="num">ranks</th><th>state</th>
+                    <th class="num">rtt</th><th>link</th><th class="num">tiles</th><th>share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="sel">
+                    <td>▣</td><td><span class="swatch" style="background:#4f8fbf"></span>lucy</td>
+                    <td class="num">2</td><td class="num">2.0G</td><td class="num">0+m</td>
+                    <td><span class="dot" style="background:#5f7f9f"></span>master</td>
+                    <td class="num">—</td><td>local</td><td class="num" id="t-lucy">0</td>
+                    <td><i class="bar" id="b-lucy" style="width:0px;background:#4f8fbf"></i></td>
+                  </tr>
+                  <tr>
+                    <td>▣</td><td><span class="swatch" style="background:#c8863c"></span>arthur</td>
+                    <td class="num">4</td><td class="num">7.0G</td><td class="num">4</td>
+                    <td><span class="dot" style="background:#3d8b3d"></span>run</td>
+                    <td class="num">0.19</td><td>hippi</td><td class="num" id="t-arthur">42</td>
+                    <td><i class="bar" id="b-arthur" style="width:10px;background:#c8863c"></i></td>
+                  </tr>
+                  <tr>
+                    <td>▣</td><td><span class="swatch" style="background:#5f9e4a"></span>aurora</td>
+                    <td class="num">4</td><td class="num">4.0G</td><td class="num">4</td>
+                    <td><span class="dot" style="background:#3d8b3d"></span>run</td>
+                    <td class="num">0.04</td><td>gm</td><td class="num" id="t-aurora">102</td>
+                    <td><i class="bar" id="b-aurora" style="width:24px;background:#5f9e4a"></i></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="agg" style="border-top:1px solid #8a8e93; margin-top:3px; padding-top:3px;">
+                <span><b>aurora</b> · Origin 350 · 1 of 5 bricks powered · 4×1GHz R16k · ranks auto</span>
+                <span>free <b>16.4G</b></span><span>tile <b>41 ms</b></span><span>×26.0</span>
+              </div>
+              <div class="agg">
+                <span>Σ <b>8 compute</b> +m</span>
+                <span>Σ <b>13.0 GB</b> · 10.1 free</span>
+                <span><b id="a-rate">0.34</b> Mpix/s</span>
+                <span>eff <b>87%</b></span>
+                <span>via <b>gm</b> + tcp + shmem</span>
+                <span>0 retries</span>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:4px;">
+              <span class="hint mono" style="font-size:9px;">
+                <span class="dot" style="background:#3d8b3d"></span>ready/running
+                <span class="dot" style="background:#5f7f9f;margin-left:6px"></span>paused
+                <span class="dot" style="background:#b7791f;margin-left:6px"></span>no arrayd
+                <span class="dot" style="background:#a02c2c;margin-left:6px"></span>unreachable
+                <span class="dot" style="background:#6b6f74;margin-left:6px"></span>disabled
+              </span>
+            </div>
+
+            <div class="row" style="margin-top:5px;">
+              <div class="btn sm">Add Host…</div>
+              <div class="btn sm">Edit…</div>
+              <div class="btn sm">Remove</div>
+              <div class="btn sm">Test All</div>
+              <span style="flex:1"></span>
+              <div class="btn sm">Profile…</div>
+            </div>
+
+            <div class="row" style="margin-top:5px;">
+              <span class="lab">Array</span>
+              <div class="om" style="width:92px;"><span>default</span></div>
+              <div class="btn sm">Env…</div>
+              <span class="tog on">Preflight</span>
+            </div>
+
+            <div class="row" style="margin-top:5px;">
+              <span class="lab">mpirun</span>
+              <div class="tf wide" style="font-size:10px;">-f /usr/people/rutger/.tess/cluster.args</div>
+              <div class="btn sm">Show</div>
+            </div>
+
+            <div class="logpane" style="margin-top:6px;">
+              <div><span class="t">16:41:02</span> preflight: lucy, arthur, aurora ready · 9 ranks, lucy master only</div>
+              <div><span class="t">16:41:02</span> arthur via hippi0 (tcp — no bypass in MPT 1.9)</div>
+              <div><span class="t">16:41:03</span> aurora via gm0 · MPI_USE_GM=1 · 64-bit</div>
+              <div><span class="t">16:41:03</span> mpirun -f cluster.args — job 12043, ash 0x1f4a</div>
+              <div><span class="t">16:41:03</span> rank 0 attached · MPI 4.4 · provided=FUNNELED</div>
+              <div><span class="t">16:41:04</span> render 724×716 · 144 tiles · 64 px · 512 iter</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout" style="left:-10px; top:60px;">5</div>
+        <div class="callout" style="left:-10px; top:262px;">6</div>
+        <div class="callout" style="left:-10px; top:420px;">7</div>
+        <div class="callout" style="left:-10px; top:496px;">8</div>
+        <div class="callout" style="left:-10px; top:600px;">9</div>
+        <div class="callout" style="left:-10px; top:876px;">10</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Callouts</h2>
+  <div class="legend">
+    <div>
+      <h3>Render window — image only</h3>
+      <ol>
+        <li><b>Tiles land in the owner's colour.</b> A completed tile is drawn immediately; for about
+          400 ms it keeps a one-pixel outline in the hue of the host that computed it, then the outline
+          fades. You can watch load balancing happen — aurora's tiles outpace lucy's twenty-five to one — without
+          reading a single number. Toggle the outlines off with <span class="mono">g</span> for a clean image.</li>
+        <li><b>In-flight tiles are dimmed, not blank.</b> The coarse ⅛-scale pass fills the whole frame
+          in well under a second, so there is never an empty canvas; refinement sharpens it tile by tile.</li>
+        <li><b>One status line, hideable.</b> Pointer coordinates at full precision on the left, progress
+          and state on the right. <span class="mono">F8</span> hides it for a borderless image. This is
+          the only chrome in this window — the old side panel is gone.</li>
+        <li><b>The title bar is a progress display.</b> Magnification and percentage live there, so a
+          minimised or partly covered window still reports. Mouse: drag a rubber-band box to zoom,
+          B2 pans, B3 opens the popup menu (v1 stub: zoom, reset, back/forward, copy coordinates,
+          save image, grid toggle). Keys: <span class="mono">+ −</span> zoom, arrows pan,
+          <span class="mono">Home</span> reset, <span class="mono">[ ]</span> history,
+          <span class="mono">Space</span> pause, <span class="mono">Esc</span> cancel,
+          <span class="mono">g</span> grid, <span class="mono">F8</span> status line — and
+          <span class="mono">Tab</span> overlays every parameter of the current image at once, stolen
+          shamelessly from Fractint, which got that exactly right in 1990.</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Control window — settings above, cluster below</h3>
+      <ol start="5" style="counter-reset: c 4;">
+        <li><b>Coordinates are text, at full precision.</b> 17 significant digits, selectable and
+          paste-able, because that is how you return to a view you found last month. The thumbwheel is
+          for hunting, the text field is for keeping.</li>
+        <li><b>Colour applies instantly.</b> The GUI keeps the iteration count per pixel, not just RGB,
+          so palette, rotation and smoothing recolour from memory in a frame. No re-render, no cluster
+          involvement. This one decision costs ~1.9 MB per megapixel and pays for itself hourly.</li>
+        <li><b>Save is two verbs.</b> <em>Save Image</em> writes what you see. <em>Render to File</em> is a
+          separate, larger job — 4096², supersampled, more iterations — queued to the same cluster.</li>
+        <li><b>Start / Pause / Stop, and honest progress.</b> Tiles done, elapsed, ETA and throughput.
+          Pause is real: the scheduler stops handing out tiles and in-flight work is allowed to land.</li>
+        <li><b>The host table is the cluster.</b> A checkbox decides participation; the rank count is
+          editable per host; state is a coloured dot with a word next to it. Reachability, RTT and free
+          memory are measured before launch, so an unreachable host is greyed out rather than hanging your job.</li>
+        <li><b>The exact mpirun line is visible.</b> The UI writes an Array Services arguments file and
+          runs <span class="mono">mpirun -f</span>. Nothing about the launch is hidden, and the file is
+          the saveable cluster profile.</li>
+        <li><b>Everything stays scriptable.</b> The arguments file is plain text you can read, edit and
+          run by hand — the GUI is a convenience over the command line, not a replacement for it. That is
+          also how the first milestone gets tested, before any window exists. The log names the transport
+          each host actually got, because with HIPPI on one link and Myrinet on the other, "which wire is
+          this tile on?" is a question you will want answered without guessing.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h2>Why two processes, not one</h2>
+  <p class="col">
+    MPT 1.9 on IRIX cannot spawn ranks at runtime — MPI-2 process management is enabled for Linux
+    partitioned systems only. So the set of hosts is frozen the moment <span class="mono">mpirun</span>
+    starts. If the GUI <em>were</em> rank 0, every change to the cluster would kill the windows and lose
+    your view, your zoom history and your log.
+  </p>
+  <p class="col">
+    So the GUI is its own long-lived process on lucy. It launches the MPI job as a child, talks to
+    rank 0 over a socket, and survives job restarts. Reconfiguring the cluster relaunches the job while
+    the windows stay put. This is also what makes the framework claim credible: a second compute module
+    is a different rank-0 binary and a different parameter table, not a different application.
+  </p>
+  <p class="col">
+    Rank 0 lives on lucy too, next to the GUI, and computes nothing. That makes the GUI↔master hop a
+    loopback socket, so tile data crosses the network exactly once. Putting the master on aurora would
+    relay every tile twice; running the GUI on aurora and displaying on lucy would push nearly 9 MB per
+    refresh across the wire and lose shared-memory blitting altogether. lucy spends one of its two CPUs
+    on X, the GUI and an idle master, and offers the other to the render — which is the right trade for
+    the machine you are sitting at.
+  </p>
+  <pre class="code"><span class="c">/* the whole framework contract — a module implements these five */</span>
+typedef struct FxModule {
+    const char     *name;              <span class="c">/* "mandelbrot" */</span>
+    FxParamDesc    *params;            <span class="c">/* drives the settings pane */</span>
+    int             npar;
+    size_t (*state_size)(void);        <span class="c">/* bytes per pixel of kept result */</span>
+    void   (*plan)   (FxJob *, FxTileList *);
+    void   (*compute)(const FxJob *, const FxTile *, void *out);
+    void   (*shade)  (const void *in, int n, const FxPalette *, <span class="k">unsigned</span> *rgb);
+} FxModule;</pre>
+  <p class="col">
+    <span class="mono">compute()</span> runs on workers and knows nothing about X. <span class="mono">shade()</span>
+    runs in the GUI, which is why palette changes are instant. <span class="mono">params</span> is a table,
+    so the settings pane is generated rather than hand-built — the next module gets a UI for free.
+  </p>
+  <p class="col">
+    The split is enforced at link time rather than by discipline: <span class="mono">tess-ui</span> links
+    <span class="mono">Xm/Xt/X11</span> and <em>not</em> <span class="mono">libmpi</span>;
+    <span class="mono">tess-node</span> links <span class="mono">libmpi/pthread</span> and <em>not</em> Motif.
+    If a compute file ever reaches for a widget, the link fails.
+  </p>
+
+  <h3>Platform conventions this follows</h3>
+  <ul class="tight">
+    <li><span class="mono">appName*sgiMode: TRUE</span> — one resource gets the sculpted IRIX Interactive
+      Desktop look; everything else is stock Motif.</li>
+    <li>Colours and fonts come from SGI <em>scheme</em> symbolic names, never hardcoded — and schemes
+      deliberately exclude rendering areas, which is exactly right for the fractal canvas.</li>
+    <li>SGI's documented pattern for this shape of app is a <em>main primary window</em> plus a
+      <em>support window</em>, which is what these two are; the render window's bottom strip is the
+      documented status area, an <span class="mono">XmMainWindow</span> slot rather than an invention.</li>
+    <li>Menu order is SGI's canonical File / Selected / Edit / View / Tools / Options / Help, with
+      <em>Render</em> in the Selected slot and <em>Cluster</em> in Tools — kept in order even though renamed.</li>
+    <li>Focus follows the pointer by default on IRIX, so accelerators are installed per window and the
+      pointer is never warped.</li>
+    <li>SGI's feedback thresholds are numeric: busy pointer at 3 s, a real progress indicator at 5 s.
+      A cluster render is always past both, so the meter is permanent rather than conditional.</li>
+  </ul>
+
+  <h3>Three MPT traps designed around</h3>
+  <ul class="tight">
+    <li><b>No colons in arguments.</b> <span class="mono">mpirun</span>'s parser uses <span class="mono">:</span>
+      to separate entries, so no generated argument may contain one. Parameters go through the arguments
+      file and a socket, never as colon-bearing argv.</li>
+    <li><b>stdio cannot carry binary and stdin must be redirected</b> for a backgrounded job — hence a real
+      TCP socket for tiles, with <span class="mono">mpirun</span>'s stdout reserved for the log pane.</li>
+    <li><b>MPI_STATS is not a live feed.</b> The environment variable only prints at
+      <span class="mono">MPI_Finalize</span>, to stderr. The live counters come from
+      <span class="mono">MPI_SGI_stat_get()</span>, which is a different thing with the same name on the tin.</li>
+  </ul>
+
+  <h2>Render lifecycle</h2>
+  <div class="states">
+    <div><b>idle</b></div><div>→ preflight</div><div>→ launching</div><div>→ <b>running</b></div>
+    <div>⇄ paused</div><div>→ draining</div><div>→ <b>done</b></div><div>↘ failed</div>
+  </div>
+  <p class="col">
+    Every message carries an epoch number. Cancelling bumps the epoch, so tiles from the abandoned
+    render are recognised and dropped instead of corrupting the new one — the standard fix for the
+    "stale tile paints over my new zoom" bug, and the reason cancel never has to block.
+    On failure, be honest about what MPT gives you: nothing. <span class="mono">MPI_Abort</span> takes down
+    the whole job regardless of which communicator you hand it, and installing
+    <span class="mono">MPI_ERRORS_RETURN</span> does not make a dead rank survivable. So the framework's
+    answer is prevention plus speed: preflight every host before launching, time out a tile that never
+    lands, then mark the host failed, drop it from the arguments file, relaunch, and keep the view. A lost
+    node costs you seconds, not your session — which is only true because the GUI is not part of the job.
+  </p>
+
+  <h2>Settings inventory</h2>
+  <div class="scroller">
+    <table class="data">
+      <thead><tr><th>Setting</th><th>Widget</th><th>Range / default</th><th>Applies</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Center re / im</td><td class="mono">XmTextField</td><td class="mono">17 sig digits · −0.5, 0</td><td>on Return / Apply</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Magnification</td><td class="mono">XmTextField + SgThumbWheel</td><td class="mono">1 … 1e13 · 1.0</td><td>live while dragging</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Max iterations</td><td class="mono">XmTextField + wheel</td><td class="mono">32 … 1e6 · 512</td><td>on Apply</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Auto iterations</td><td class="mono">XmToggleButton</td><td class="mono">on</td><td>on zoom</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Bailout |z|²</td><td class="mono">XmTextField</td><td class="mono">4 … 1e6 · 4.0</td><td>on Apply</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Periodicity check</td><td class="mono">XmToggleButton</td><td class="mono">on</td><td>on Apply</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Palette</td><td class="mono">XmComboBox</td><td>6 built in · Deep Water</td><td><b>instant</b></td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Palette editor</td><td class="mono">SgColorChooser</td><td>—</td><td><b>instant</b></td><td><span class="tag later">later</span></td></tr>
+        <tr><td>Colour cycles / rotate</td><td class="mono">XmTextField + wheel</td><td class="mono">0.25 … 32 · 3.0</td><td><b>instant</b></td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Smooth colouring</td><td class="mono">XmToggleButton</td><td class="mono">on</td><td><b>instant</b></td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Histogram equalise</td><td class="mono">XmToggleButton</td><td class="mono">off</td><td><b>instant</b></td><td><span class="tag later">later</span></td></tr>
+        <tr><td>Supersample</td><td class="mono">XmOptionMenu</td><td class="mono">off / 2×2 / 4×4</td><td>on Apply</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Tile size</td><td class="mono">XmOptionMenu</td><td class="mono">16/32/64/128 · 64</td><td>next render</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Progressive preview</td><td class="mono">XmToggleButton</td><td class="mono">on · ⅛ then 1:1</td><td>next render</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Render size / follow window</td><td class="mono">XmTextField ×2 + toggle</td><td class="mono">follow · 724×716</td><td>on Apply</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Save format</td><td class="mono">XmOptionMenu</td><td>PPM · SGI .rgb · PNG†</td><td>at save</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Render to file</td><td class="mono">XmFileSelectionBox +</td><td class="mono">≤ 8192² · 4096²</td><td>queues a job</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Zoom history / bookmarks</td><td class="mono">popup + XmList</td><td>64 deep</td><td>immediate</td><td><span class="tag later">later</span></td></tr>
+        <tr><td>Julia mode, rotation, deep zoom</td><td>—</td><td>—</td><td>—</td><td><span class="tag later">later</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:14px; color:var(--ink-3);">† PNG only if libpng is present from nekoware; PPM and SGI <span class="mono">.rgb</span> (via <span class="mono">-limage</span>) always work.</p>
+
+  <h2>Stats inventory</h2>
+  <p class="sub">Only stats with a real source on IRIX 6.5 are in the design. Anything marked <span class="tag check">verify</span> gets confirmed on the hardware before it earns a place in the table.</p>
+  <div class="scroller">
+    <table class="data">
+      <thead><tr><th>Stat</th><th>Scope</th><th>Source</th><th>Cadence</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Host, model, CPU count &amp; MHz</td><td>host</td><td class="mono">PCP hinv.* · getinvent(3) fallback</td><td>at preflight</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>IRIX &amp; MPT version</td><td>host</td><td class="mono">uname(2) · MPI_Get_version</td><td>at preflight</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Memory total / free</td><td>host</td><td class="mono">PCP mem.* via pmcd · sysget(SGT_RMINFO) fallback</td><td>2 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Swap free</td><td>host</td><td class="mono">swapctl(SC_GETFREESWAP)</td><td>2 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>CPU busy %</td><td>host</td><td class="mono">PCP kernel.percpu.cpu.* · sysget fallback</td><td>1 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Reachability / arrayd up</td><td>host</td><td class="mono">pmNewContext + connect() to 5434/tcp, timeout</td><td>preflight + 10 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>RTT, min/median</td><td>rank</td><td class="mono">MPI ping-pong, MPI_Wtime</td><td>preflight + 10 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Bandwidth MB/s</td><td>rank</td><td class="mono">1 MB ping-pong</td><td>preflight</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Interconnect actually used</td><td>cluster</td><td class="mono">MPI_SGI_stat_get() — BYTES_PT2PT_{TCP,GM,GSN,SHMEM}</td><td>2 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Bytes moved, retries</td><td>cluster</td><td class="mono">MPI_SGI_stat_get (50 counters)</td><td>2 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Tiles done, pixels/s, share</td><td>rank</td><td>scheduler bookkeeping</td><td>on each tile</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Relative speed factor</td><td>rank</td><td>rolling median tile time</td><td>on each tile</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Aggregate Mpix/s, efficiency</td><td>cluster</td><td>Σ vs fastest-single-host baseline</td><td>1 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Elapsed / ETA</td><td>job</td><td>tiles remaining ÷ current rate</td><td>250 ms</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Rank RSS</td><td>rank</td><td class="mono">ioctl(PIOCPSINFO) on /proc/pinfo/&lt;pid&gt;</td><td>5 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Link speed, MTU, if errors</td><td>host</td><td class="mono">PCP network.interface.* · SIOCGIFDATA fallback</td><td>at preflight</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Load average</td><td>host</td><td class="mono">PCP kernel.all.load · sysget(SGT_KSYM) fallback</td><td>2 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Uptime</td><td>host</td><td class="mono">utmp BOOT_TIME</td><td>at preflight</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>Render metrics exported</td><td>job/rank/host</td><td class="mono">tess PMDA ← mmap'd stats file</td><td>1 s</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>NUMA node map, page migration</td><td>host</td><td class="mono">sysmp(MP_NUMNODES) — 5 on aurora, 2 on arthur</td><td>at launch</td><td><span class="tag v1">v1</span></td></tr>
+        <tr><td>L1/L2 controller — temp, PSU</td><td>host</td><td>Origin/Onyx L1 only, no clean API</td><td>—</td><td><span class="tag later">later</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Build order</h2>
+  <p class="sub">Each milestone runs on real hardware and proves one thing. Nothing depends on a later step.</p>
+  <ul class="tight">
+    <li><b>0 · MPT on the boxes.</b> Install <span class="mono">mpt</span>, <span class="mono">mpi</span>, <span class="mono">sma</span> and <span class="mono">arraysvcs</span> from the August 2006 Applications CD; one <span class="mono">ARRAY</span> block with <span class="mono">MACHINE</span> lines, <span class="mono">AUTHENTICATION SIMPLE</span> (the installed default is <span class="mono">NOREMOTE</span>, which blocks everything), <span class="mono">sgi-arrayd 5434/tcp</span> in <span class="mono">/etc/services</span> on every node, <span class="mono">~/.rhosts</span>, then <span class="mono">arrayd -c -f</span>, <span class="mono">ascheck</span>, and finally <span class="mono">mpirun host_a,host_b 1 hostname</span>. <span class="mono">arrayconfig(1M)</span> will generate and distribute the config for you. Nothing else can be tested until this works.</li>
+    <li><b>1 · The build loop.</b> <span class="mono">make sgi</span> rsyncs and compiles with MIPSpro over ssh, errors come back to the Mac; <span class="mono">make mac</span> builds the same C89 sources against Homebrew Motif and Open MPI for UI iteration.</li>
+    <li><b>2 · Two empty windows.</b> Motif 2.1 shell, both top-levels, menus, WM close handling, geometry saved. No compute at all.</li>
+    <li><b>3 · Local tiler.</b> The scheduler and the iteration buffer running in-process, single host: tiles appear, palette recolours instantly, save works. The UI is now fully exercised without MPI.</li>
+    <li><b>4 · MPI transport.</b> Same scheduler over MPT, one host, several ranks. Prove the socket, the epochs, the cancel path.</li>
+    <li><b>5 · Multi-host.</b> Arguments-file generation, preflight, per-host colours, the cluster table live.</li>
+    <li><b>6 · Stats and polish.</b> <span class="mono">MPI_SGI_stat</span> counters, RTT/bandwidth probes, ETA, log pane, profiles.</li>
+    <li><b>7 · Second module.</b> Anything that isn't a fractal, to prove the contract holds. That is the real acceptance test for the framework.</li>
+  </ul>
+
+  <h2>What I need from you</h2>
+
+  <p class="col" style="margin-bottom:26px;">
+    Settled: the name is <b>Tess</b> — a <em>tessera</em> is one tile of a mosaic, which is what the
+    scheduler hands out. <b>64-bit build</b> (Myrinet's GM library on IRIX ships
+    <span class="mono">lib64</span> and nothing else, so this is forced rather than chosen),
+    <b>one rank per CPU and no threads</b>, <b>3 bytes per pixel</b> of kept iteration data,
+    <b>Performance Co-Pilot in both directions</b>, a <b>link seam</b> for raw HIPPI later, and
+    <b>X blitting now with GL as a switchable backend</b>.
+  </p>
+
+  <h3>The cluster, as it actually is</h3>
+  <div class="scroller" style="margin-bottom:26px;">
+    <table class="data">
+      <thead><tr><th>Host</th><th>Machine</th><th>CPUs</th><th>RAM</th><th>Link to lucy</th><th>Role</th><th>Share</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">lucy</td><td>Octane2, VPro <b>V12</b></td><td>2 × R14000 600</td><td>2 GB</td><td>—</td>
+            <td>GUI + master + PCP; <b>no compute</b></td><td class="mono">0%</td></tr>
+        <tr><td class="mono">arthur</td><td>Onyx2, 2 nodeboards, <b>IR2</b></td><td>4 × 400</td><td>7 GB</td><td class="mono">HIPPI → tcp</td>
+            <td>4 ranks; also a display host</td><td class="mono">~29% <span class="mono">(8%)</span></td></tr>
+        <tr><td class="mono">aurora</td><td>Origin 350, one image, NUMAlink</td><td><b>4</b> × 1 GHz — 1 brick <span class="mono">(20 = 5 bricks)</span></td><td>4 GB <span class="mono">(20 GB)</span></td><td class="mono">Myrinet → gm</td>
+            <td>ranks = auto</td><td class="mono">~71% <span class="mono">(92%)</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="col">
+    Aurora is <b>4 CPUs per brick</b>. Powering all five with the router and the L2 controller
+    costs real electricity, so the everyday state is the main brick alone — 4 CPUs and 4 GB, same
+    hostname, same configuration. Bracketed figures above are the fully-powered shape: 20 CPUs,
+    20 GB. Cluster totals are therefore <b>10 CPUs</b> everyday and <b>26</b> fully powered.
+    <b>So rank counts are resolved at preflight from the detected CPU count, never stored</b>:
+    one profile covers both shapes, and a stored <span class="mono">20</span> would silently
+    oversubscribe a 4-CPU aurora fivefold. The panel shows detected against configured, so a
+    half-powered cluster looks half-powered rather than broken.
+  </p>
+  <p class="col">
+    The everyday shape is also the better development target, not merely the cheaper one: at ten
+    CPUs the three machines contribute roughly 10, 26 and 64 percent, which exercises the load
+    balancer far more usefully than one host doing 89% of everything. The mockup above shows that
+    shape for exactly this reason. Power up the rest for benchmarks and big offline renders —
+    which is what <em>Render to File</em> is for.
+  </p>
+  <p class="col">
+    Two interconnect facts worth knowing before wiring anything. <b>HIPPI to arthur will be
+    plain TCP</b> — MPT 1.9 removed HIPPI-800 OS bypass entirely, so you keep the bandwidth but
+    not the low-latency path. And <b>which interface the TCP path uses is decided by
+    <span class="mono">arrayd.conf</span>'s hostname field</b>, not by any MPI variable — so
+    arthur's entry has to name its HIPPI address or the tiles quietly ride ethernet instead.
+    Myrinet to aurora can use real GM bypass, which is exactly what the 64-bit build buys.
+  </p>
+
+  <h3>The GUI host computes nothing</h3>
+  <p class="col">
+    Lucy has two CPUs and five jobs wanting them: the X server, the GUI's shading and blitting,
+    the master, the PCP collector — and, if you let it, a compute rank. The first four together
+    are a small fraction of one CPU. The fifth pegs one outright for the length of the render.
+  </p>
+  <p class="col">
+    So the default is <b>zero compute ranks on whichever host runs the GUI</b>. It costs 3–10% of
+    throughput and buys the thing that actually determines how the program feels: a CPU available
+    <em>the moment</em> you drag a zoom box or rotate the palette. Average load is not the metric;
+    latency under load is. A pegged CPU competing with the X server is precisely how a workstation
+    UI comes to feel like treacle, and no throughput figure compensates for a render window that
+    stutters while you are aiming it.
+  </p>
+  <p class="col">
+    Mechanically: <b>0 is a legal rank count</b>, and it means something different from unticking
+    the host — an unticked host leaves the array altogether, while a host with 0 ranks stays in the
+    job as master and telemetry source and computes nothing. The table shows
+    <span class="mono">mstr only</span> rather than a bare zero, so it reads as a decision instead
+    of an oversight. And it follows the GUI: move the windows to arthur for IR2 work and the default
+    moves with them. Turning it back on is one click, which is worth doing for an unattended
+    overnight render — there is no interactive latency to protect when nobody is watching.
+  </p>
+
+  <h3>How the shape gets discovered</h3>
+  <p class="col">
+    Three mechanisms at three moments. <b>Preflight uses PCP</b> — a <span class="mono">pmFetch</span>
+    of <span class="mono">hinv.ncpu</span>, <span class="mono">hinv.cpuclock</span> and
+    <span class="mono">hinv.physmem</span> per host, which is remote, uniform, needs no agent of
+    ours, and where a context that won't open is simultaneously the reachability answer.
+    <b>Where <span class="mono">pmcd</span> is absent</b>, a tiny
+    <span class="mono">tess-probe</span> binary runs over <span class="mono">arshell</span> and
+    prints one machine-readable line — better than parsing <span class="mono">hinv</span> output,
+    whose format varies, and it needs only Array Services, which MPI requires anyway.
+    <b>Then every rank self-reports at <span class="mono">MPI_Init</span></b>, which is
+    authoritative but too late to size the job — its job is to catch the mismatch and say
+    <em>under-subscribed</em> when 4 ranks land on an aurora reporting 20 online CPUs. That is
+    exactly the failure a powered-up aurora invites.
+  </p>
+  <p class="col">
+    One <span class="mono">tess_inventory()</span> function serves all three callers — the probe,
+    the rank hello, and the PMDA — because inventory gathered three ways drifts. And
+    <em>Rescan</em> sits beside <em>Test All</em>, since the shape changes between runs whenever
+    you power bricks up.
+  </p>
+
+  <h3>Three subsystems the specs added</h3>
+  <p class="col">
+    <b>One rank per CPU — no threads anywhere.</b> Your <span class="mono">mandel3.c</span> already
+    showed why: it creates two pthreads and never calls
+    <span class="mono">pthread_setconcurrency()</span>, and IRIX pthreads are an M:N implementation
+    that will happily time-slice both workers onto one CPU. It also splits the image into static
+    halves, so even correctly threaded it would show about 1.3× rather than 2× — interior rows cost
+    <span class="mono">max_iter</span> per pixel while exterior rows escape immediately. Ranks
+    sidestep both: MPT places processes, <span class="mono">MPI_DSM_DISTRIBUTE</span> spreads them
+    across aurora's five bricks, and on one system image all 20 talk over shared memory — faster
+    than the Myrinet link bringing tiles in. It also drops MPT's thread-safety question, and
+    <span class="mono">tess-node</span> stops linking <span class="mono">-lpthread</span> at all.
+  </p>
+  <p class="col">
+    <b>Performance Co-Pilot, both directions.</b> Reading: the panel opens a PMAPI context per
+    host and fetches from <span class="mono">pmcd</span>, which replaces most of the bespoke
+    stats code with a supported remote API — and a context that won't open <em>is</em> the
+    reachability answer. Writing: a <span class="mono">tess</span> PMDA exports the render
+    metrics, so <span class="mono">pmchart</span> can plot render rate against CPU and link load
+    on one chart and <span class="mono">pmlogger</span> can archive a whole session. The master
+    writes an mmap'd stats file and the PMDA maps it read-only, so <span class="mono">pmcd</span>
+    doesn't care when Tess starts or stops, and a stale file reports no values rather than lying.
+    Because the panel and PCP read the same source, they can't disagree.
+  </p>
+  <p class="col">
+    <b>The link seam.</b> Control always travels on MPI — assignment, epochs, cancel. Only bulk
+    tile payload is eligible for a raw link, MPI carries the handshake that sets one up, and any
+    raw-link failure degrades back to MPI and says so in the log. GM to aurora needs no work
+    because MPT selects it itself; raw <span class="mono">hippibp</span> to arthur is a later
+    milestone, gated on measuring TCP-over-HIPPI first. A fast path that can't fail closed isn't
+    worth having.
+  </p>
+
+  <div class="q">
+    <h3>Three small things to confirm at the machines</h3>
+    <p>None of these block design work, and the preflight probe answers most of them by itself once
+      it runs: what <span class="mono">arthur</span> actually is (4×400 MHz and 7 GB doesn't pin the
+      model), <span class="mono">aurora</span>'s R16000 clock, and <span class="mono">lucy</span>'s
+      screen resolution — that last one picks the default window layout preset.</p>
+    <p class="rec"><b>The one that could bite:</b> which GM is on lucy and aurora. MPT 1.9's bypass
+      expects SGI's IRIX Myrinet driver 1.0.x, which is the
+      <span class="mono">6.5.13_myrinet_1.0.2.tar</span> already in your Downloads — the community
+      <span class="mono">gm-1.6.4</span> tree is a different lineage. Worth checking with
+      <span class="mono">MPI_GM_VERBOSE=1</span> before counting on bypass.</p>
+  </div>
+
+  <div class="q">
+    <h3>The name — a woman's name, to match lucy and aurora</h3>
+    <p>Theresa works. A few others that also mean something here, in case one lands better:
+      <b>Tess</b> (a <em>tessera</em> is a single tile in a mosaic — literally what the scheduler hands
+      out), <b>Iris</b> (SGI's own lineage — IRIS, IRIX, the Personal IRIS — and also the aperture you
+      look through), <b>Hedy</b> (Lamarr, who patented frequency-hopping: splitting a signal across
+      many channels), or <b>Grace</b> (Hopper).</p>
+    <p class="rec"><b>My pick is Tess</b> — it is a real name in the same register as lucy and aurora,
+      the mosaic-tile etymology is exactly what the framework does, and it survives the Mandelbrot being
+      replaced by something else. Whatever you choose becomes the binaries
+      (<span class="mono">tess-ui</span>, <span class="mono">tess-node</span>), the window titles, the
+      X resource class, and <span class="mono">~/.tess/</span>. The resource class has to be the
+      framework rather than the module, or the second application needs its own app-defaults file.</p>
+  </div>
+
+  <div class="q">
+    <h3>Save formats — my default unless you object</h3>
+    <p>PPM P6 plus SGI <span class="mono">.rgb</span> via <span class="mono">-limage</span>. PPM is a
+      bare <span class="mono">fwrite</span> with no library and no endian question;
+      <span class="mono">.rgb</span> is what <span class="mono">imgview</span> and
+      <span class="mono">ipaste</span> open on the desktop without conversion.</p>
+    <p class="rec">PNG stays a compile-time option rather than a dependency, because prebuilt nekoware
+      libraries may be gcc-built and that is documented as ABI-incompatible with MIPSpro for some
+      struct-returning libc calls. Say the word if being able to recolour a three-hour render next week
+      matters, and I'll add the raw iteration-map export now — it is about thirty lines.</p>
+  </div>
+
+  <footer>
+    Design document · nothing built yet · baseline preserved in <span class="mono">sgi-tess/baseline/mandel3-motif-panes.c</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- stage scaling ---------------- */
+  var stage = document.getElementById("stage");
+  var vp = document.getElementById("viewport");
+  var fitBtn = document.getElementById("fitbtn");
+  var fullBtn = document.getElementById("fullbtn");
+  var mode = "fit";
+
+  function apply() {
+    if (mode === "fit") {
+      var s = Math.min(1, vp.clientWidth / 1280);
+      stage.style.transform = "scale(" + s + ")";
+      vp.style.height = Math.round(1024 * s) + "px";
+      vp.style.overflow = "hidden";
+    } else {
+      stage.style.transform = "none";
+      vp.style.height = "660px";
+      vp.style.overflow = "auto";
+    }
+    fitBtn.setAttribute("aria-pressed", mode === "fit");
+    fullBtn.setAttribute("aria-pressed", mode !== "fit");
+  }
+  fitBtn.addEventListener("click", function () { mode = "fit"; apply(); });
+  fullBtn.addEventListener("click", function () { mode = "full"; apply(); });
+  window.addEventListener("resize", apply);
+  apply();
+
+  /* ---------------- fractal ---------------- */
+  var cv = document.getElementById("fractal");
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height;
+  var TILE = 64;
+  var CX = -0.743643887037151, CY = 0.131825904205330;
+  var SPAN = 0.0035, MAXIT = 512;
+
+  /* palette: black interior, deep water -> teal -> pale gold */
+  var LUT = (function () {
+    var stops = [
+      [0.00,   6,  18,  42], [0.18,  16,  54,  92], [0.36,  28, 107, 140],
+      [0.52,  56, 160, 168], [0.66, 127, 201, 189], [0.79, 214, 176, 110],
+      [0.88, 242, 231, 208], [1.00,   6,  18,  42]
+    ];
+    var t = new Uint8Array(1024 * 3);
+    for (var i = 0; i < 1024; i++) {
+      var f = i / 1023, a = stops[0], b = stops[stops.length - 1];
+      for (var s = 0; s < stops.length - 1; s++) {
+        if (f >= stops[s][0] && f <= stops[s + 1][0]) { a = stops[s]; b = stops[s + 1]; break; }
+      }
+      var k = (b[0] - a[0]) ? (f - a[0]) / (b[0] - a[0]) : 0;
+      t[i * 3] = a[1] + (b[1] - a[1]) * k;
+      t[i * 3 + 1] = a[2] + (b[2] - a[2]) * k;
+      t[i * 3 + 2] = a[3] + (b[3] - a[3]) * k;
+    }
+    return t;
+  })();
+
+  /* the base canvas holds the computed image; the visible canvas is base + overlay,
+     so nothing is ever recomputed to erase a tile outline */
+  var base = document.createElement("canvas");
+  base.width = W; base.height = H;
+  var bctx = base.getContext("2d");
+
+  var scale = SPAN / W;
+  var rgb = [0, 0, 0];
+  function shade(it, zr, zi) {
+    if (it >= MAXIT) { rgb[0] = 0; rgb[1] = 0; rgb[2] = 0; return; }
+    var log_zn = Math.log(zr * zr + zi * zi) / 2;
+    var nu = Math.log(log_zn / Math.LN2) / Math.LN2;
+    var f = (Math.log(1 + it + 1 - nu) / Math.log(1 + MAXIT)) * 3.0 % 1;
+    var idx = (f * 1023) | 0;
+    if (idx < 0) idx = 0; else if (idx > 1023) idx = 1023;
+    rgb[0] = LUT[idx * 3]; rgb[1] = LUT[idx * 3 + 1]; rgb[2] = LUT[idx * 3 + 2];
+  }
+
+  function renderRect(x0, y0, w, h, step) {
+    var img = bctx.createImageData(w, h), d = img.data;
+    for (var y = 0; y < h; y += step) {
+      var ci = CY + (y0 + y - H / 2) * scale;
+      for (var x = 0; x < w; x += step) {
+        var cr = CX + (x0 + x - W / 2) * scale;
+        var zr = 0, zi = 0, it = 0, zr2 = 0, zi2 = 0;
+        while (it < MAXIT && zr2 + zi2 <= 16) {
+          zi = 2 * zr * zi + ci; zr = zr2 - zi2 + cr;
+          zr2 = zr * zr; zi2 = zi * zi; it++;
+        }
+        shade(it, zr, zi);
+        var r = rgb[0], g = rgb[1], b = rgb[2];
+        for (var by = 0; by < step && y + by < h; by++) {
+          for (var bx = 0; bx < step && x + bx < w; bx++) {
+            var o = ((y + by) * w + (x + bx)) * 4;
+            d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+          }
+        }
+      }
+    }
+    bctx.putImageData(img, x0, y0);
+  }
+
+  /* ---------------- simulated cluster ---------------- */
+  /* Rutger's cluster in its everyday shape: aurora on its main brick only
+     (4 x 1 GHz) and arthur 4 x 400 MHz. Lucy contributes NO compute by default —
+     it runs X, the GUI, the master and the PCP collector, and keeping a CPU free
+     for interactive latency beats the ~10% throughput its second CPU would add.
+     Eight compute CPUs, split 29 / 71 percent. */
+  var HOSTS = [
+    { id: "arthur", hue: "#c8863c", weight: 2.67, cell: "t-arthur", bar: "b-arthur", n: 0, busy: 0 },
+    { id: "aurora", hue: "#5f9e4a", weight: 6.67, cell: "t-aurora", bar: "b-aurora", n: 0, busy: 0 }
+  ];
+
+  var cols = Math.ceil(W / TILE), rows = Math.ceil(H / TILE);
+  var tiles = [];
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      tiles.push({ x: c * TILE, y: r * TILE, w: Math.min(TILE, W - c * TILE), h: Math.min(TILE, H - r * TILE) });
+    }
+  }
+  /* order: centre outwards, so the interesting part resolves first */
+  tiles.sort(function (a, b) {
+    var da = Math.hypot(a.x + a.w / 2 - W / 2, a.y + a.h / 2 - H / 2);
+    var db = Math.hypot(b.x + b.w / 2 - W / 2, b.y + b.h / 2 - H / 2);
+    return da - db;
+  });
+  var TOTAL = tiles.length;
+
+  var mFill = document.getElementById("m-fill"), mText = document.getElementById("m-text");
+  var mDetail = document.getElementById("m-detail"), aRate = document.getElementById("a-rate");
+  var slProg = document.getElementById("sl-prog"), slState = document.getElementById("sl-state");
+  var tbRender = document.getElementById("tb-render");
+
+  var next, done, inflight, t0, raf, fades, pending;
+
+  function reset() {
+    if (raf) cancelAnimationFrame(raf);
+    next = 0; done = 0; inflight = []; fades = []; pending = []; t0 = null;
+    HOSTS.forEach(function (h) { h.n = 0; h.busy = 0; });
+    bctx.fillStyle = "#000"; bctx.fillRect(0, 0, W, H);
+    renderRect(0, 0, W, H, 8);              /* the coarse pass, instantly */
+    ctx.drawImage(base, 0, 0);
+  }
+
+  function paint(now) {
+    ctx.drawImage(base, 0, 0);
+    fades = fades.filter(function (f) { return now - f.at < 420; });
+    inflight.concat(pending).forEach(function (t) {
+      ctx.save();
+      ctx.globalAlpha = 0.34; ctx.fillStyle = "#000";
+      ctx.fillRect(t.x, t.y, t.w, t.h);
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = t.host.hue; ctx.lineWidth = 1;
+      ctx.strokeRect(t.x + 0.5, t.y + 0.5, t.w - 1, t.h - 1);
+      ctx.restore();
+    });
+    fades.forEach(function (f) {
+      ctx.save();
+      ctx.globalAlpha = 0.85 * (1 - (now - f.at) / 420);
+      ctx.strokeStyle = f.hue; ctx.lineWidth = 1;
+      ctx.strokeRect(f.t.x + 0.5, f.t.y + 0.5, f.t.w - 1, f.t.h - 1);
+      ctx.restore();
+    });
+  }
+
+  function stats(elapsed, finished) {
+    var pct = Math.round(100 * done / TOTAL);
+    mFill.style.width = pct + "%";
+    mText.textContent = pct + "%";
+    tbRender.textContent = "tess — mandel — render — 1.00e+03× — " + (finished ? "done" : pct + "%");
+    var mpix = (done * TILE * TILE) / 1e6;
+    var rate = elapsed > 0.2 ? (mpix / elapsed) : 0;
+    aRate.textContent = rate.toFixed(2);
+    var eta = rate > 0 ? ((TOTAL - done) * TILE * TILE / 1e6) / rate : 0;
+    if (finished) {
+      mDetail.textContent = TOTAL + "/" + TOTAL + " tiles · " + elapsed.toFixed(1) +
+        " s · " + rate.toFixed(2) + " Mpix/s · done";
+      slProg.textContent = "tiles " + TOTAL + "/" + TOTAL + " · " + rate.toFixed(2) +
+        " Mpix/s · " + elapsed.toFixed(1) + " s";
+      slState.textContent = "DONE";
+    } else {
+      mDetail.textContent = done + "/" + TOTAL + " tiles · elapsed " + elapsed.toFixed(1) +
+        " s · eta " + eta.toFixed(1) + " s · " + rate.toFixed(2) + " Mpix/s";
+      slProg.textContent = "tiles " + done + "/" + TOTAL + " · " + rate.toFixed(2) +
+        " Mpix/s · " + elapsed.toFixed(1) + " s";
+      slState.textContent = "RENDERING";
+    }
+    HOSTS.forEach(function (h) {
+      var cell = document.getElementById(h.cell);
+      if (cell) cell.textContent = h.n;
+      var bar = document.getElementById(h.bar);
+      if (bar) bar.style.width = Math.max(2, Math.round(34 * (h.n / Math.max(1, TOTAL)))) + "px";
+    });
+  }
+
+  function step(ts) {
+    if (t0 === null) t0 = ts;
+    var elapsed = (ts - t0) / 1000;
+
+    /* retire finished tiles into a queue — at most one is rasterised per frame,
+       so a slow machine degrades in frame rate, never in responsiveness */
+    inflight = inflight.filter(function (t) {
+      if (ts >= t.until) { pending.push(t); return false; }
+      return true;
+    });
+    if (pending.length) {
+      var t = pending.shift();
+      renderRect(t.x, t.y, t.w, t.h, 1);
+      fades.push({ t: t, hue: t.host.hue, at: ts });
+      t.host.n++; done++;
+    }
+
+    /* hand out work to idle hosts */
+    HOSTS.forEach(function (h) {
+      if (h.busy > ts || next >= TOTAL) return;
+      var t = tiles[next++];
+      t.host = h;
+      var cost = (700 + Math.random() * 400) / h.weight;
+      t.until = ts + cost;
+      h.busy = t.until;
+      inflight.push(t);
+    });
+
+    paint(ts);
+    stats(elapsed, done >= TOTAL);
+
+    if (done < TOTAL) {
+      raf = requestAnimationFrame(step);
+    } else {
+      /* let the last outlines fade out, then leave a clean image */
+      var t1 = ts;
+      (function tail(now) {
+        paint(now);
+        if (now - t1 < 500) requestAnimationFrame(tail); else ctx.drawImage(base, 0, 0);
+      })(ts);
+    }
+  }
+
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function run() {
+    reset();
+    if (reduce) {
+      renderRect(0, 0, W, H, 1);
+      ctx.drawImage(base, 0, 0);
+      done = TOTAL;
+      HOSTS.forEach(function (h, i) { h.n = [42, 102][i]; });
+      stats(4.1, true);
+      return;
+    }
+    raf = requestAnimationFrame(step);
+  }
+  document.getElementById("replay").addEventListener("click", run);
+  run();
+})();
+</script>

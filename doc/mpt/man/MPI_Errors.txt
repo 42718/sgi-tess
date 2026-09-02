@@ -1,0 +1,132 @@
+
+
+
+MPI_ERRORS(3)							 MPI_ERRORS(3)
+
+
+
+NAME
+     MPI_Errors - Defines error codes
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Errors routine defines the following MPI error codes:
+
+     MPI_SUCCESS		   Specifies a successful return code
+
+     MPI_ERR_EXHAUSTED		   Specifies that memory is exhausted
+
+     MPI_ERR_TAG		   Specifies an invalid tag argument
+
+     MPI_ERR_COMM_NULL		   Specifies that a NULL communicator argument
+				   was passed to a function
+
+     MPI_ERR_COMM_INTER 	   Specifies that an intercommunicator is not
+				   allowed in a function
+
+     MPI_ERR_COMM_INTRA 	   Specifies that an intracommunicator is not
+				   allowed in a function
+
+     MPI_ERR_ARG		   Specifies an invalid argument
+
+     MPI_ERR_BUFFER		   Specifies an invalid buffer pointer
+
+     MPI_ERR_COUNT		   Specifies an invalid count argument
+
+     MPI_ERR_TYPE		   Specifies an invalid data type argument
+
+     MPI_ERR_ROOT		   Specifies an invalid root
+
+     MPI_ERR_OP 		   Specifies an invalid operation
+
+     MPI_ERR_ERRORCODE		   Specifies an invalid error code
+
+     MPI_ERR_GROUP		   Specifies that a null group was passed to a
+				   function
+
+     MPI_ERR_RANK		   Specifies an invalid rank
+
+     MPI_ERR_TOPOLOGY		   Specifies invalid topology
+
+     MPI_ERR_DIMS		   Specifies an illegal dimension argument
+
+     MPI_ERR_NULL		   Specifies a null parameter
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_ERRORS(3)							 MPI_ERRORS(3)
+
+
+
+     MPI_ERR_UNKNOWN		   Specifies an unknown error
+
+     MPI_ERR_REQUEST		   Specifies an illegal mpi_request handle
+
+     MPI_ERR_LIMIT		   Specifies that a limit was reached
+
+     MPI_ERR_INTERN		   Specifies an internal error code
+
+     MPI_ERR_NOMATCH		   Specifies that no receive was posted for a
+				   ready send
+
+     MPI_ERR_TRUNCATE		   Specifies that a message was truncated on
+				   receive
+
+     MPI_ERR_BAD_ARGS		   Specifies invalid arguments
+
+     MPI_ERR_INIT		   Specifies that MPI_INIT was already called
+
+     MPI_ERR_PERM_KEY		   Specifies that a permanent key cannot be
+				   freed
+
+     MPI_ERR_BUFFER_EXISTS	   Specifies that the buffer is already
+				   attached
+
+     MPI_ERR_COMM		   Specifies an invalid communicator
+
+     MPI_ERR_PERM_TYPE		   Specifies that a permanent type cannot be
+				   freed
+
+     MPI_ERR_PERM_OP		   Specifies that a permanent operator cannot
+				   be freed
+
+     MPI_ERR_IN_STATUS		   Specifies that the error value is in the
+				   status
+
+     MPI_ERR_PRE_INIT		   Specifies that MPI_INIT has not been called
+
+     MPI_ERR_OTHER		   Specifies another error (use Error_string)
+
+     MPI_ERR_LASTCODE		   Specifies the last error class (always at
+				   end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 2
+
+
+

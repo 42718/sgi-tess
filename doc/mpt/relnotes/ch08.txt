@@ -1,0 +1,66 @@
+
+
+
+                                  - 1 -
+
+
+
+       8.  Documentation
+
+       You can access documentation that supports the MPT 1.9
+       release as follows:
+
+          +o SGI Technical Publications Library at the following
+            URL:
+
+                hhhhttttttttpppp::::////////ddddooooccccssss....ssssggggiiii....ccccoooommmm
+
+            This website allows you to browse documents online,
+            order documents, and send feedback to SGI.
+
+            The following documentation is available to MPT 1.9
+            customers:
+
+            Message Passing Toolkit: MPI Programmer's Manual
+
+
+
+          +o Man pages, each of which describes a particular element
+            of the Message Passing Toolkit. To see a detailed
+            description of a particular command or routine, use the
+            mmmmaaaannnn(1) command, as in the following example:
+
+                mmmmaaaannnn mmmmppppiiiirrrruuuunnnn
+
+          +o Release notes.  To access release notes, see
+            "Distribution of These Release Notes" in chapter 1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

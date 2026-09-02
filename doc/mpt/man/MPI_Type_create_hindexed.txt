@@ -1,0 +1,132 @@
+
+
+
+MPI_TYPE_CREATE_HINDEXED(3)			   MPI_TYPE_CREATE_HINDEXED(3)
+
+
+
+NAME
+     MPI_Type_create_hindexed - Creates an indexed data type with offsets in
+     bytes
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Type_create_hindexed( count, blocklens, indices,
+	  old_type, newtype )
+
+	  int		count;
+	  int		blocklens[];
+	  MPI_Aint	indices[];
+	  MPI_Datatype	old_type;
+	  MPI_Datatype *newtype;
+
+     C++:
+
+	  #include <mpi.h>
+
+	  Datatype Datatype::Create_hindexed(
+	  int		    count,
+	  const 	    intarray_of_blocklengths[],
+	  const Aint	    array_of_displacements[]) const
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER count, array_of_blocklengths(*), oldtype,
+	  newtype, ierror
+	  INTEGER(KIND=MPI_ADDRESS_KIND) array_of_displacements(*)
+
+	  CALL MPI_TYPE_CREATE_HINDEXED(count,
+	  array_of_blocklengths(*),
+	  array_of_displacements(*), oldtype, newtype,
+	  ierror)
+
+DESCRIPTION
+     The MPI_Type_create_hindexed routine creates an indexed data type with
+     offsets in bytes.	The MPI_Type_create_hindexed routine is an MPI-2
+     implementation replacing the MPI-1 MPI_Type_hindexed routine which has
+     been deprecated.  This routine differs from the MPI-1 routine in that in
+     the Fortran implementation the array_of_displacements(*) argument is of
+     type MPI_ADDRESS_KIND, which makes it more suitable for ABI 64.
+     Currently, the Fortran version of this function is implemented only for
+     ABI 64.  This routine accepts the following parameters:
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_TYPE_CREATE_HINDEXED(3)			   MPI_TYPE_CREATE_HINDEXED(3)
+
+
+
+     count     Specifies the number of blocks.	Also specifies the number of
+	       entries in indices and blocklens (integer)
+
+     blocklens Specifies the number of elements in each block (array of
+	       nonnegative integers)
+
+     indices   Specifies the byte displacement of each block (array of
+	       integers)
+
+     old_type  Specifies the old data type (handle)
+
+     newtype   Returns the new data type (handle)
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 2
+
+
+

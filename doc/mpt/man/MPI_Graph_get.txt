@@ -1,0 +1,86 @@
+
+
+
+MPI_GRAPH_GET(3)					      MPI_GRAPH_GET(3)
+
+
+
+NAME
+     MPI_Graph_get - Retrieves graph topology information associated with a
+     communicator
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Graph_get ( comm, maxindex, maxedges,
+	  index, edges )
+	  MPI_Comm comm;
+	  int maxindex, maxedges;
+	  int *index, *edges;
+
+
+     C++:
+
+	  #include <mpi.h>
+
+	  void Graphcomm::Get_topo(
+	  int		    maxindex,
+	  int		    maxedges,
+	  int		    index[],
+	  int		    edges[]) const
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER comm, maxindex, maxedges, index(*), edges(*), ierror
+
+	  CALL MPI_GRAPH_GET(comm, maxindex, maxedges, index(*), edges(*), ierror)
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Graph_get routine retrieves graph topology information associated
+     with a communicator.  This routine accepts the following parameters:
+
+     comm	    Specifies the communicator with a graph structure (handle)
+
+     maxindex	    Specifies the length of the vector index in the calling
+		    program (integer)
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_GRAPH_GET(3)					      MPI_GRAPH_GET(3)
+
+
+
+     maxedges	    Specifies the length of the vector edges in the calling
+		    program (integer)
+
+     index	    Returns an array of integers containing the graph
+		    structure for node degrees (for details, see
+		    MPI_Graph_create(3))
+
+     edges	    Returns an array of integers containing the graph
+		    structure for graph edges (for details, see
+		    MPI_Graph_create(3))
+
+     ierror	    Specifies the return code value for successful completion,
+		    which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the

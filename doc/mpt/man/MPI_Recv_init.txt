@@ -1,0 +1,92 @@
+
+
+
+MPI_RECV_INIT(3)					      MPI_RECV_INIT(3)
+
+
+
+NAME
+     MPI_Recv_init - Builds a handle for a receive
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Recv_init( buf, count, datatype, source,
+	  tag, comm, request )
+	  void	       *buf;
+	  int	       count;
+	  MPI_Request  *request;
+	  MPI_Datatype datatype;
+	  int	       source;
+	  int	       tag;
+	  MPI_Comm     comm;
+
+
+     C++:
+
+	  #include <mpi.h>
+
+	  Prequest Comm::Recv_init(
+	  void* 	    buf,
+	  int		    count,
+	  const Datatype&   datatype,
+	  int		    source,
+	  int		    tag) const
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  <type> BUF(*)
+	  INTEGER count, datatype, source, tag, comm, request, ierror
+
+	  CALL MPI_RECV_INIT(buf, count, datatype, source, tag, comm, request, ierror)
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Recv_init routine builds a handle for a receive operation.  This
+     routine accepts the following parameters:
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_RECV_INIT(3)					      MPI_RECV_INIT(3)
+
+
+
+     buf       Specifies the initial address of the receive buffer (choice)
+
+     count     Specifies the number of elements received (integer)
+
+     datatype  Specifies the type of each element (handle)
+
+     source    Specifies the rank of source or MPI_ANY_SOURCE (integer)
+
+     tag       Specifies the message tag or MPI_ANY_TAG (integer)
+
+     comm      Specifies the communicator (handle)
+
+     request   Returns the communication request (handle)
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+SEE A

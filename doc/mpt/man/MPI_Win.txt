@@ -1,0 +1,455 @@
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+NAME
+     MPI_Win - Manipulates a memory region for one-sided communication
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_Win_create(void, *base, MPI_Aint size, int disp_unit,
+	  MPI_Info info, MPI_Comm comm, MPI_Win *win);
+
+	  int MPI_Win_fence(int assert, MPI_Win win);
+
+	  int MPI_Win_lock(int lock_type, int rank, int assert, MPI_Win win);
+	  int MPI_Win_unlock(int rank, MPI_Win win);
+
+	  int MPI_Win_free(MPI_Win *win);
+
+	  int MPI_Get(void *origin_addr, int origin_count,
+	  MPI_Datatype origin_datatype, int target_rank,
+	  MPI_Aint target_disp, int target_count,
+	  MPI_Datatype target_datatype, MPI_Win win);
+
+	  int MPI_Put(void *origin_addr, int origin_count,
+	  MPI_Datatype origin_datatype, int target_rank,
+	  MPI_Aint target_disp, int target_count,
+	  MPI_Datatype target_datatype, MPI_Win win);
+
+	  int MPI_Accumulate(void* origin_addr, int origin_count,
+	  MPI_Datatype origin_datatype, int target_rank,
+	  MPI_Aint target_disp, int target_count,
+	  MPI_Datatype target_datatype,
+	  MPI_Op op, MPI_Win win);
+
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER(KIND=MPI_ADDRESS_KIND) size
+	  INTEGER disp_unit, info, comm, win, ierror
+	  CALL MPI_WIN_CREATE(base, size, disp_unit, info,
+	  comm, win, ierror)
+
+	  INTEGER assert, win, ierror
+	  CALL MPI_WIN_FENCE(assert, win, ierror)
+
+	  INTEGER lock_type, rank, assert, win, ierror
+	  CALL MPI_WIN_LOCK(lock_type, rank, assert, win, ierror)
+
+	  INTEGER rank, win, ierror
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+	  CALL MPI_WIN_UNLOCK(rank, win, ierror)
+
+	  INTEGER win, ierror
+	  CALL MPI_WIN_FREE(win, ierror)
+
+	  INTEGER(KIND=MPI_ADDRESS_KIND) target_disp
+	  INTEGER origin_count, origin_datatype, target_rank,
+	  target_count, target_datatype, win, ierror
+	  <type> origin_addr(*)
+	  CALL MPI_GET(origin_addr, origin_count, origin_datatype,
+	  target_rank, target_disp, target_count,
+	  target_datatype, win, ierror)
+
+	  INTEGER(KIND=MPI_ADDRESS_KIND) target_disp
+	  INTEGER origin_count, origin_datatype, target_rank,
+	  target_count, target_datatype, win, ierror
+	  <type> origin_addr(*)
+	  CALL MPI_PUT(origin_addr, origin_count, origin_datatype,
+	  target_rank, target_disp, target_count,
+	  target_datatype, win, ierror)
+
+	  <type> origin addr(*)
+	  INTEGER(KIND=MPI_ADDRESS_KIND) target_disp
+	  INTEGER origin_count, origin_datatype, target_rank,
+	  target_count, target_datatype, op, win, ierror
+
+	  CALL MPI_ACCUMULATE(origin_addr, origin_count,
+	  origin_datatype, target_rank, target_disp,
+	  target_count, target_datatype, op, win, ierror)
+
+
+
+
+IMPLEMENTATION
+     IRIX (ABI 64 only) and Linux
+
+
+DESCRIPTION
+     The following MPI_Win routines manipulate a memory region for one-sided
+     communication.  MPI one-sided communication is also known as remote
+     memory access (RMA).
+
+     MPI_Win_create
+	       A collective routine that sets up a memory region, or window,
+	       to be the target of MPI one-sided communication.
+	       MPI_Win_create accepts the following arguments:
+
+	       base Specifies the starting address of the local window.
+
+	       size Specifies the size of the window in bytes.
+
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+	       disp_unit
+		    Specifies the local unit size for displacements, in bytes.
+		    Common choices for disp_unit are 1, indicating no scaling,
+		    and (in C syntax) sizeof(type), indicating a window that
+		    consists of an array of elements of type type.  The latter
+		    choice allows the use of array indices in one-sided
+		    communications calls, and has those indices scaled
+		    correctly to byte displacements.  Fortran users can use
+		    MPI_TYPE_EXTENT or the KIND intrinsic function to get the
+		    byte size of basic MPI datatypes.
+
+	       info Specifies the information object handle or MPI_INFO_NULL.
+		    The only option available to MPI_Win_create is nolocks,
+		    which indicates that this window is not able to be locked.
+		    Any calls to MPI_Win_lock or MPI_Win_unlock on this window
+		    object will generate an error.
+
+	       comm Specifies the communicator that defines the group of
+		    processes to be associated with this set of windows.
+
+	       win  Specifies the window handle returned by this call.
+
+	       ierror
+		    Specifies the return code value for successful completion,
+		    which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		    mpif.h file.
+
+
+
+     MPI_Win_fence
+	       Waits for completion of locally issued RMA operations and
+	       performs a barrier synchronization of all processes in the
+	       group of the specified RMA window.  MPI_Win_fence accepts the
+	       following arguments:
+
+	       win  Specifies the window object (handle).
+
+	       assert
+		    Provides assertions on the context of the call. Some MPI
+		    implementations use the assert argument to optimize fence
+		    operations. Currently, on SGI systems, the assert argument
+		    is ignored. A value of assert = 0 is always valid.
+
+
+
+     MPI_Win_lock
+	       Locks an RMA window object for a particular rank. MPI_Win_lock
+	       accepts the following arguments:
+
+	       lock_type
+		    Specifies the type of lock to be used: MPI_LOCK_SHARED or
+		    MPI_LOCK_EXCLUSIVE.  With MPI_LOCK_SHARED, multiple
+
+
+
+									Page 3
+
+
+
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+		    processes can acquire the lock at the same time.  With
+		    MPI_LOCK_EXCLUSIVE, only one process can have the lock at
+		    any time.
+
+	       rank Specifies the rank of the window object (handle) to lock.
+
+	       assert
+		    Provides assertions on the context of the call. Some MPI
+		    implementations use the assert argument to optimize fence
+		    operations. Currently, on SGI systems, the assert argument
+		    is ignored. A value of assert = 0 is always valid.
+
+	       win  Specifies the window object (handle).
+
+
+
+     MPI_Win_unlock
+	       Unlocks an RMA window object for a particular rank.
+	       MPI_Win_unlock accepts the following arguments:
+
+	       rank Specifies the rank of the window object (handle) to
+		    unlock.
+
+	       win  Specifies the window object (handle).
+
+
+
+     MPI_Win_free
+	       Deletes an RMA window object.  MPI_Win_free accepts the
+	       following argument:
+
+	       win  Specifies the window object (handle).
+
+
+
+     MPI_Get   Transfers data from an RMA window on a specified target process
+	       to a buffer on the origin process.  The origin process is the
+	       process that makes the RMA call.  MPI_Get accepts the following
+	       arguments:
+
+	       origin_addr
+		    Specifies the initial address of the buffer on the origin
+		    process into which the data will be transferred.
+		    (choice).
+
+	       origin_count
+		    Specifies the number of entries in the origin buffer
+		    (nonnegative integer).
+
+	       origin_datatype
+		    Specifies the datatype of each entry in the origin buffer
+		    (handle).
+
+
+
+									Page 4
+
+
+
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+	       target_rank
+		    Specifies the rank of the target (nonnegative integer).
+
+	       target_disp
+		    Specifies the displacement from start of window to target
+		    buffer (nonnegative integer).  The target buffer is the
+		    location in the target process window from which the data
+		    will be copied.  The displacement unit is defined by
+		    MPI_Win_create.
+
+	       target_count
+		    Specifies the number of entries in the target buffer
+		    (nonnegative integer).  target_datatype Specifies the
+		    datatype of each entry in the target buffer (handle).
+
+	       win  Specifies the window object used for communication
+		    (handle).
+
+
+
+     MPI_Put   Transfers data from a buffer on the origin process into an RMA
+	       window on a specified target process. MPI_Put accepts the
+	       following arguments:
+
+	       origin_addr
+		    Specifies the initial address of the buffer on the origin
+		    process from which the data will be transferred.
+		    (choice).
+
+	       origin_count
+		    Specifies the number of entries in the origin buffer
+		    (nonnegative integer).
+
+	       origin_datatype
+		    Specifies the datatype of each entry in the origin buffer
+		    (handle).
+
+	       target_rank
+		    Specifies the rank of the target (nonnegative integer).
+
+	       target_disp
+		    Specifies the displacement from start of window to target
+		    buffer (nonnegative integer).  The target buffer is the
+		    location in the target process window into which the data
+		    will be copied.  The displacement unit is defined by
+		    MPI_Win_create.
+
+	       target_count
+		    Specifies the number of entries in the target buffer
+		    (nonnegative integer).
+
+
+
+
+
+									Page 5
+
+
+
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+	       target_datatype
+		    Specifies the datatype of each entry in the target buffer
+		    (handle).
+
+	       win  Specifies the window object used for communication
+		    (handle).
+
+
+
+     MPI_Accumulate
+	       Combines data from a buffer on the origin process with data in
+	       an RMA window on a specific target process, using the given
+	       operation.  MPI_Accumulate accepts the following arguments:
+
+	       origin_addr
+		    Specifies the initial address of the buffer (choice).
+
+	       origin_count
+		    Specifies the number of entries in buffer (nonnegative
+		    integer).
+
+	       origin_datatype
+		    Specifies the datatype of each buffer entry (handle).
+
+	       target_rank
+		    Specifies the rank of the target (nonnegative integer).
+
+	       target_disp
+		    Specifies the displacement from the start of the window to
+		    the beginning of the target buffer (nonnegative integer).
+
+	       target_count
+		    Specifies the number of entries in the target buffer
+		    (nonnegative integer).
+
+	       target_datatype
+		    Specifies the datatype of each entry in the target buffer
+		    (handle).
+
+	       op   Specifies the operation (valid operations are the same as
+		    for MPI_Reduce) (handle).
+
+	       win  Specifies the window object (handle).
+
+
+
+     After a call to MPI_Win_create, any process in the group can issue
+     MPI_Put or MPI_Get requests to any part of these memory regions, subject
+     to the constraints for conflicting accesses outlined in the MPI-2
+     standard.
+
+
+
+
+
+									Page 6
+
+
+
+
+
+
+MPI_Win(3)							    MPI_Win(3)
+
+
+
+     The current implementation of one-sided communication has the following
+     limitations:
+
+     *	 On IRIX, the communicator must reside completely on a single host.
+	 On Linux, the communicator may reside on a single host or span
+	 multiple partitions.
+
+     *	 On IRIX, the memory window must be in a remotely accessible memory
+	 region. The following types of memory qualify:
+
+       - Static memory (C)
+
+       - Arrays within common blocks (Fortran)
+
+       - Save variables and arrays (Fortran)
+
+       - Symmetric heap (allocated with shmalloc or SHPALLOC)
+
+       - Global heap (allocated with the Fortran 90 ALLOCATE command and
+	 MIPSpro 7.3.1 lm or later and the SMA_GLOBAL_ALLOC environment
+	 variable set to any value.
+
+     *	 On Linux, the memory window must be in a remotely accessible memory
+	 region. The following types of memory qualify:
+
+       - Static memory
+
+       - Memory located on the stack
+
+       - Memory allocated from the heap (via malloc)
+
+       - Memory allocated via MPI_alloc_mem
+
+       *   The disp_unit value passed to MPI_Win_create must be the same on
+	   all processes.
+
+       *   The data type passed to MPI_Put or MPI_Get must have contiguous
+	   storage.
+
+       *   Currently, the only supported RMA functions are MPI_Win_create,
+	   MPI_Win_free, MPI_Put, MPI_Get, and MPI_Win_fence.  The MPI_Put,
+	   MPI_Get, and MPI_Win_fence functions provide the tools needed to
+	   code a "compute-synchronize-communicate-synchronize" sequence
+	   strategy for parallel programming.  Note that the MPI_Win_fence
+	   function is essentially a barrier synchronization function.
+
+NOTES
+     On IRIX, use of MPI_Put, MPI_Get, and MPI_Accumulate in Fortran programs
+     requires that you compile with the -LANG:recursive=on option on the f77
+     or f90 command line when RMA windows are created in SAVE arrays that are
+     not in common blocks.  We recommend that, to be safe, you always specify
+     -LANG:recursive=o

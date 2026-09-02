@@ -1,0 +1,132 @@
+
+
+
+MPI_Type_create_darray(3)			     MPI_Type_create_darray(3)
+
+
+
+NAME
+     MPI_Type_create_darray - Creates a data type corresponding to a
+     distributed, multidimensional array
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_Type_create_darray(int size, int rank, int ndims,
+	  int *array_of_gsizes, int *array_of_distribs,
+	  int *array_of_dargs, int *array_of_psizes, int order,
+	  MPI_Datatype oldtype, MPI_Datatype *newtype)
+
+
+     Fortran:
+
+	  include "mpif.h" (or USE MPI)
+
+	  INTEGER size, rank, ndims, array_of_gsizes(*),
+	  array_of_distribs(*), array_of_dargs(*), array_of_psizes(*),
+	  order, oldtype, newtype, ierror
+
+	  CALL MPI_TYPE_CREATE_DARRAY(size, rank, ndims,
+	  array_of_gsizes, array_of_distribs, array_of_dargs,
+	  array_of_psizes, order, oldtype, newtype, ierror)
+
+
+DESCRIPTION
+     MPI_Type_create_darray creates a data type corresponding to a
+     distributed, multidimensional array.  This routine can be used to
+     generate the data types corresponding to the distribution of an ndims-
+     dimensional array of oldtype elements onto an ndims-dimensional grid of
+     logical processes.  Unused dimensions of array_of_psizes should be set to
+     1.  For a call to MPI_Type_create_darray to be correct, the equation must
+     be satisfied.  The ordering of processes in the process grid is assumed
+     to be row-major, as in the case of virtual Cartesian process topologies
+     in MPI-1.
+
+     MPI_Type_create_darray accepts the following arguments:
+
+     size	    Specifies the size of the process group (positive integer)
+
+     rank	    Specifies the rank in the process group (nonnegative
+		    integer)
+
+     ndims	    Specifies the number of array dimensions as well as
+		    process grid dimensions (positive integer)
+
+     array_of_gsizes
+		    Specifies the number of elements of type oldtype in each
+		    dimension of the global array (array of positive integers)
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Type_create_darray(3)			     MPI_Type_create_darray(3)
+
+
+
+     array_of_distribs
+		    Specifies the distribution of the array in each dimension
+		    (array of state)
+
+     array_of_dargs Specifies the distribution argument in each dimension
+		    (array of positive integers)
+
+     array_of_psizes
+		    Specifies the size of the process grid in each dimension
+		    (array of positive integers)
+
+     order	    Specifies the array storage order flag (state)
+
+     oldtype	    Specifies the old data type (handle)
+
+     newtype	    Returns the new data type (handle)
+
+     ierror	    Specifies the return code value for successful completion,
+		    which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		    mpif.h file.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_Datatype, MPI_Comm, MPI_File) are of
+     type INTEGER.
+
+SEE ALSO
+     MPI_Type_create_subarray(3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 2
+
+
+

@@ -1,0 +1,264 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Type_get_contents(3)			      MPI_Type_get_contents(3)
+
+
+
+NAME
+     MPI_Type_get_contents - Constructs new data types
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_Type_get_contents(MPI_Datatype datatype, int max_integers,
+	  int max_addresses, int max_datatypes, int array_of_integers[],
+	  MPI_Aint array_of_addresses[], MPI_Datatype array_of_datatypes[])
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER datatype, max_integers, max_addresses,
+	  max_datatypes, array_of_integers(*), array_of_datatypes(*),
+	  ierror
+	  INTEGER(KIND=MPI_ADDRESS_KIND) array_of_addresses(*)
+
+	  CALL MPI_TYPE_GET_CONTENTS(datatype, max_integers,
+	  max_addresses,
+	  max_datatypes, array_of_integers, array_of_addresses,
+	  array_of_datatypes, ierror)
+
+
+DESCRIPTION
+     MPI_Type_get_contents constructs new data types. Arguments are as
+     follows:
+
+     datatype		 Specifies the data type to be accessed (handle).
+			 datatype must be a predefined unnamed data type or a
+			 derived data type.  The call is erroneous if datatype
+			 is a predefined named data type.
+
+			 MPI_Type_get_contents can be invoked with a data type
+			 argument that was constructed by using
+			 MPI_TYPE_CREATE_F90_REAL,
+			 MPI_TYPE_CREATE_F90_INTEGER, or
+			 MPI_TYPE_CREATE_F90_COMPLEX (an unnamed predefined
+			 data type). In such a case, an empty
+			 array_of_datatypes is returned.
+
+			 The definition of data type equivalence implies that
+			 equivalent predefined data types are equal. By
+			 requiring the same handle for named predefined data
+			 types, it is possible to use the == or .EQ.
+			 comparison operator to determine the data type
+			 involved.
+
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_Type_get_contents(3)			      MPI_Type_get_contents(3)
+
+
+
+     max_integers	 Specifies the number of elements in array_of_integers
+			 (non-negative integer).
+
+     max_addresses	 Specifies the number of elements in
+			 array_of_addresses (non-negative integer).
+
+     max_datatypes	 Specifies the number of elements in
+			 array_of_datatypes (non-negative integer).
+
+     array_of_integers	 Returns integer arguments used in constructing the
+			 data type (array of integers).
+
+     array_of_addresses  Returns address arguments used in constructing the
+			 data type (array of integers).
+
+     array_of_datatypes  Returns data type arguments used in constructing the
+			 data type (array of handles).
+
+     ierror		 Specifies the return code value for successful
+			 completion, which is in MPI_SUCCESS.  MPI_SUCCESS is
+			 defined in the mpif.h file.
+
+     The values given for max_integers, max_addresses, and max_datatypes must
+     be at least as large as the corresponding values returned in
+     num_integers, num_addresses, and num_datatypes in the
+     MPI_TYPE_GET_ENVELOPE call for the same data type argument.
+
+     The data types returned in array_of_datatypes are handles to data type
+     objects that are equivalent to the data types used in the original
+     construction call. If these were derived data types, the returned data
+     types are new data type objects, and the user is responsible for freeing
+     these data types by using MPI_TYPE_FREE. If these were predefined data
+     types, the returned data type is a constant equal to that predefined data
+     type and cannot be freed.
+
+     The committed state of returned derived data types is undefined (that is,
+     the data types might or might not be committed). Furthermore, the content
+     of attributes of returned data types is undefined.
+
+     In the MPI-1 data type constructor calls, the address arguments in
+     Fortran are of type INTEGER. In the new MPI-2 calls, the address
+     arguments are of type INTEGER(KIND=MPI_ADDRESS_KIND).  The
+     MPI_Type_get_contents call returns all addresses in an argument of type
+     INTEGER(KIND=MPI_ADDRESS_KIND). This is true even if the old MPI-1 calls
+     were used. Thus, the location of returned values can be thought of as
+     being returned by the C bindings. It can also be determined by examining
+     the new MPI-2 calls for data type constructors for the deprecated MPI-1
+     calls that involve addresses. Since the Fortran verison of this function
+     uses MPI_ADDRESS_KIND, which is supported only for ABI 64, the Fortran
+     version of this function is also available only for ABI 64.
+
+
+
+
+
+									Page 3
+
+
+
+
+
+
+MPI_Type_get_contents(3)			      MPI_Type_get_contents(3)
+
+
+
+     By having all address arguments returned in the array_of_addresses
+     argument, the result from a C and Fortran decoding of a data type gives
+     the result in the same argument. It is assumed that an integer of type
+     INTEGER(KIND=MPI_ADDRESS_KIND) will be at least as large as the integer
+     argument used in data type construction with the old MPI-1 calls, so no
+     loss of information will occur.
+
+EXAMPLES
+     The following code defines what values are placed in each entry of the
+     returned arrays depending on the data type constructor used for data
+     type. It also specifies the size of the arrays needed, which are the
+     values returned by MPI_TYPE_GET_ENVELOPE.
+
+
+     Fortran calls:
+
+     PARAMETER (LARGE = 1000)
+	   INTEGER TYPE, NI, NA, ND, COMBINER, I(LARGE), D(LARGE), IERROR
+	   INTEGER(KIND=MPI_ADDRESS_KIND) A(LARGE)
+     !	   CONSTRUCT DATATYPE TYPE (NOT SHOWN)
+	   CALL MPI_TYPE_GET_ENVELOPE(TYPE, NI, NA, ND, COMBINER, IERROR)
+	   IF ((NI .GT. LARGE) .OR. (NA .GT. LARGE) .OR. (ND .GT. LARGE)) THEN
+	     WRITE (*, *) "NI, NA, OR ND = ", NI, NA, ND, &
+	     " RETURNED BY MPI_TYPE_GET_ENVELOPE IS LARGER THAN LARGE = ", LARGE
+	     CALL MPI_ABORT(MPI_COMM_WORLD, 99)
+	   ENDIF
+	   CALL MPI_TYPE_GET_CONTENTS(TYPE, NI, NA, ND, I, A, D, IERROR)
+
+
+     C calls:
+
+     #define LARGE 1000
+     int ni, na, nd, combiner, i[LARGE];
+     MPI_Aint a[LARGE];
+     MPI_Datatype type, d[LARGE];
+     /* construct datatype type (not shown) */
+     MPI_Type_get_envelope(type, &ni, &na, &nd, &combiner);
+     if ((ni > LARGE) || (na > LARGE) || (nd > LARGE)) {
+       fprintf(stderr, "ni, na, or nd = %d %d %d returned by ", ni, na, nd);
+       fprintf(stderr, "MPI_Type_get_envelope is larger than LARGE = %d0,
+	       LARGE);
+       MPI_Abort(MPI_COMM_WORLD, 99);
+     };
+     MPI_Type_get_contents(type, ni, na, nd, i, a, d);
+
+
+SEE ALSO
+     MPI_File_open(3), MPI_Type_get_envelope(3)
+
+
+
+
+
+
+
+									Page 4
+
+
+

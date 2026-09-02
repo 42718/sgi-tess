@@ -1,0 +1,75 @@
+
+
+
+MPI_FINALIZED(3)					      MPI_FINALIZED(3)
+
+
+
+NAME
+     MPI_Finalized - Determines whether MPI has finalized
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  MPI_FINALIZED(flag)
+
+	  int MPI_Finalized(int *flag)
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  LOGICAL flag
+	  INTEGER ierror
+
+	  CALL	MPI_FINALIZED(flag, ierror)
+
+     C++:
+
+	  bool MPI::Is_finalized()
+
+     This routine returns true if MPI_Finalize has completed.
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Finalized routine determines whether MPI has finalized. This
+     routine is part of the MPI-2 standard and is provided for MPI layered
+     libraries to function properly.
+
+     MPI is "active" and it is thus safe to call MPI functions if MPI_Init has
+     completed and MPI_Finalize has not completed.  For example, MPI is
+     "active" in callback functions that are invoked during MPI_Finalize. If a
+     library has no other way of knowing whether MPI is active, it can use
+     MPI_Initialized and MPI_Finalized to determine this.  It is legal to call
+     MPI_Finalized before MPI_Init and after MPI_Finalize.  Once MPI has been
+     finalized, it is no longer active and cannot be restarted.
+
+     MPI_Finalized accepts the following arguments:
+
+     flag	 Returns true if MPI was finalized (logical).
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_FINALIZED(3)					      MPI_FINALIZED(3)
+
+
+
+     ierror	 Specifies the return code value for successful completion,
+		 whic

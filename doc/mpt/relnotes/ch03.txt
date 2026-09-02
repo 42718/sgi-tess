@@ -1,0 +1,330 @@
+
+
+
+                                  - 1 -
+
+
+
+       3.  MPTInstallationforLinuxSystems
+
+       This chapter describes requirements and procedures for MPT
+       installation on Linux systems.
+
+
+       3.1  DiskSpaceRequirements
+
+       Disk space requirements for the MPT for Linux product are
+       approximately 6.3 Mbytes.
+
+
+       3.2  Prerequisites
+
+       Array Services must be configured and running.  See the
+       Array Services release notes (vi `rpm -ql sgi-arraysvcs |
+       grep relnotes`) or the aaaarrrrrrrraaaayyyydddd....ccccoooonnnnffff(4) man page for more
+       details.
+
+
+       3.3  InstallingtheMPTRPM
+
+
+       MPT is supplied as an RPM file.  The file's name contains
+       the following information:
+
+           Product (sgi-mpt)
+           Version (1.9)
+           Release (1)
+           Architecture (SGI Altix 3000 systems)
+
+       For example, the name of the MPT RPM for the MPT 1.9 release
+       is ssssggggiiii----mmmmpppptttt----1111....9999----1111....iiiiaaaa66664444....rrrrppppmmmm.  To install this RPM, log in as
+       root and issue the following command:
+
+       %%%% rrrrppppmmmm ----UUUUvvvvhhhh ssssggggiiii----mmmmpppptttt----1111....9999----1111....iiiiaaaa66664444....rrrrppppmmmm
+
+       3.3.1  UninstallingConflictingPackages
+       When an MPI installation fails because pre-existing files
+       are conflicting with the package you are installing, you can
+       use the rrrrppppmmmm ----eeee command to uninstall the unwanted package.
+       For example, if LAM MPI is running on your system and you
+       want to uninstall it, use the following command:
+
+           %%%% rrrrppppmmmm ----eeee llllaaaammmm
+
+       For more information about handling MPI and LAM MPI
+       collisions, see "MPI and LAM MPI Collisions," later in this
+       chapter.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+       3.4  InstallingMPTSoftwareinaNondefaultLocation
+
+       RPM provides a means for creating, installing, and managing
+       relocatable packages. That is, the MPT RPM can be installed
+       in either a default or nondefault location.
+
+       The default location for installing the MPT RPM is ////uuuussssrrrr.  To
+       install the MPT RPM in a nondefault location, use the
+       --------pppprrrreeeeffffiiiixxxx option, as shown in the following example. The
+       --------pppprrrreeeeffffiiiixxxx option specifies the alternate root directory for
+       the installation of the MPT software (in this case, ////ttttmmmmpppp).
+
+           %%%% rrrrppppmmmm ----iiii --------pppprrrreeeeffffiiiixxxx ////ttttmmmmpppp ssssggggiiii----mmmmpppptttt----1111....9999----1111....iiiiaaaa66664444....rrrrppppmmmm
+
+       3.5  UsingtheQueryFacility
+
+       After installation, you can use the RPM query facility,
+       rrrrppppmmmm ----qqqqiiii, to display information about the MPT RPM.
+
+       Another useful querying capability provided by RPM is
+       rrrrppppmmmm ----qqqqllll, which displays the files associated with the
+       specified RPM.
+
+       Important note:  If the MPT software is installed in an
+       alternate location, to compile, load, or run MPI programs,
+       you must specify the following environment variable:
+
+       LLLLDDDDLLLLIIIIBBBBRRRRAAAARRRRYYYYPPPPAAAATTTTHHHH - Specifies the search location of run-time
+       libraries:
+
+       sssseeeetttteeeennnnvvvv LLLLDDDDLLLLIIIIBBBBRRRRAAAARRRRYYYYPPPPAAAATTTTHHHH ////ttttmmmmpppp////lllliiiibbbb (assuming nondefault location of /tmp)
+
+       For more information, see "Using Dynamic Shared Libraries to
+       Run MPI Jobs," later in this chapter.
+
+
+       3.6  UsingacpioFileforInstallation
+
+       Using a cpio file for installation provides a method of
+       mimicking relocatable software. This method fits nicely into
+       the 'modules' scheme with which most IRIX users are
+       familiar. The following command takes an MPT RPM and creates
+       from it a cpio file that contains the actual files that
+       would have been installed if the RPM had been installed in
+       the default manner.
+
+           %%%% rrrrppppmmmm2222ccccppppiiiioooo ssssggggiiii----mmmmpppptttt----1111....9999----1111....iiiiaaaa66664444....rrrrppppmmmm >>>> ////ttttmmmmpppp////ssssggggiiii----mmmmpppptttt....ccccppppiiiioooo
+
+       Once you have created the ....ccccppppiiiioooo file, you are free to
+       install the software beneath any directory in which you have
+       write permission.  That is, you do not necessarily need root
+
+
+
+
+
+
+
+
+
+
+
+                                  - 3 -
+
+
+
+       permission and, as a consequence, you can install several
+       versions of MPT on the same system to run concurrently for
+       testing or development purposes. The following example
+       demonstrates the process.
+
+       %%%% ccccdddd ////ttttmmmmpppp
+       %%%% ccccppppiiiioooo ----iiiiddddmmmmvvvv <<<< ssssggggiiii----mmmmpppptttt....ccccppppiiiioooo
+
+       uuuussssrrrr////bbbbiiiinnnn////mmmmppppiiiirrrruuuunnnn
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiii++++++++....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiii....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiiieeeexxxxtttt....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiiieeeexxxxttttffff....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiiiffff....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiiiffffppppaaaarrrraaaammmmeeeetttteeeerrrrssss....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiiioooo....hhhh
+       uuuussssrrrr////iiiinnnncccclllluuuuddddeeee////mmmmppppiiiiooooffff....hhhh
+       uuuussssrrrr////lllliiiibbbb////lllliiiibbbbmmmmppppiiii++++++++....ssssoooo
+       uuuussssrrrr////lllliiiibbbb////lllliiiibbbbmmmmppppiiii....ssssoooo
+       uuuussssrrrr////lllliiiibbbb////lllliiiibbbbxxxxmmmmppppiiii....ssssoooo
+       ............
+
+       %%%% llllssss ----RRRR ////ttttmmmmpppp////uuuussssrrrr
+
+       ////ttttmmmmpppp////uuuussssrrrr::::
+       bbbbiiiinnnn  iiiinnnncccclllluuuuddddeeee  lllliiiibbbb  llllooooccccaaaallll
+
+       ////ttttmmmmpppp////uuuussssrrrr////bbbbiiiinnnn::::
+       mmmmppppiiiirrrruuuunnnn
+
+       ////ttttmmmmpppp////uuuussssrrrr////iiiinnnncccclllluuuuddddeeee::::
+       mmmmppppiiii++++++++....hhhh  mmmmppppiiiieeeexxxxtttt....hhhh   mmmmppppiiiiffff....hhhh             mmmmppppiiiioooo....hhhh
+       mmmmppppiiii....hhhh    mmmmppppiiiieeeexxxxttttffff....hhhh  mmmmppppiiiiffffppppaaaarrrraaaammmmeeeetttteeeerrrrssss....hhhh  mmmmppppiiiiooooffff....hhhh
+
+       ////ttttmmmmpppp////uuuussssrrrr////lllliiiibbbb::::
+       lllliiiibbbbmmmmppppiiii++++++++....aaaa  lllliiiibbbbmmmmppppiiii++++++++....ssssoooo  lllliiiibbbbmmmmppppiiii....aaaa  lllliiiibbbbmmmmppppiiii....ssssoooo  lllliiiibbbbxxxxmmmmppppiiii....aaaa  lllliiiibbbbxxxxmmmmppppiiii....ssssoooo
+
+       ////ttttmmmmpppp////uuuussssrrrr////llllooooccccaaaallll::::
+       bbbbiiiinnnn
+
+       As stated previously, if the MPT software is installed in an
+       alternate location, to compile, load, or run MPI programs,
+       you must specify the LLLLDDDDLLLLIIIIBBBBRRRRAAAARRRRYYYYPPPPAAAATTTTHHHH environment variable.
+
+       NOTE: The only apparent disadvantage of using ....ccccppppiiiioooo files to
+       install the contents of an RPM package is that the system's
+       RPM database does not reflect the installation of the files
+       from the ....ccccppppiiiioooo file.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 4 -
+
+
+
+       3.7  MPIandLAMMPICollisions
+
+       The default installations of the MPT and LAM MPI RPMs cannot
+       co-exist on the same Linux system.  This limitation exists
+       because MPT and LAM MPI contain a number of files with
+       identical names and absolute paths.  For example, both the
+       MPT and LAM MPI distributions include a file named
+       ////uuuussssrrrr////bbbbiiiinnnn////mmmmppppiiiirrrruuuunnnn.
+
+       However, for systems already running LAM MPI, it is
+       sometimes desirable to have MPT and LAM MPI co-existing on
+       the same system for purposes of comparison.  To allow the
+       two distributions to co-exist on the same system, you can
+       install the MPT RPM in a nondefault location as described
+       previously in "Installing MPT Files in a Nondefault
+       Location." You will then want to be sure to refer to "Using
+       Dynamic Shared Libraries to Run MPI Jobs," later in this
+       chapter.
+
+       As an alternate remedy to MPT and LAM MPI collisions, you
+       can choose between the two distributions by erasing one and
+       installing the other, as appropriate.
+
+       For example, to erase a version of LAM MPI that has been
+       previously installed using RPM, enter the following command:
+
+           %%%% rrrrppppmmmm ----eeee llllaaaammmm
+
+       Then you can install the MPT RPM as described previously.
+
+       To re-install the LAM MPI RPM, you must find the LAM MPI RPM
+       and install it just as you would install the MPT RPM.
+
+
+       3.8  UsingDynamicSharedLibrariestoRunMPIJobs
+
+       After you have installed the MPT RPM as default, use the
+       following command to build an MPI-based application that
+       uses the ....ssssoooo files:
+
+       For C programs:
+
+       %%%% ggggcccccccc ssssiiiimmmmpppplllleeee1111mmmmppppiiii....cccc ----llllmmmmppppiiii
+       %%%% mmmmppppiiiirrrruuuunnnn ----nnnnpppp 2222 aaaa....oooouuuutttt
+
+       For Fortran programs:
+
+       %%%% ffff77777777 ----IIII////uuuussssrrrr////iiiinnnncccclllluuuuddddeeee ssssiiiimmmmpppplllleeee1111mmmmppppiiii....ffff ----llllmmmmppppiiii
+       %%%% mmmmppppiiiirrrruuuunnnn ----nnnnpppp 2222 aaaa....oooouuuutttt
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 5 -
+
+
+
+       The default locations for the include and ....ssssoooo files and the
+       mmmmppppiiiirrrruuuunnnn command are referenced automatically.
+
+       Assuming that the MPT package has been installed in a
+       nondefault location (under the ////ttttmmmmpppp directory), as described
+       earlier in "Installing MPT Files in a Nondefault Location,"
+       the commands to compile, load, and check are as follows:
+
+           %%%% ggggcccccccc ----IIII ////ttttmmmmpppp////uuuussssrrrr////iiiinnnncccclllluuuuddddeeee ssssiiiimmmmpppplllleeee1111mmmmppppiiii....cccc ----LLLL////ttttmmmmpppp////uuuussssrrrr////lllliiiibbbb ----llllmmmmppppiiii
+           %%%% lllldddddddd aaaa....oooouuuutttt
+
+               lllliiiibbbbmmmmppppiiii....ssssoooo ====>>>> ////uuuussssrrrr////lllliiiibbbb////lllliiiibbbbmmmmppppiiii....ssssoooo ((((0000xxxx44440000000011119999000000000000))))
+               lllliiiibbbbcccc....ssssoooo....6666 ====>>>> ////lllliiiibbbb////lllliiiibbbbcccc....ssssoooo....6666 ((((0000xxxx444400002222aaaacccc000000000000))))
+               lllliiiibbbbddddllll....ssssoooo....2222 ====>>>> ////lllliiiibbbb////lllliiiibbbbddddllll....ssssoooo....2222 ((((0000xxxx4444000033339999aaaa000000000000))))
+               ////lllliiiibbbb////lllldddd----lllliiiinnnnuuuuxxxx....ssssoooo....2222 ====>>>> ////lllliiiibbbb////lllldddd----lllliiiinnnnuuuuxxxx....ssssoooo....2222 ((((0000xxxx44440000000000000000000000000000))))
+
+       However, compiling with non-default libraries does not mean
+       that you can run with them. If you are going to use a
+       nondefault location for the ....ssssoooo files, it is important to
+       set the LLLLDDDDLLLLIIIIBBBBRRRRAAAARRRRYYYYPPPPAAAATTTTHHHH environment variable, as in the
+       following example:
+
+           %%%% sssseeeetttteeeennnnvvvv LLLLDDDDLLLLIIIIBBBBRRRRAAAARRRRYYYYPPPPAAAATTTTHHHH ////ttttmmmmpppp////uuuussssrrrr////lllliiiibbbb
+           %%%% lllldddddddd aaaa....oooouuuutttt
+
+               lllliiiibbbbmmmmppppiiii....ssssoooo ====>>>> ////ttttmmmmpppp////uuuussssrrrr////lllliiiibbbb////lllliiiibbbbmmmmppppiiii....ssssoooo ((((0000xxxx44440000000011114444000000000000))))
+               lllliiiibbbbcccc....ssssoooo....6666 ====>>>> ////lllliiiibbbb////lllliiiibbbbcccc....ssssoooo....6666 ((((0000xxxx444400002222aaaacccc000000000000))))
+               lllliiiibbbbddddllll....ssssoooo....2222 ====>>>> ////lllliiiibbbb////lllliiiibbbbddddllll....ssssoooo....2222 ((((0000xxxx4444000033339999aaaa000000000000))))
+               ////lllliiiibbbb////lllldddd----lllliiiinnnnuuuuxxxx....ssssoooo....2222 ====>>>> ////lllliiiibbbb////lllldddd----lllliiiinnnnuuuuxxxx....ssssoooo....2222 ((((0000xxxx44440000000000000000000000000000))))
+
+       3.9  Running MPI Jobs in Cluster Mode with MPT Nondefault
+            Installation
+
+       For MPI jobs to run correctly in a cluster environment in
+       which MPT has been installed in a nondefault location, you
+       must copy all of the pertinent pieces of MPT to an NFS-
+       mounted filesystem.  This is the only way in which all of
+       the nodes in the cluster can access the software, short of
+       installing the same MPT RPM on each node.  The following
+       method is one way to accomplish this (assuming ////ddddaaaattttaaaa////nnnnffffssss is
+       an NFS-mounted directory and MPT has been installed in the
+       nondefault location ////ttttmmmmpppp////uuuussssrrrr):
+
+       nnnnooooddddeeee1111 #### ttttaaaarrrr ccccffff ////ttttmmmmpppp////mmmmpppptttt....1111....9999....ttttaaaarrrr ////ttttmmmmpppp////uuuussssrrrr
+       nnnnooooddddeeee1111 #### ccccpppp ////ttttmmmmpppp////mmmmpppptttt....1111....9999....ttttaaaarrrr ////ddddaaaattttaaaa////nnnnffffssss
+       nnnnooooddddeeee1111 #### ccccdddd ////ddddaaaattttaaaa////nnnnffffssss
+       nnnnooooddddeeee1111 #### ttttaaaarrrr xxxxffff mmmmpppptttt....1111....9999....ttttaaaarrrr
+       nnnnooooddddeeee1111 #### sssseeeetttteeeennnnvvvv LLLLDDDDLLLLIIIIBBBBRRRRAAAARRRRYYYYPPPPAAAATTTTHHHH ////ddddaaaattttaaaa////nnnnffffssss////lllliiiibbbb
+       nnnnooooddddeeee1111 #### ////ddddaaaattttaaaa////nnnnffffssss////bbbbiiiinnnn////mmmmppppiiiirrrruuuunnnn ----vvvv ----aaaa aaaarrrrrrrraaaayyyynnnnaaaammmmeeee nnnnooooddddeeee1111 1111,,,,nnnnooooddddeeee2222 ----nnnnpppp 1111 aaaa....oooouuuutttt
+
+
+
+
+
+
+
+
+
+

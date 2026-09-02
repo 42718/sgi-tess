@@ -1,0 +1,132 @@
+
+
+
+MPI_STARTALL(3) 					       MPI_STARTALL(3)
+
+
+
+NAME
+     MPI_Startall - Starts a collection of requests
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Startall( count, array_of_requests )
+	  int count;
+	  MPI_Request array_of_requests[];
+
+
+     C++:
+
+	  #include <mpi.h>
+
+	  static void Prequest::Startall(
+	  int		    count,
+	  Prequest	    array_of_requests[])
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER count, array_of_requests(*), ierror
+
+	  CALL MPI_STARTALL(count, array_of_requests(*), ierror)
+
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Startall routine starts a collection of requests.	This routine
+     accepts the following parameters:
+
+     count     Specifies the list length (integer)
+
+     array_of_requests
+	       Specifies the array of requests (array of handle)
+
+     ierror    Specifies the return code value for successful completion,
+	       which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the mpif.h
+	       file.
+
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_STARTALL(3) 					       MPI_STARTALL(3)
+
+
+
+SEE ALSO
+     MPI_Bsend_init(3), MPI_Rsend_init(3), MPI_Send_init(3),
+     MPI_Ssend_init(3), MPI_Recv_init(3), MPI_Wait(3), MPI_Test(3),
+     MPI_Testsome(3), MPI_Waitsome(3), MPI_Waitall(3), MPI_Waitany(3),
+     MPI_Testall(3), MPI_Testany(3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 2
+
+
+

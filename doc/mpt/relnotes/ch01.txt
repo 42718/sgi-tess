@@ -1,0 +1,330 @@
+
+
+
+                                  - 1 -
+
+
+
+       1.  Introduction
+
+       This document provides an overview of the SGI Message
+       Passing Toolkit (MPT) for release 1.9.
+
+       MPT is a software package that supports interprocess data
+       exchange for applications that use concurrent, cooperating
+       processes on a single host or on multiple hosts. Data
+       exchange is done through message passing, which is the use
+       of library calls to request data delivery from one process
+       to another or between groups of processes.
+
+       This release of MPT does not support MPI jobs across
+       heterogeneous clusters.
+
+       The MPT package contains the following components and
+       accompanying documentation:
+
+          +o Message Passing Interface.
+
+          +o Logically shared, distributed memory (SHMEM) data
+            passing routines.
+
+       The MPI component of MPT is based on industry standards for
+       the message passing programming model. These components also
+       contain enhancements specific to SGI systems. For a
+       description of MPI, see the Message Passing Toolkit: MPI
+       Programmer's Manual.  SHMEM man pages are available online
+       only.
+
+       NOTE:  Previous releases of MPT also included PVM (Parallel
+       Virtual Machine).  With the MPT 1.6 release, PVM 3.3 was
+       unbundled and is now available as a stand-alone product via
+       the SGI Download Cool Software (DCS) web site.
+       http://www.sgi.com/products/evaluation/
+
+       These release notes include the following chapters:
+
+         1.  Introduction
+
+         2.  MPT Installation for IRIX Systems
+
+         3.  MPT Installation for Linux Systems
+
+         4.  New Features
+
+         5.  Closed PVs
+
+         6.  Compatibilities and Dependencies
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+         7.  Known Problems and Workarounds
+
+         8.  Documentation
+
+         9.  Customer Services
+
+
+       1.1  ReleaseIdentificationInformation
+
+       The release identification for MPT release is as follows:
+
+       SSSSooooffffttttwwwwaaaarrrreeee pppprrrroooodddduuuucccctttt                  Message Passing Toolkit
+
+       VVVVeeeerrrrssssiiiioooonnnn                           1.9
+
+       SSSSooooffffttttwwwwaaaarrrreeee rrrreeeeqqqquuuuiiiirrrreeeemmmmeeeennnnttttssss      IRIX:  SGI MIPS based systems
+                                         running IRIX release 6.5 or later
+
+                                         Array Services software
+                                         version 3.4 or later and any
+                                         Array Services patches that
+                                         are appropriate for the version
+                                         of IRIX and Array Services
+                                         on your system
+
+
+                                  Linux: SGI Altix 3000 systems running
+                                         SGI Propack.   SGI Propack 2.3
+                                         is recommended.
+
+       1.2  DistributionofTheseReleaseNotes
+
+       For IRIX systems:
+
+         After you have installed the online release notes (the
+         relnotes subsystem), you can view the release notes on
+         your screen.
+
+         If you have a graphics system, select Release Notes from
+         the Help submenu of the Toolchest. This invokes the
+         grelnotes graphical browser for the online release notes.
+         For options to this command, see the ggggrrrreeeellllnnnnooootttteeeessss(1) man
+         page.
+
+         If you do not have a graphics system, you can use the
+         rrrreeeellllnnnnooootttteeeessss(1) command to access the online release notes.
+
+
+       For Linux systems:
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 3 -
+
+
+
+         You can access the release notes from the following
+         location:
+
+            ////uuuussssrrrr////sssshhhhaaaarrrreeee////ddddoooocccc////ssssggggiiii----mmmmpppptttt----1111....9999////RRRREEEEAAAADDDDMMMMEEEE....rrrreeeellllnnnnooootttteeeessss
+
+       1.3  ProductDescription
+
+       The MPT package contains the following subcomponents:
+
+          +o Message Passing Interface (MPI)
+
+          +o Logically shared, distributed memory (SHMEM) data
+            passing routines
+
+       The MPI component of MPT includes a library of
+       communications and synchronization functions that are
+       necessary for writing distributed applications. For example,
+       you can add calls that cause one task to send a message to
+       another, or to receive a message, or to wait until another
+       task is finished.
+
+       To use MPI or SHMEM message passing directly, you must
+       change your source code to add the appropriate calls.
+
+
+       1.3.1  MessagePassingInterface(MPI)
+       SGI MPI is an optimized version of the Message Passing
+       Interface (MPI) created by the Message Passing Interface
+       Forum (MPIF). SGI MPI is the full implementation of the MPI
+       1.2 specification.  In addition, the following MPI-2
+       features have been added to this library:
+
+         Parallel I/O
+         One sided put/get model messaging
+         MMMMPPPPIIIICCCCoooommmmmmmmssssppppaaaawwwwnnnn/MMMMPPPPIIIICCCCoooommmmmmmmssssppppaaaawwwwnnnnmmmmuuuullllttttiiiipppplllleeee
+         MMMMPPPPIIIIAAAAllllllllooooccccmmmmeeeemmmm/MMMMPPPPIIIIFFFFrrrreeeeeeeemmmmeeeemmmm
+         Transfer handles
+         Replacements for deprecated MPI-1 functions
+         Generalized Requests
+
+       MPI is a standard specification for message passing
+       libraries, allowing portable message passing programs in the
+       Fortran and C languages. MPI is not sanctioned or supported
+       by any official standards organization. Its goal was to
+       develop a widely used standard for writing message passing
+       programs. The implementation of this standard includes the
+       lllliiiibbbbmmmmppppiiii....ssssoooo and lllliiiibbbbmmmmppppiiii++++++++....ssssoooo libraries, a run-time command
+       (mmmmppppiiiirrrruuuunnnn(1)), the lllliiiibbbbxxxxmmmmppppiiii....ssssoooo library, and allows for
+       profiling of message passing applications
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 4 -
+
+
+
+       1.3.2  LogicallyShared,DistributedMemory(SHMEM)
+       SHMEM data passing is another form of distributed
+       programming. It differs from MPI message passing in that it
+       uses one-sided communication. One processing element (PE)
+       can send or receive data from a remote PE without direct
+       participation by the remote PE.
+
+       SHMEM data passing capability is similar to that of the MPI
+       one-sided functions defined in Chapter 6 of the MPI-2
+       specification.
+
+
+       1.4  ProductSupport
+
+       SGI provides a comprehensive product support maintenance
+       program for its products. If you are in the U.S. or Canada
+       and would like support for your supported products, contact
+       the Technical Assistance Center at (800) 800-4SGI.  If you
+       are outside these areas, contact the SGI subsidiary or
+       authorized distributor in your country.
+
+
+
+       1.5  ReaderComments
+
+       If you have comments about the technical accuracy, content,
+       or organization of this document, please tell us. Be sure to
+       include the title and part number of the document with your
+       comments.
+
+       You can contact us in any of the following ways:
+
+          +o Send e-mail to the following address:
+
+               tttteeeecccchhhhppppuuuubbbbssss@@@@ssssggggiiii....ccccoooommmm
+
+          +o Send a fax to the attention of "Technical Publications"
+            at: +1-650-932-0801.
+
+          +o Use the Feedback option on the Technical Publications
+            Library World Wide Web page:
+
+               hhhhttttttttpppp::::////////ddddooooccccssss....ssssggggiiii....ccccoooommmm
+
+          +o Call the Technical Publications Group, through the
+            Technical Assistance Center at 1-800-800-4SGI
+
+          +o Send mail to the following address:
+
+            Technical Publications SGI 1600 Amphitheatre Pkwy.
+            Mountain View, California 94043-1351
+
+
+
+
+
+
+
+
+
+
+
+                                  - 5 -
+
+
+
+       We value your comments and will respond to them promptly.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

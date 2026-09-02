@@ -1,0 +1,70 @@
+
+
+
+MPI_File_get_type_extent(3)			   MPI_File_get_type_extent(3)
+
+
+
+NAME
+     MPI_File_get_type_extent - Returns the extent of datatype in the file
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_get_type_extent(MPI_File fh, MPI_Datatype
+	  datatype, MPI_Aint *extent)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER fh, datatype, ierror
+	  INTEGER(KIND=MPI_ADDRESS_KIND) extent
+
+	  CALL MPI_FILE_GET_TYPE_EXTENT(fh, datatype, extent,
+	  ierror)
+
+
+DESCRIPTION
+     The MPI_File_get_type_extent routine returns the extent of datatype in
+     the fh file. This extent will be the same for all processes accessing the
+     fh file.  If the current view uses a user-defined data representation,
+     MPI uses the dtype_file_extent_fn callback to calculate the extent.
+
+     In the case of user-defined data representations, the extent of a derived
+     datatype can be calculated by first using dtype_file_extent_fn to
+     determine the extents of the predefined datatypes in this derived
+     datatype.
+
+     The MPI_File_get_type_extent routine accepts the following arguments:
+
+     fh 	    Specifies the file handle (handle)
+
+     datatype	    Specifies the datatype (handle)
+
+     extent	    Returns the extent of the datatype (nonnegative integer)
+
+     ierror	    Specifies the return code value for successful completion,
+		    which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		    mpif.h file.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_Datatype, MPI_Comm, MPI_File) are of
+     type INTEGER.
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_File_get_type_e

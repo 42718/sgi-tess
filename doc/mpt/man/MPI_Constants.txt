@@ -1,0 +1,330 @@
+
+
+
+MPI_CONSTANTS(3)					      MPI_CONSTANTS(3)
+
+
+
+NAME
+     MPI_Constants - Defines constants
+
+STANDARDS
+     This release implements the MPI 1.2 standard, as documented by the MPI
+     Forum in the spring 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+DESCRIPTION
+     The MPI_Constants routine defines constants of the following types:
+
+     *	 Communicators
+
+     *	 Groups
+
+     *	 Results of compare operations
+
+     *	 Collective operations
+
+     *	 Permanent key values
+
+     *	 Null objects
+
+     *	 Predefined constants
+
+     *	 Topology types
+
+     *	 MPI status
+
+     *	 Special MPI types and functions
+
+   Communicators
+     The following communicator constants are of type MPI_Comm in C and type
+     integer in Fortran:
+
+     MPI_COMM_WORLD	 Specifies a constant that contains all of the
+			 processes
+
+     MPI_COMM_SELF	 Specifies a constant that contains only the calling
+			 process
+
+   Groups
+     The following group constant is of type MPI_Group in C and type integer
+     in Fortran:
+
+     MPI_GROUP_EMPTY	 Specifies a group that contains no members
+
+   Compare Operation Results
+     The following constants specify results of compare operations:
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_CONSTANTS(3)					      MPI_CONSTANTS(3)
+
+
+
+     MPI_IDENT		 The groups are identical.
+
+     MPI_CONGRUENT	 The groups are identical (used only for
+			 MPI_Comm_compare(3)).
+
+     MPI_SIMILAR	 The groups contain the same members, but in a
+			 different order.
+
+     MPI_UNEQUAL	 The groups are not equal.
+
+   Collective Operations
+     The collective combination operations (MPI_Reduce(3), MPI_Allreduce(3),
+     MPI_Reduce_scatter(3), and MPI_Scan(3)) take a combination operation.
+     This combination operation is of type MPI_Op in C and of type integer in
+     Fortran.  The predefined operations are as follows:
+
+     MPI_MAX		 Returns the maximum value
+
+     MPI_MIN		 Returns the minumum value
+
+     MPI_SUM		 Returns the sum
+
+     MPI_PROD		 Returns the product
+
+     MPI_LAND		 Returns the logical AND
+
+     MPI_BAND		 Returns the bitwise AND
+
+     MPI_LOR		 Returns the logical OR
+
+     MPI_BOR		 Returns the bitwise OR
+
+     MPI_LXOR		 Returns the logical exclusive OR
+
+     MPI_BXOR		 Returns the bitwise exclusive OR
+
+     MPI_MINLOC 	 Returns the minimum value and the location (actually,
+			 it returns the value of the second element of the
+			 structure where the minimum of the first element is
+			 found)
+
+     MPI_MAXLOC 	 Returns the maximum value and the location
+
+   Permanent Key Values
+     The types of the following permanent key value constants are the same in
+     C and Fortran:
+
+     MPI_TAG_UB 	      Specifies largest tag value
+
+     MPI_HOST		      Specifies the rank of the process that is host,
+			      if any
+
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_CONSTANTS(3)					      MPI_CONSTANTS(3)
+
+
+
+     MPI_IO		      Specifies the rank of the process that can
+			      perform I/O operations
+
+     MPI_WTIME_IS_GLOBAL      Has a value of 1 if MPI_Wtime(3) is globally
+			      synchronized
+
+   Null Objects
+     The following constants specify null objects:
+
+     MPI_COMM_NULL	      Specifies a null communicator
+
+     MPI_OP_NULL	      Specifies a null operation
+
+     MPI_GROUP_NULL	      Specifies a null group
+
+     MPI_DATATYPE_NULL	      Specifies a null data type
+
+     MPI_REQUEST_NULL	      Specifies a null request
+
+     MPI_ERRHANDLER_NULL      Specifies a null error handler
+
+   Predefined Constants
+     The following constants are predefined:
+
+     MPI_MAX_PROCESSOR_NAME	   Specifies the maximum length of the name
+				   returned by MPI_Get_processor_name(3)
+
+     MPI_MAX_ERROR_STRING	   Specifies the maximum length of the string
+				   returned by MPI_Error_string(3)
+
+     MPI_UNDEFINED		   Used by many routines to indicate an
+				   undefined or unknown integer value
+
+     MPI_UNDEFINED_RANK 	   Specifies an unknown rank
+
+     MPI_KEYVAL_INVALID 	   Provides a special key value that can be
+				   used to detect uninitialized key values
+
+     MPI_BSEND_OVERHEAD 	   Specifies a value that can be added to the
+				   size of a MPI_Bsend(3) buffer for each
+				   outstanding message
+
+     MPI_PROC_NULL		   Specifies a rank that can be used to send
+				   or receive from no-one
+
+     MPI_ANY_SOURCE		   Indicates, in a receive, to accept a
+				   message from anyone
+
+     MPI_ANY_TAG		   Indicates, in a receive, to accept a
+				   message with any tag value
+
+
+
+
+
+									Page 3
+
+
+
+
+
+
+MPI_CONSTANTS(3)					      MPI_CONSTANTS(3)
+
+
+
+     MPI_BOTTOM 		   Can be used to indicate the bottom of the
+				   address space
+
+   Topology Types
+     The following constants are topology types:
+
+     MPI_GRAPH	    Indicates a general graph
+
+     MPI_CART	    Indicates a Cartesian grid
+
+   MPI Status
+     The MPI_Status data type is a structure.  The elements that programmers
+     can use are as follows:
+
+     MPI_SOURCE     Indicates who sent the message
+
+     MPI_TAG	    Indicates with what tag the message was sent
+
+     MPI_ERROR	    Indicates any error return
+
+   Special MPI Types and Functions
+     The following constants are special MPI types and functions:
+
+     MPI_Aint			   Specifies a C type that holds any valid
+				   address
+
+     MPI_Handler_function	   Specifies a C function for handling errors
+				   (see the MPI_Errhandler_create(3) man page)
+
+     MPI_User_function		   Specifies a C function to combine values
+				   (see the Collective Operations subsection
+				   on this man page) and the MPI_Op_create(3)
+				   man page)
+
+     MPI_Copy_function		   Specifies a function to copy attributes
+				   (see the MPI_Keyval_create(3) man page)
+
+     MPI_Delete_function	   Specifies a function to delete attributes
+				   (see the MPI_Keyval_create(3) man page)
+
+     MPI_ERRORS_ARE_FATAL	   Specifies an error handler that forces an
+				   exit on error
+
+     MPI_ERRORS_RETURN		   Specifies an error handler that returns
+				   error codes (as a value of the MPI routine
+				   in C and through the last argument in
+				   Fortran)
+
+SEE ALSO
+     MPI_Allreduce(3), MPI_Bsend(3), MPI_Comm_compare(3),
+     MPI_Errhandler_create(3), MPI_Error_string(3), MPI_Get_processor_name(3),
+     MPI_Keyval_create(3), MPI_Op_create(3), MPI_Reduce(3),
+
+
+
+									Page 4
+
+
+
+
+
+
+MPI_CONSTANTS(3)					      MPI_CONSTANTS(3)
+
+
+
+     MPI_Reduce_scatter(3), MPI_Scan(3), MPI_Wtime(3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+									Page 5
+
+
+

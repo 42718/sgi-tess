@@ -1,0 +1,169 @@
+
+
+
+MPI_Transfer_of_handles(3)			    MPI_Transfer_of_handles(3)
+
+
+
+NAME
+     MPI_Transfer_of_handles - Transfers a Fortran handle (which is an
+     integer) to a C handle, and vice versa.
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  MPI_Fint MPI_Comm_c2f ( comm )
+	  MPI_Comm     *comm;
+
+	  MPI_Comm MPI_Comm_f2c ( comm )
+	  MPI_Fint     *comm;
+
+	  MPI_Fint MPI_Type_c2f ( datatype )
+	  MPI_Datatype	   *datatype;
+
+	  MPI_Datatype MPI_Type_f2c ( datatype )
+	  MPI_Fint    *datatype;
+
+	  MPI_Fint MPI_Group_c2f ( group )
+	  MPI_Group	*group;
+
+	  MPI_Group MPI_Group_f2c ( group )
+	  MPI_Fint     *group;
+
+	  MPI_Fint MPI_Request_c2f ( request )
+	  MPI_Request	  *request;
+
+	  MPI_Request MPI_Request_f2c ( request )
+	  MPI_Fint     *request;
+
+	  MPI_Fint MPI_Win_c2f ( win )
+	  MPI_Win     *win;
+
+	  MPI_Win MPI_Win_f2c ( win )
+	  MPI_Fint     *win;
+
+
+	  MPI_Fint MPI_Op_c2f ( FIop )
+	  MPI_Op     *op;
+
+
+STANDARDS
+     This release implements the MPI 2.0 standard, as documented by the MPI
+     Forum in the July 1997 release of MPI:  A Message Passing Interface
+     Standard.
+
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_Transfer_of_handles(3)			    MPI_Transfer_of_handles(3)
+
+
+
+DESCRIPTION
+     The MPI_Transfer_of_handles functions convert from an integer Fortran
+     handle to a C handle, and from a C handle to an integer Fortran handle.
+
+     You can pass handles between Fortran and C or C++ by using an explicit C
+     wrapper to convert Fortran handles to C handles. There is no direct
+     access to C or C++ handles in Fortran.
+
+     You can pass handles between C and C++ by using overloaded C++ operators
+     called from C++ code. There is no direct access to C++ objects from C.
+
+     The type definition, MPI_Fint, is provided in C and C++ for an integer of
+     the size that matches a Fortran INTEGER type. Usually, MPI_Fint will be
+     equivalent to int.
+
+     The MPI_Transfer_of_handles function descriptions and the parameters they
+     accept are as follows:
+
+     MPI_Comm_f2c returns a C handle to a communicator.  If the comm parameter
+     is a valid Fortran handle to a communicator, MPI_Comm_f2c returns a valid
+     C handle to that same communicator. If the value of comm is MPI_COMM_NULL
+     (Fortran value), MPI_Comm_f2c returns a null C handle.  If comm is an
+     invalid Fortran handle, MPI_Comm_f2c returns an invalid C handle.
+
+     MPI_Comm_c2f translates a C communicator handle into a Fortran handle to
+     the same communicator. It maps a null handle into a null handle and an
+     invalid handle into an invalid handle.
+
+     MPI_Type_f2c returns a C handle to a datatype.  If the datatype parameter
+     is a valid Fortran handle to a datatype, MPI_Type_f2c returns a valid C
+     handle to that same datatype. If the value of datatype is
+     MPI_DATATYPE_NULL (Fortran value), MPI_Type_f2c returns a null C handle.
+     If datatype is an invalid Fortran handle, MPI_Type_f2c returns an invalid
+     C handle.
+
+     MPI_Type_c2f translates a C datatype handle into a Fortran handle to the
+     same datatype. It maps a null handle into a null handle and an invalid
+     handle into an invalid handle.
+
+     MPI_Group_f2c returns a C handle to a group.  If the group parameter is a
+     valid Fortran handle to a group, MPI_Group_f2c returns a valid C handle
+     to that same group. If the value of group is MPI_GROUP_NULL (Fortran
+     value), MPI_Group_f2c returns a null C handle.  If group is an invalid
+     Fortran handle, MPI_Group_f2c returns an invalid C handle.
+
+     MPI_Group_c2f translates a C group handle into a Fortran handle to the
+     same group. It maps a null handle into a null handle and an invalid
+     handle into an invalid handle.
+
+     MPI_Request_f2c returns a C handle to a request.  If the request
+     parameter is a valid Fortran handle to a request, MPI_request_f2c returns
+     a valid C handle to that same request. If the value of request is
+
+
+
+									Page 2
+
+
+
+
+
+
+MPI_Transfer_of_handles(3)			    MPI_Transfer_of_handles(3)
+
+
+
+     MPI_REQUEST_NULL (Fortran value), MPI_Request_f2c returns a null C
+     handle.  If request is an invalid Fortran handle, MPI_Request_f2c returns
+     an invalid C handle.
+
+     MPI_Request_c2f translates a C request handle into a Fortran handle to
+     the same request. It maps a null handle into a null handle and an invalid
+     handle into an invalid handle.
+
+     MPI_Win_f2c returns a C handle to a window.  If the win parameter is a
+     valid Fortran handle to a window, MPI_Win_f2c returns a valid C handle to
+     that same window. If the value of win is MPI_WIN_NULL (Fortran value),
+     MPI_Win_f2c returns a null C handle.  If win is an invalid Fortran
+     handle, MPI_Win_f2c returns an invalid C handle.
+
+     MPI_Win_c2f translates a C window handle into a Fortran handle to the
+     same window. It maps a null handle into a null handle and an invalid
+     handle into an invalid handle.
+
+     MPI_Op_f2c returns a C handle to an operator.  If the op parameter is a
+     valid Fortran handle to an operator, MPI_Op_f2c returns a valid C handle
+     to that same operator. If the value of op is MPI_OP_NULL (Fortran value),
+     MPI_Op_f2c returns a null C handle.  If op is an invalid Fortran handle,
+     MPI_Op_f2c returns an invalid C handle.
+
+     MPI_Op_c2f translates a C operator handle into a Fortran handle to the
+     same operator. It maps a null handle into a null handle and an invalid
+     handle into an invalid handle.
+
+NOTES
+     All MPI routines in Fortran (except for MPI_Wtime(3) and MPI_

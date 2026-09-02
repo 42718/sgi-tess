@@ -1,0 +1,58 @@
+
+
+
+MPI_File_get_position(3)			      MPI_File_get_position(3)
+
+
+
+NAME
+     MPI_File_get_position - Returns the current position of the individual
+     file pointer in etype units relative to the current view
+
+SYNOPSIS
+     C:
+
+	  #include "mpi.h"
+
+	  int MPI_File_get_position(MPI_File fh, MPI_Offset offset)
+
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER fh, ierror
+	  INTEGER(KIND=MPI_OFSET_KIND) offset
+	  CALL MPI_FILE_GET_POSITION(fh, offset, ierror)
+
+
+DESCRIPTION
+     MPI_File_get_position returns, in offset, the current position of the
+     individual file pointer in etype units relative to the current view.
+
+     The offset can be used in a future call to MPI_File_seek using the whence
+     argument of MPI_File_seek set to MPI_SEEK_SET to return to the current
+     position.	To set the displacement to the current file pointer position,
+     first use the MPI_File_get_byte_offset routine to convert offset into an
+     absolute byte position, then use the resulting displacement to call
+     MPI_File_set_view.
+
+     MPI_File_get_position accepts the following arguments:
+
+     fh 	 Specifies the file handle (handle)
+
+     offset	 Returns the offset of the individual file pointer
+		 (nonnegative integer).
+
+     ierror	 Specifies the return code value for successful completion,
+		 which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		 mpif.h file.
+
+		 Note: End-of-file is not detected.  The individual file
+		 pointer is increased by the requested amount of data and not
+		 by the actual amount of data read.  Therefore, after end-of-
+		 file is reached, MPI_File_get_position(3) returns a wrong
+		 offset.
+
+   Notes for Fortran
+     All MPI objects (for example, MPI_D

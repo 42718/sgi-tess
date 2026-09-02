@@ -1,0 +1,264 @@
+
+
+
+                                  - 1 -
+
+
+
+       9.  CustomerServices
+
+       This chapter describes MPT support services that are
+       available for the MPT 1.9 release.
+
+       9.1  SupportPolicy
+
+       SGI offers standard support for problems in the following
+       categories:
+
+          +o Build problems
+
+          +o Run-time problems specific to SGI computer systems
+
+       Fixes to problems will be made available through one of the
+       following mechanisms:
+
+          +o Upgrade utility
+
+          +o Major release
+
+          +o Minor release
+
+       9.1.1  MPISupportPolicy
+       SGI will address MPI problems in a timely fashion.
+
+       9.1.2  SHMEMLibrarySupportPolicy
+       SGI will address SHMEM message passing problems in a timely
+       fashion.
+
+       9.2  MPTWorldWideWebSite
+
+       Current product information regarding MPT is available
+       online through World Wide Web site at the following URL:
+
+          hhhhttttttttpppp::::////////wwwwwwwwwwww....ssssggggiiii....ccccoooommmm////ssssooooffffttttwwwwaaaarrrreeee////mmmmpppptttt////
+
+       9.3  TrainingSupport
+
+       For information about SGI courses, training office
+       locations, current class schedules, and training services
+       listed by country, contact us in one of the following ways:
+
+          +o On the World Wide Web at the following URL:
+
+               hhhhttttttttpppp::::////////wwwwwwwwwwww....ssssggggiiii....ccccoooommmm////ssssuuuuppppppppoooorrrrtttt////ccccuuuusssstttteeeedddduuuuccccaaaattttiiiioooonnnn
+
+          +o Call one of the following numbers:
+               1 800 800 4744 (toll free in the United States or
+              Canada)
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 2 -
+
+
+
+               +1 651 683 3825 (from all other locations)
+
+
+       9.4  SoftwareProblemReportingandResolutionProcess
+
+       If you experience problems with MPT 1.9, contact your
+       service representative. Your service representative will
+       work with you to resolve the problem. If you choose to have
+       full-time or part-time on-site support, your on-site support
+       personnel are your primary contacts for service. If you have
+       elected not to have on-site support, please call the
+       Customer Support Center and report your problem to them.
+
+       When you report problems, use the product name most
+       appropriate for the problem and refer to MPT for all
+       products. Use any of the following product names:
+
+          +o MPI
+
+          +o LIBSMA
+
+       9.5  Pipeline
+
+       Customers who have a support contract receive Pipeline, the
+       SGI customer newsletter. Pipeline provides product and
+       support information about SGI workstations and servers.
+       Pipeline is published six times a year (January/February,
+       March/April, and so on). Pipeline is available on the World
+       Wide Web in Supportfolio Online (http://support.sgi.com/).
+
+       9.6  AdditionalSupportResources
+
+       Along with the standard support described in the preceding
+       sections, users of MPI have a variety of other resources
+       available to help them use these products. These resources
+       should supplement, not replace, standard SGI support. In
+       particular, users are encouraged to use SGI support when
+       they encounter what may be an MPI bug, even if the problem
+       does not apply to SGI systems. However, these other
+       resources can be helpful in gaining a better understanding
+       of MPI and how it can be used. The following sections
+       describe some of these resources.
+
+       9.6.1  MPIStandard
+       You can access the MPI standard in any of the following
+       ways:
+
+          +o As online PostScript or hypertext on the World Wide Web
+            at the following URL:
+
+               hhhhttttttttpppp::::////////wwwwwwwwwwww----uuuunnnniiiixxxx....mmmmccccssss....aaaannnnllll....ggggoooovvvv////mmmmppppiiii
+
+
+
+
+
+
+
+
+
+
+
+                                  - 3 -
+
+
+
+          +o As a journal article in the fall 1994 issue of the
+            Journal of Supercomputing Applications
+
+
+       9.6.2  NewsGroups
+       The comp.parallel.mpi Internet news groups focus on MPI and
+       related products. The MPI developers use these news groups
+       to announce new releases of the products and to discuss
+       related topics.  Users are also free to use the news groups
+       to interact with one another by responding to postings made
+       by others.
+
+       To access comp.parallel.mpi, you must have access to the
+       Internet and a news reader program. If necessary, contact
+       your site administrator for additional information.
+
+       9.6.3  MPIUserGroupMeetings
+       You can obtain information about upcoming MPI developers
+       conferences and user group meetings through
+       comp.parallel.mpi or through the MPI web page listed in "MPI
+       Standard".
+
+       The MPI Forum e-mail discussions, and both current and
+       earlier versions of the standard, are available from the
+       netlib server. For more information about netlib, see the
+       following section.
+
+       9.6.4  netlibSource
+       A public domain version of MPI is available from a source
+       called netlib. If your site is using the versions of these
+       products contained in MPT, you will not need to obtain the
+       source code from netlib. However, the following additional
+       resources available from netlib might be useful:
+
+          +o Test and sample programs contained in the public domain
+            releases that are not included in the SGI release
+
+          +o Papers and presentations by the MPI developers that
+            describe MPI and related products
+
+       You can obtain information from netlib in the following
+       ways:
+
+          +o Use the Web, which allows you to obtain the files
+            directly. This is perhaps the easiest and most
+            convenient method.  The MPI page at netlib is located
+            at the following URL:
+
+               hhhhttttttttpppp::::////////wwwwwwwwwwww....nnnneeeettttlllliiiibbbb....oooorrrrgggg////mmmmppppiiii////iiiinnnnddddeeeexxxx....hhhhttttmmmmllll
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  - 4 -
+
+
+
+          +o Send e-mail to netlib@ornl.gov (or
+            netlib@research.att.com), and include the following in
+            the Subject: line or message body:
+
+               sssseeeennnndddd iiiinnnnddddeeeexxxx ffffrrrroooommmm mmmmppppiiii
+
+            Once you receive the index, similar send messages will
+            return parts of MPI. This assumes the ORNL or AT&T host
+            can determine how to return your e-mail. If not, use
+            anonymous ftp.
+
+          +o Use anonymous ftp from netlib2.cs.utk.edu.
+
+          +o Use anonymous rcp from netlib2.cs.utk.edu. For example:
+
+               rrrrccccpppp aaaannnnoooonnnn@@@@nnnneeeettttlllliiiibbbb2222....ccccssss....uuuuttttkkkk....eeeedddduuuu::::mmmmppppiiii//// yyyyoooouuuurrrr----llllooooccccaaaallll----ffffiiiilllleeee
+
+            You can use the following command to obtain file lists:
+
+               rrrrsssshhhh nnnneeeettttlllliiiibbbb2222....ccccssss....uuuuttttkkkk....eeeedddduuuu ----llll aaaannnnoooonnnn llllssss mmmmppppiiii
+
+          +o Use the xnetlib browsing tool (which you can obtain
+            from netlib by using one of the preceding methods).
+
+          +o For access in Europe, use the duplicate collection in
+            Oslo, as follows:
+
+               IIIInnnntttteeeerrrrnnnneeeetttt:::: nnnneeeettttlllliiiibbbb@@@@nnnnaaaacccc....nnnnoooo
+               EEEEAAAARRRRNNNN////BBBBIIIITTTTNNNNEEEETTTT:::: nnnneeeettttlllliiiibbbb%%%%nnnnaaaacccc....nnnnoooo@@@@nnnnoooorrrruuuunnnniiiixxxx....bbbbiiiittttnnnneeeetttt
+               XXXX....444400000000:::: ssss====nnnneeeettttlllliiiibbbb;;;; oooo====nnnnaaaacccc;;;; cccc====nnnnoooo
+               EEEEUUUUNNNNEEEETTTT////uuuuuuuuccccpppp:::: nnnnaaaacccc!!!!nnnneeeettttlllliiiibbbb
+
+          +o For access in the Pacific, use the following address,
+            located at the University of Wollongong, NSW,
+            Australia:
+
+               nnnneeeettttlllliiiibbbb@@@@ddddrrrraaaacccciiii....ccccssss....uuuuoooowwww....eeeedddduuuu....aaaauuuu
+
+       9.7  ObtainingPublications
+
+       The MPT 1.9 release package includes the publications
+       indicated in the chapter titled "Documentation."
+
+       You can access the Message Passing Toolkit from the SGI
+       software evaluation URL:
+
+         http://www.sgi.com/products/evaluation/#mpt
+
+
+
+
+
+
+
+
+
+
+
+

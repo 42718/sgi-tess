@@ -1,0 +1,110 @@
+
+
+
+MPI_TYPE_CREATE_STRUCT(3)			     MPI_TYPE_CREATE_STRUCT(3)
+
+
+
+NAME
+     MPI_Type_create_struct - Creates a struct datatype
+
+SYNOPSIS
+     C:
+
+	  #include <mpi.h>
+
+	  int MPI_Type_create_struct( count, blocklens, indices,
+	  old_types,
+	  newtype )
+	  int		count;
+	  int	     blocklens[];
+	  MPI_Aint	indices[];
+	  MPI_Datatype	old_types[];
+	  MPI_Datatype *newtype;
+
+     C++:
+
+	  #include <mpi.h>
+
+	  Datatype Datatype::Create_struct(
+	  int		    count,
+	  const int	    array_of_blocklengths[],
+	  const Aint	    array_of_displacements[],
+	  const Datatype    array_of_types[])
+
+     Fortran:
+
+	  INCLUDE "mpif.h" (or USE MPI)
+
+	  INTEGER count, array_of_blocklengths(*), array_of_types(*),
+	  newtype, ierror
+	  INTEGER(KIND=MPI_ADDRESS_KIND) array_of_displacements(*)
+
+	  CALL MPI_TYPE_CREATE_STRUCT(count, array_of_blocklengths(*),
+	  array_of_displacements(*), array_of_types(*),
+	  newtype, ierror)
+
+
+DESCRIPTION
+     The MPI_Type_create_struct routine creates a struct data type. The
+     MPI_Type_create_struct routine is an MPI-2 implementation replacing the
+     MPI-1 MPI_Type_struct routine which has been deprecated.  This routine
+     differs from the MPI-1 routine in that in the Fortran implementation the
+     array_of_displacements(*) argument is of type MPI_ADDRESS_KIND, which
+     makes it more suitable for ABI 64.  Currently, the Fortran version of
+     this function is implemented only for ABI 64.  This routine accepts the
+     following parameters:
+
+
+
+
+
+
+									Page 1
+
+
+
+
+
+
+MPI_TYPE_CREATE_STRUCT(3)			     MPI_TYPE_CREATE_STRUCT(3)
+
+
+
+     count	    Specifies the number of blocks. Also specifies the	number
+		    of entries in old_types, indices, and blocklens.
+
+     blocklens	    Specifies the number of elements in each block (array).
+
+     indices	    Specifies the byte displacement of each block (array).
+
+     old_types	    Specifies the type of elements in each block (array of
+		    handles to data type objects).
+
+     newtype	    Returns the new data type (handle).
+
+     ierror	    Specifies the return code value for successful completion,
+		    which is in MPI_SUCCESS.  MPI_SUCCESS is defined in the
+		    mpif.h file.
+
+NOTES
+     If an upper bound is set explicitly by using the MPI data type MPI_UB,
+     the corresponding index must be positive.
+
+     The MPI standard originally made vague statements about padding and
+     alignment; this was intended to allow the simple definition of structures
+     that could be sent with a count greater than one.	For example, in the
+     structure definition, struct { int a; char b; } foo;, the sizeof value
+     might be sizeof(foo) > sizeof(int) + sizeof(char) (for example,
+     sizeof(foo) == 2*sizeof(int)).  The initial version of the MPI standard
+     defined the extent of a data type as including an epsilon that would have
+     allowed an implementation to make the extent an MPI data type for this
+     structure equal to 2*sizeof(int).	However, since different systems might
+     define different paddings, a clarification to the standard made epsilon
+     zero.  Thus, if you define a structure data type and wish to send or
+     receive multiple items, you should explicitly include an MPI_UB entry as
+     the last member of the structure.	For example, the following code can be
+     used for the structure foo:
+
+	 blen[0] = 1; indices[0] = 0; oldtypes[0] = MPI_INT;
+	 blen[1] = 1; indices[1] = &foo.b -

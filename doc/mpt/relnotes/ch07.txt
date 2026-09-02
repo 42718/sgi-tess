@@ -1,0 +1,66 @@
+
+
+
+                                  - 1 -
+
+
+
+       7.  KnownProblemsandWorkarounds
+
+       This chapter describes the known problems and workarounds
+       for the SGI MPT for IRIX and Linux systems.
+
+
+       7.1  MixingDirectandBufferedI/O
+
+       If, across an IRIX system, both buffered and direct I/O are
+       used on the same file at the same time, direct-I/O data is
+       not always written to the file on disk.  For this reason, if
+       you cannot guarantee that no concurrent buffered I/O will be
+       issued to a file while your application has it open, setting
+       the direct-write hint to RRRROOOOMMMMIIIIOOOO is not recommended at this
+       time.  PV 856979 documents this XFS filesystem issue.
+
+
+       7.2  System V Shared Memory and Checkpoint Restart (IRIX
+            systems only)
+
+       Changes introduced into the MPI and SHMEM libraries to
+       improve job startup and shutdown time have uncovered some
+       problems with checkpointing of certain System V objects
+       utilizing the IIIIPPPPCCCCPPPPRRRRIIIIVVVVAAAATTTTEEEE key.
+
+       To work around this problem, the software attempts to use
+       non-private System V shared memory segment keys by default.
+       The keys are generated in a fashion that minimizes the
+       likelihood that MPI jobs will interfere with one another.
+
+       If a shared memory segment with this same key happens to be
+       already present, the software reverts to use of the
+       IIIIPPPPCCCCPPPPRRRRIIIIVVVVAAAATTTTEEEE key.  If this occurs, a warning message is
+       issued to ssssttttddddeeeerrrrrrrr.
+
+       If checkpoint/restart capability is not required, and the
+       use of key values interferes with other applications, you
+       can set the SSSSMMMMAAAACCCCPPPPRRRRHHHHAAAACCCCKKKKOOOOFFFFFFFF environment variable in the
+       script executing the MPI job.  This forces the MPI software
+       to use the IIIIPPPPCCCCPPPPRRRRIIIIVVVVAAAATTTTEEEE key.  This ensures that MPI will not
+       interfere with other applications making use of System V
+       shared memory segments with non-zero key values.  PV 878684
+       documents this issue.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

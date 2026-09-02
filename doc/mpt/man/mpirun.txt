@@ -1,0 +1,670 @@
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+NAME
+     mpirun - Runs MPI programs
+
+SYNOPSIS
+     mpirun [global_options] entry_object [:entry_object ...]
+
+DESCRIPTION
+     The mpirun command is the primary job launcher for the Message Passing
+     Toolkit (MPT) implementations of MPI. The mpirun command must be used
+     when a user wants to run an MPI application on IRIX or Linux systems.  In
+     addition, Array Services software must be running to launch MPI programs.
+
+     MPI implements the MPI 1.2 standard, as documented by the MPI Forum in
+     the spring 1997 release of MPI: A Message Passing Interface Standard.  In
+     addition, certain MPI-2 functions are implemented. However, several MPI
+     implementations available today use a job launcher called mpirun, and
+     because this command is not part of the MPI standard, each
+     implementation's mpirun command differs in both syntax and functionality.
+
+     You can run an application on the local host only (the host from which
+     you issued mpirun) or distribute it to run on any number of hosts that
+     you specify.
+
+     The mpirun command accepts the following operands:
+
+     The global_options operand applies to all MPI executable files on all
+     specified hosts. Global options must be specified before local options
+     specific to a host (entry_object).  The following global options are
+     supported:
+
+     Global Option	      Description
+
+     -a[rray] array_name      Specifies the array to use when launching an MPI
+			      application.  By default for multihost jobs,
+			      Array Services uses the default array, which is
+			      identified by the ainfo dfltarray command.  You
+			      can obtain other valid values by issuing the
+			      ainfo arrays command or by viewing the
+			      /usr/lib/array/arrayd.conf file.	[Note:	This
+			      option is ignored when using the -np option.]
+
+     -cpr		      (This option is supported on IRIX systems only.)
+			      Allows users to checkpoint or restart MPI jobs
+			      that consist of a single executable file running
+			      on a single system.  Note that the -cpr forces
+			      the use of the -np option.
+
+			      For example, the following command is valid in
+			      ksh (OUTFILE is the file to which stdout will be
+			      redirected, which may also be /dev/null):
+
+		    mpirun -v -cpr -np 2 a.out > OUTFILE 2>&1 < /dev/null
+
+
+
+									Page 1
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+			      The following commands are not valid:
+
+		    mpirun -cpr 2 ./a.out : 3 ./b.out
+		    mpirun -cpr hosta -np 2 ./a.out>out 2>&1 </dev/null
+
+
+			      The first one is not valid because it consists
+			      of more than one executable file (a.out and
+			      b.out).  The second one is not valid because
+			      even if submitted from hosta, it specifies a
+			      host name.
+
+			      For interactive users, the most common methods
+			      of checkpointing are by either ASH or HID.  You
+			      can use the array(1) command to find the ASH of
+			      a job.
+
+			      However, checkpoint/restart currently uses the
+			      default array from Array Services to checkpoint
+			      jobs.  To be able to checkpoint by ASH you must
+			      also ensure that the default array contains only
+			      the localhost.  If the default array contains
+			      any remote hosts, you must checkpoint by HID or
+			      one of the other types supported by cpr.
+
+			      Interactive users should also note that stdin,
+			      stdout, and stderr should not be connected to
+			      the terminal when this option is being used.
+
+			      Use of this option requires Array Services 3.1
+			      or later.
+
+			      The default behavior will allow for jobs to be
+			      checkpointed if the above rules for invoking
+			      have been followed, but using the -cpr option is
+			      recommended because it provides specific error
+			      messages instead of silently disabling.
+
+     -d[ir] path_name	      Specifies the working directory for all hosts.
+			      In addition to normal path names, the following
+			      special values are recognized:
+
+				   .	Translates into the absolute path name
+					of the user's current working
+					directory on the local host. This is
+					the default.
+
+				   ~	Specifies the use of the value of
+					$HOME as it is defined on each
+					machine. In general, this value can be
+					different on each machine.
+
+
+
+
+									Page 2
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+     -f[ile] file_name	      Specifies a text file that contains mpirun
+			      arguments.
+
+     -h[elp]		      Displays a list of options supported by the
+			      mpirun command.
+
+     -miser		      (This option is supported on IRIX systems only.)
+			      Allows MPI jobs that run on a single system to
+			      be submitted to miser. The absence of any host
+			      names in the mpirun command indicates that a job
+			      is running on a single system, and thus can be
+			      submitted to miser.  For example, the following
+			      command is valid:
+
+		    miser_submit -q queue -f file mpirun -miser 2 ./a.out : 3 ./b.out
+
+
+			      The following command is not valid, even if
+			      submitted on hosta:
+
+		    miser_submit -q queue -f file mpirun -miser hosta 2 ./a.out
+
+
+			      Use of this option requires Array Services 3.1
+			      or later.
+
+     -p[refix] prefix_string  Specifies a string to prepend to each line of
+			      output from stderr and stdout for each MPI
+			      process. To delimit lines of text that come from
+			      different hosts, output to stdout must be
+			      terminated with a new line character.  If a
+			      process's stdout or stderr streams do not end
+			      with a new line character, there will be no
+			      prefix associated with the output or error
+			      streams of that process from the final new line
+			      to the end of the stream.
+
+			      If the MPI_UNBUFFERED_STDIO environment variable
+			      is set, the prefix string is ignored.
+
+			      Some strings have special meaning and are
+			      translated as follows:
+
+			      *   %g translates into the global rank of the
+				  process producing the output. This is
+				  equivalent to the rank of the process in
+				  MPI_COMM_WORLD when not running in spawn
+				  capable mode.  In the latter case, this
+				  translates to the rank of the process within
+				  the universe specified at job launch.
+
+
+
+
+
+									Page 3
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+			      *   %G translates into the number of processes
+				  in MPI_COMM_WORLD, or, if running in spawn
+				  capable mode, the value of the
+				  MPI_UNIVERSE_SIZE attribute.
+
+			      *   %h translates into the rank of the host on
+				  which the process is running, relative to
+				  the mpirun command line.  This string is not
+				  relevant for processes started via
+				  MPI_Comm_spawn or MPI_Comm_spawn_multiple.
+
+			      *   %H translates into the total number of hosts
+				  in the job.  This string is not relevant for
+				  processes started via MPI_Comm_spawn or
+				  MPI_Comm_spawn_multiple.
+
+			      *   %l translates into the rank of the process
+				  relative to other processes running on the
+				  same host.
+
+			      *   %L translates into the total number of
+				  processes running on the host.
+
+			      *   %w translates into the world rank of the
+				  process, i.e. its rank in a MPI_COMM_WORLD.
+				  When not running in spawn capable mode, this
+				  is equivalent to %g.
+
+			      *   %W translates into the total number of
+				  processes in MPI_COMM_WORLD.	When not
+				  running in spawn capable mode, this is
+				  equivalent to %G.
+
+			      *   %@ translates into the name of the host on
+				  which the process is running.
+
+			      For examples of the use of these strings, first
+			      consider the following code fragment:
+
+				   main(int argc, char **argv)
+				   {
+				      MPI_Init(&argc, &argv);
+
+				      printf("Hello world\n");
+
+				      MPI_Finalize();
+				   }
+
+
+			      Depending on how this code is run, the results
+			      of running the mpirun command will be similar to
+			      those in the following examples:
+
+
+
+									Page 4
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+			      % mpirun -np 2 a.out
+			      Hello world
+			      Hello world
+
+
+
+			      % mpirun -prefix ">" -np 2 a.out
+			      >Hello world
+			      >Hello world
+
+
+
+			      % mpirun -prefix "%g" 2 a.out
+			      0Hello world
+			      1Hello world
+
+
+
+			      % mpirun -prefix "[%g] " 2 a.out
+			      [0] Hello world
+			      [1] Hello world
+
+
+
+			      % mpirun -prefix "<process %g out of %G> " 4 a.out
+			      <process 1 out of 4> Hello world
+			      <process 0 out of 4> Hello world
+			      <process 3 out of 4> Hello world
+			      <process 2 out of 4> Hello world
+
+
+
+			      % mpirun -prefix "%@: " hosta,hostb 1 a.out
+			      hosta: Hello world
+			      hostb: Hello world
+
+
+
+		    % mpirun -prefix "%@ (%l out of %L) %g: " hosta 2, hostb 3 a.out
+
+			      hosta (0 out of 2) 0: Hello world
+			      hosta (1 out of 2) 1: Hello world
+			      hostb (0 out of 3) 2: Hello world
+			      hostb (1 out of 3) 3: Hello world
+			      hostb (2 out of 3) 4: Hello world
+
+
+
+		    % mpirun -prefix "%@ (%h out of %H): " hosta,hostb,hostc 2 a.out
+
+
+
+
+
+
+									Page 5
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+			      hosta (0 out of 3): Hello world
+			      hostb (1 out of 3): Hello world
+			      hostc (2 out of 3): Hello world
+			      hosta (0 out of 3): Hello world
+			      hostc (2 out of 3): Hello world
+			      hostb (1 out of 3): Hello world
+
+
+
+     -stats		      Prints statistics about the amount of data sent
+			      with MPI calls during the MPI_Finalize process.
+			      Data is sent to stderr.  Users can combine this
+			      option with the -p option to prefix the
+			      statistics messages with the MPI rank.  For more
+			      details, see the MPI_SGI_stat_print(3) man page.
+
+     -up u_size 	      Specifies the value of the MPI_UNIVERSE_SIZE
+			      attribute to be used in supporting
+			      MPI_Comm_spawn and MPI_Comm_spawn_multiple.
+			      This field must be set if either of these
+			      functions are to be used by the application
+			      being launched by mpirun.  Setting this field
+			      implies the MPI job is being run in spawn
+			      capable mode.  By default, additional MPI
+			      processes will be spawned on the localhost where
+			      mpirun is running.  See the section Launching
+			      Spawn Capable Jobs on Altix Partitioned Systems
+			      below for information on how to spawn additional
+			      processes on other hosts.
+
+     -v[erbose] 	      Displays comments on what mpirun is doing when
+			      launching the MPI application.
+
+   Entry Objects
+     entry_object describes a host on which to run a program, and the local
+     options for that host.  You can list any number of entry_object entries
+     on the mpirun command line.
+
+     In the common case (Single Program Multiple Data (SPMD)), in which the
+     same program runs with identical arguments on each host, usually only one
+     entry_object needs to be specified.
+
+     Each entry_object has the following components:
+
+     *	 One or more host names (not needed if you run on the local host)
+
+     *	 Number of processes to start on each host
+
+     *	 Name of an executable program
+
+
+
+
+
+
+									Page 6
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+     *	 Arguments to the executable program (optional)
+
+     entry_object has the following format:
+
+	  host_list local_options program program_arguments
+
+
+     The host_list operand is either a single host (machine name) or a comma-
+     separated list of hosts on which to run an MPI program.
+
+     The local_options operand contains information that applies to a specific
+     host list. The following local options are supported:
+
+     Local Option		   Description
+
+     -f[ile] file_name		   Specifies a text file that contains mpirun
+				   arguments (same as global_options.)	For
+				   more details, see the subsection titled
+				   "Using a File For mpirun Arguments" on this
+				   man page.
+
+     -np num_proc		   Specifies the number of processes on which
+				   to run. This local option behaves the same
+				   as -np.
+
+     -nt num_proc		   The -nt option is equivalent to the -np
+				   option. It is deprecated, and exists for
+				   command line compatibility with previously
+				   supported architectures.
+
+     The program program_arguments operand specifies the name of the program
+     that you are running and its accompanying options.
+
+   Using a File for mpirun Arguments
+     Because the full specification of a complex job can be lengthy, you can
+     enter mpirun arguments in a file and use the -f option to specify the
+     file on the mpirun command line, as in the following example:
+
+	  mpirun -f my_arguments
+
+
+     The arguments file is a text file that contains argument segments.  White
+     space is ignored in the arguments file, so you can include spaces and
+     newline characters for readability. An arguments file can also contain
+     additional -f options.
+
+   Launching Programs on the Local Host
+     For testing and debugging, it is often useful to run an MPI program on
+     the local host only without distributing it to other systems. To run the
+     application locally, enter mpirun with the -np argument. Your entry must
+     include the number of processes to run and the name of the MPI executable
+     file.
+
+
+
+									Page 7
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+     The following command starts three instances of the application mtest,
+     which is passed an arguments list (arguments are optional):
+
+	  mpirun -np 3 mtest 1000 "arg2"
+
+
+     You are not required to use a different host in each entry that you
+     specify on the mpirun command.  You can launch a job that has two
+     executable files on the same host.  In the following example, both
+     executable files use shared memory.
+
+	  mpirun host_a -np 6 a.out : host_a -np 4 b.out
+
+     Note that for IRIX hosts, both executable files must be compiled
+     as either 32-bit or 64-bit applications.
+
+   Launching a Distributed Program
+     You can use mpirun to launch a program that consists of any number of
+     executable files and processes and distribute it to any number of hosts.
+     A host is usually a single machine, or, for IRIX systems, can be any
+     accessible computer running Array Services software.  For available nodes
+     on systems running Array Services software, see the
+     /usr/lib/array/arrayd.conf file.
+
+     You can list multiple entries on the mpirun command line. Each entry
+     contains an MPI executable file and a combination of hosts and process
+     counts for running it. This gives you the ability to start different
+     executable files on the same or different hosts as part of the same MPI
+     application.
+
+     The following examples show various ways to launch an application that
+     consists of multiple MPI executable files on multiple hosts.
+
+     The following example runs ten instances of the a.out file on host_a:
+
+	  mpirun host_a -np 10 a.out
+
+
+     When specifying multiple hosts, the -np option can be omitted with the
+     number of processes listed directly.  The following example launches ten
+     instances of fred on three hosts.	fred has two input arguments.
+
+	  mpirun host_a, host_b, host_c 10 fred arg1 arg2
+
+
+     The following IRIX example launches an MPI application on different hosts
+     with different numbers of processes and executable files, using an array
+     called test:
+
+	  mpirun -array test host_a 6 a.out : host_b 26 b.out
+
+
+
+
+
+									Page 8
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+     The following example launches an MPI application on different hosts out
+     of the same directory on both hosts:
+
+	  mpirun -d /tmp/mydir host_a 6 a.out : host_b 26 b.out
+
+
+   Launching Spawn Capable Jobs on Altix Partitioned Systems
+     When running MPI applications on partitioned Altix systems which use the
+     MPI-2 MPI_Comm_spawn or MPI_Comm_spawn_multiple functions, it may be
+     necessary to explicitly specify the partitions on which additional MPI
+     processes may be launched.  The MPI_UNIVERSE environment variable may be
+     used for this purpose.  The syntax for this variable is list of entry
+     objects, but without a specified application or argument list.
+
+     The following example shows how to set the MPI_UNIVERSE shell variable to
+     enable spawning of processes on two partitions with hostnames host_a and
+     host_b:
+
+	  setenv MPI_UNIVERSE "host_a, host_b 8"
+	  mpirun -up 16 -np 1 coupler
+
+     In this example, the MPI_UNIVERSE_SIZE is 16.  Processes started via
+     mpirun count as part of the universe.  The coupler runs on the local host
+     where the mpirun was executed.  In this case, the localhost must either
+     be host_a or host_b.  Note the use of the -up argument is not required if
+     the MPI_UNIVERSE shell variable is set.
+
+     The following example shows host to set the MPI_UNIVERSE shell variable
+     to allow different numbers of MPI processes on different partitions:
+
+	  setenv MPI_UNIVERSE "host_a 16, host_b 8"
+	  mpirun host_b 1 coupler
+
+     In this example, the MPI_UNIVERSE_SIZE is 24.  mpirun is used to start
+     one instance of the coupler application on host_b.  The -up argument has
+     been omitted as this is not necessary if the MPI_UNIVERSE shell variable
+     is set.
+
+   Job Control
+     It is possible to terminate, suspend, and/or resume an entire MPI
+     application (potentially running across multiple hosts) by using the same
+     control characters that work for serial programs.	For example, sending a
+     SIGINT signal to mpirun terminates all processes in an MPI job.
+     Similarly, sending a SIGTSTP signal to mpirun suspends an MPI job and
+     sending a SIGCONT signal resumes a job.
+
+   Signal Propagation
+     It is possible to send some user signals to all processes in an MPI
+     application (potentially running across multiple hosts).  Presently,
+     mpirun supports two user-defined signals:	SIGURG and SIGUSR1.  To make
+     use of this feature, the MPI program needs to have a signal handler that
+     catches SIGURG or SIGUSR1. When the SIGURG or SIGUSR1 signals are sent to
+
+
+
+									Page 9
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+     the mpirun process ID, the mpirun process will catch the signal and
+     propagate it to all MPI processes.
+
+   Troubleshooting
+     Problems you encounter when launching MPI jobs will typically result in a
+     could not run executable error message from mpirun. There are many
+     possible causes for this message, including (but not limited to) the
+     following reasons:
+
+     *	 The . is missing from the user's search path. This problem most
+	 commonly occurs when the -np syntax is used.
+
+     *	 No permission has been granted to the local host to launch processes
+	 on remote hosts.  Because MPI references the .rhosts file for
+	 authentication, this can happen even if you are running your job on
+	 the same machine. For example, if you specify mpirun localhost 2
+	 a.out, MPI will treat localhost as a remote host.  The usual solution
+	 to this problem is to put the local host name in your ~/.rhosts file.
+
+     *	 The working directory is defaulting to $HOME instead of to $PWD on
+	 remote machines; use either MPI_DIR or the -d option.
+
+     *	 localhost does not appear in the /etc/hosts.equiv file (required for
+	 -np syntax).
+
+     *	 The Array Services daemon (arrayd) has been incorrectly configured;
+	 use ascheck to test your configuration.
+
+     *	 In general, if arshell fails, mpirun usually fails as well.
+
+   Limitations
+     The following practices will break the mpirun parser:
+
+     *	 Using machine names that are numbers (for example, 3, 127, and so on)
+
+     *	 Using MPI applications whose names match mpirun options (for example,
+	 -d, -f, and so on)
+
+     *	 Using MPI applications that use a colon (:) in their command-lines.
+
+NOTES
+     Running an MPI job in the background is supported only when stdin is
+     redirected.
+
+     The mpirun process is still connected to the tty when a job is placed in
+     the background.  One of the things that mpirun polls for is input from
+     stdin.  If it happens to be polling for stdin when a user types in a
+     window after putting an MPI job in the background, and stdin has not been
+     redirected, the job will abort upon receiving a SIGTTIN signal.  This
+     behavior is intermittent, depending on whether mpirun happens to be
+     looking for and sees any stdin input.
+
+
+
+
+								       Page 10
+
+
+
+
+
+
+mpirun(1)							     mpirun(1)
+
+
+
+     The following examples show how to run an MPI job in the background.
+
+     For a job that uses input_file as std
