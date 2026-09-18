@@ -20,7 +20,7 @@
 # Bourne shell: IRIX /bin/sh, and the root shell is csh so this needs its
 # shebang. No loops in the caller's shell, no GNU tools.
 
-ARRAY=tess
+ARRAY=          # empty: use arrayd.conf's default array. -a names another.
 MASTER=lucy
 HOSTS=
 DIR=`cd \`dirname $0\`/.. 2>/dev/null && pwd`
@@ -139,9 +139,9 @@ if [ -z "$SPEC" ]; then
 fi
 
 echo "$0: $TOTAL rank(s) total" >&2
-echo "mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC"
+echo "mpirun $VERBOSE${ARRAY:+ -a $ARRAY} -d $DIR $SPEC"
 
 if [ $DRYRUN -eq 1 ]; then
     exit 0
 fi
-eval exec mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC
+eval exec mpirun $VERBOSE${ARRAY:+ -a $ARRAY} -d $DIR $SPEC
