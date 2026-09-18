@@ -759,10 +759,27 @@ the order worth checking:
 | 4 | `~/.rhosts` missing, wrong permissions, or the peer's address reverse-resolves to a name that is not in it | `chmod 600 ~/.rhosts`; make sure the *fabric* name resolves back |
 | 5 | Name resolves to an address the remote host cannot reach — a fabric address on a machine without that board | `ping` every canonical name **from every host** (step 3) |
 | 6 | Mismatched MPT version or ABI between hosts | `versions -av \| grep -i mpi` on each |
+| 7 | **The test program is not an MPI binary.** `mpirun -np 2 hostname` is not a valid smoke test — `hostname` exits before MPT's startup handshake and MPT reports it as a launch failure | use `tools/mpi-hello.c`; never test with `hostname` |
+| 8 | **The remote shell prints something.** Ranks are launched through a non-interactive csh, which reads `.cshrc`; any output corrupts the channel. An unguarded `stty` is the usual offender | `csh -c true` and `csh -l -c true` must be **silent** on every host; guard with `if ( $?prompt )`, keeping `set path` above the guard |
+| 9 | **`/etc/hosts` canonical name carries a domain.** The first name after the address is canonical; if it is `lucy.local` and the peer has no such entry, ranks hang in name resolution | plain name first, domain form as alias, file identical on every host |
 
-Two more that produce different symptoms: a job that starts and hangs usually means `arrayd`
-can reach the host but the ranks cannot connect back — suspect resolution asymmetry. A job that
-dies immediately when backgrounded is stdin: redirect it (`< /dev/null`).
+Two more that produce different symptoms. A job that starts and **hangs** has two known causes
+here: ranks that cannot resolve each other (cause 9), or MPT's interconnect auto-probe, which
+hangs with both ranks spinning at 100% CPU and no connection ever attempted — set
+`MPI_USE_TCP 1` on every host. A job that dies immediately when backgrounded is stdin: redirect
+it (`< /dev/null`).
+
+When the table does not settle it, stop guessing and read the daemon's own log — every failure
+in the September 2026 bring-up was something `arrayd` knew and MPT could not relay:
+
+```sh
+echo '-dv 9' > /etc/config/arrayd.options
+/etc/init.d/array restart
+# reproduce, then:
+tail -40 /var/adm/SYSLOG
+```
+
+`doc/MPI-HELLO.md` works through all of this with the observed output for each failure.
 
 `mpirun -v` prints the layout it decided on, which is usually enough to see which of the above
 it is.

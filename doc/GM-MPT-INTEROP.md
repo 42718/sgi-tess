@@ -231,3 +231,340 @@ project. If it does turn out that MPT will not drive GM 1.6.4, the fallback is n
 it is a raw GM transport of our own behind the link seam in `DESIGN.md` §6b, using the same
 `libgm` directly. You would then be using GM through an API you control instead of through
 MPT's 2003 expectations of it.
+
+## GM 2.0.8 on IRIX — it works (8-9 September 2026)
+
+Everything above was written about GM 1.6.4. **2.0.8 now builds and runs on lucy**: the driver
+attaches, `gm_board_info` reports the board, and two of the three blockers above are closed.
+It took eleven build fixes and one real bug fix, all on branch `irix-2.0.8` in
+`~/dev/myrinet-gm`, with `drivers/irix/README.build-2.0.8` as the runbook. Eleven fixes were needed; they are on branch `irix-2.0.8` in
+`~/dev/myrinet-gm`, one commit per fix with the evidence in each message, and
+`drivers/irix/README.build-2.0.8` on that branch is the build runbook.
+
+Why 2.0.8 at all: it makes the **LANai X / PCI-X** card a first-class citizen. `--enable-lX`
+defaults to `yes` (`configure.in:56`) and the prebuilt `mcp/gmcp_array_64b_lX_16k.c` firmware
+ships with it, so the `M3F-PCIXD-2` that 1.6.4 rejected with
+`gm_init_eeprom_dependent_functions: lanai 0x0 not supported` should work. The rev-4 hack on
+`supernova` is obsolete. This has **not** been tested on aurora yet — 2.0.8 has only been
+built on IP30, never on IP35.
+
+### Where the three blockers stand
+
+| Blocker | Status |
+|---|---|
+| **1. static archive, no `libgm.so`** | **Fixed.** `libgm.so.1.0` now builds, with `libgm.so` and `libgm.so.1` symlinked to it. `file` reports `ELF 64-bit MSB mips-4 dynamic lib MIPS - version 1` |
+| **2. `gm_register_cmd_memory` missing** | **Fixed.** `libgm/gm_register_cmd_memory.c` on the branch forwards to `gm_register_memory`, superseding the loose `tools/gm_cmd_shim.c`. Compiled into `libgm.so.1.0` on lucy and confirmed with `nm`: `0040adb0 T gm_register_cmd_memory`. **All 23 symbols MPT resolves by dlsym are now exported by the library at the path it opens** |
+| **3. mapper never run** | **Unchanged, and now the only one left.** `gm_board_info` on lucy under 2.0.8 says it plainly: `Mapper is 00:00:00:00:00:00`, `Map version is 0`, `0 hosts`, `Network is NOT fully configured` |
+
+The 22 were checked individually against `libgm.so.1.0` with `nm -B`, not against `gm.h`:
+`gm_init gm_open gm_close gm_finalize gm_receive gm_perror gm_unknown` (7),
+`gm_dma_malloc gm_dma_free gm_register_memory gm_deregister_memory` (4),
+`gm_send_with_callback gm_directed_send_with_callback gm_provide_receive_buffer
+gm_set_acceptable_sizes` (4), `gm_get_host_name gm_get_node_id gm_host_name_to_node_id
+gm_min_size_for_length` (4), `gm_num_receive_tokens gm_num_send_tokens
+gm_allow_remote_memory_access` (3).
+
+### The trap worth remembering
+
+**Unset `CFLAGS`, `CPPFLAGS` and `LDFLAGS` before running `configure`.** `configure:2918-2932`
+picks libtool's linker ABI by compiling one probe object with `$CC $CFLAGS` and reading
+`file(1)` output. The probe has no trailing `-64`, so a nekoware `CFLAGS` carrying `-n32` makes
+the probe object N32 and bakes `LD="/usr/bin/ld -n32"` into the generated `libtool`. Every real
+compile still gets a trailing `-64` and wins, so the objects are correct and only the shared
+link is wrong — it fails with `ld32: INFO 46 : No objects linked.` Check with `grep LD= libtool`;
+it must say `-64`. Fixing it needs `rm config.cache` and a full `configure`, since
+`config.status` replays the old answers.
+
+### What had to be fixed, and what that says about the port
+
+Upstream does not claim IRIX for GM-2: `README:89-110` lists GM-2.0 as Linux 2.4 and Windows
+only, with IRIX 6.5 under "an earlier release". The `drivers/irix` files are dated 2002 to 2003
+and `drivers/irix/README.building` still describes testing against `gm-1.4pre14`. The eleven
+fixes are consistent with that: nothing deep is wrong with the port, but nobody had run the
+IRIX `release:` target to completion, in 2.0.8 **or** in 1.6.4.
+
+- Four are things 1.6.4 had right and 2.0.8 lost: `LIBGM` unset, the recipe linking a
+  nonexistent `$(LIB_OBJS)`, four stray slashes on `.gm_make_id`, and `gm_eprintf.c` moved into
+  the kernel library without `<stdarg.h>`.
+- Three are latent in **both** versions and only surfaced now: `$(binary)/README` with no rule,
+  `$(sbindir)/gm_mapper` with no `.mkdir` guard, and `gm_sync.s` that no link line ever
+  included, so its assembler rule had never once run.
+- One is upstream's own instruction, ignored by upstream: `make-os.in` says "Comment out the
+  following line until `gx.c` is ready to use" directly above the line that adds `gx.c`.
+- Two are files 2.0.8 simply omits for irix while shipping them for every other Unix:
+  `drivers/irix/gm_arch_install`, and `-rpath` on the libgm link that the mapper link already
+  gets from the same variable.
+
+### IP over GM is now settled: no
+
+The section above rated `myri0` as "worth ten minutes of `ifconfig`, not a plan". That is now
+decided: **`drivers/irix/ip/gx.c` does not compile against GM-2 at all.** GM-2 tightened its
+byte-order types (`gm_hton_dp()` returns `gm_dp_n_t`, `include/gm_simple_types.h:107`) and
+dropped a trailing argument from both `gm_ethernet_broadcast()` and `gm_ethernet_send()`
+(`include/gm_ether.h:137-140,152-155`), and `gx.c` predates all of it — six errors. Reviving IP
+would be a real port of a driver its own author called unfinished and upstream called broken
+(`CHANGES:531`). It is out, and `10.42.2.0/24` stays unused.
+
+### The attach panic, and what it was (9 September 2026)
+
+Installed and booted on lucy, the 2.0.8 driver killed the machine at attach, three times, always
+the same way:
+
+```
+PANIC: CPU 0: KERNEL FAULT
+EXC code:20, 'Write Address Error'
+Bad addr: 0xa8000000484d944d
+```
+
+**The cause was a one-byte alignment error, and MIPSpro had reported it in the first build of
+the day.** GM-2 modernised the PCI config structure in `include/gm_lanai.h` to model the
+capabilities pointer that later PCI revisions put at offset 0x34:
+
+| 1.6.4 | 2.0.8 |
+|---|---|
+| `gm_u32_t Reserved[2];` | `gm_u8_t Capabilities_Pointer;` then `gm_u8_t Reserved[7];` |
+
+That moves `Reserved[0]` from struct offset 52 to **53** and turns it from a word into a byte.
+`drivers/irix/gm/gm_irix.c:3292-3293`, unchanged since 1.6.4, still read two config dwords into
+it, so `gm_arch_read_pci_config_32()` performed a 32-bit store to a byte-aligned address. x86
+permits that; MIPS raises an address error. Every panic address ended `...4d`, and 53 mod 4 = 1,
+which is `struct_base + 53` exactly. The compiler had said so twice:
+
+```
+cc-1164 cc: WARNING File = ./drivers/irix/gm/gm_irix.c, Line = 3292
+  Argument of type "gm_u8_t *" is incompatible with parameter of type "gm_u32_t *".
+```
+
+The fix reads offset 52 as the single byte GM-2's own struct says it is and drops the second
+dword read. Both values only fed a debug printer, so nothing functional is lost.
+
+**How it was located, since the method generalises.** The faulting PC lives in the loaded
+module, not the kernel, so it cannot be resolved against `unix.N`, whose symbols sit at
+`a8000000_20xxxxxx`. Printing the address of a known function at driver init gives the load
+base, and the rest is subtraction:
+
+```
+ANCHOR gm_init = 0xc000000003cf7528
+nm offset      =         0x0003b528   =>  load base 0xc000000003cbc000
+PC             = 0xc000000003ce3d50   =>  offset    0x27d50
+nm: 00027d04 T gm_arch_read_pci_config_32       (0x4c into that function)
+```
+
+**Three cautions worth keeping**, all learned expensively:
+
+- Never register an untested driver for boot-time loading. A panic at attach lands before
+  multi-user and costs a single-user rescue. Keep the three `/var/sysgen` files absent, load with
+  `ml ld -v -c <object> -p myrigm_`, and register only once it has proved itself. Note that a
+  manual load alone does not attach anything, because init's `pciio_iterate()` only finds devices
+  already bound to the prefix, so the final proof does require registration and a reboot.
+- Do not build with `--enable-debug` for this. It turns on GM's own kernel logging, whose print
+  path faults on this 2-CPU machine and produces a second, unrelated panic that masks the real
+  one. `--enable-printing=9` alone gives the IRIX layer's tracing without it.
+- Turn `chkconfig savecore` on before testing. The dump from the first panic went to swap and was
+  overwritten before `savecore` ran.
+
+### What lucy's board actually is
+
+`gm_board_info` under the working driver reports an **M3F-PCI64B-8H, LANai 9.3, 8 MB SRAM,
+serial 169214, 134 MHz**, MAC `00:60:dd:49:56:6b`. That is *not* the M3F-PCI64D with 2 MB that
+this document records from the Origin 350, so there are at least two different LANai 9 boards in
+the collection, and the earlier worry about having only one is unfounded.
+
+### Still to do
+
+1. **Run the mapper.** This is blocker 3 and now the only thing between lucy and a working
+   fabric. `gm_mapper` is installed at `/usr/myricom/sbin/gm_mapper`; note that 2.0.8 renamed it
+   from 1.6.4's `mapper`, while `drivers/irix/etc/init.d/myrinet` still starts
+   `${MYRINET_ROOT}/sbin/mapper`, so that script needs the new name before `chkconfig
+   myrinet_mapper on` means anything.
+2. **`drivers/irix/gm_install` is still uncorrected.** lucy was installed by hand instead: the
+   driver object to `/var/sysgen/boot/`, `libgm.so*` to `/usr/myricom/lib64/`, and
+   `bin`, `sbin`, `etc`, `include` copied over with the 1.6.4 versions moved aside as `*.1.6.4`.
+   The script's relative paths predate the `binary/.gm_uninstalled_*` layout, and it copies two
+   `myrinet_mapper` config files that 2.0.8 no longer installs (1.6.4 placed them from
+   `make-os.in:284-291`).
+3. **aurora has never seen 2.0.8.** It is IP35, it needs its own native build, and it is where
+   the PCI-X M3F-PCIXD-2 question gets answered, since `--enable-lX` is on by default and the
+   LANai-X firmware ships. Take `~/Downloads/gm-2.0.8-irix.tar.gz`, which carries every fix.
+4. **Then MPT.** `libgm.so` already exports all 23 symbols including the shim, so the remaining
+   unknowns are whether `gm_host_name_to_node_id` agrees with the names in `arrayd.conf` and
+   whether MPT's 2003 expectations of GM survive a 2.0.8 library.
+
+---
+
+## Answered: MPT will not use this GM, and the reason is the mapper (12 September 2026)
+
+"Still to do" item 4 above asked whether `gm_host_name_to_node_id` agrees with the names in
+`arrayd.conf` and whether MPT's 2003 expectations survive a 2.0.8 library. Both questions are
+now answered, and neither is the obstacle.
+
+With MPT 1.9 running a real two-host MPI job and GM requested explicitly:
+
+```
+MPI: Unable to use GM (Myrinet) OS bypass interconnect. Using TCP/IP instead.
+MPI:GM kernel ID 2.0.8_IRIX_rc20031103153228PST ...
+MPI:Conflicting gmID (2,1) for host aurora in myrinet array.     <- reported on lucy
+MPI:Conflicting gmID (2,1) for host lucy   in myrinet array.     <- reported on aurora
+Unable to set up gm: Found gmID conflict.
+```
+
+MPT loaded the 2.0.8 library, called into it successfully, read the kernel build ID, and
+resolved both hostnames against the Myrinet array. The names agree. The library binds. **The
+node ids do not.**
+
+`gm_simpleroute` gives each board a purely local numbering: itself gmID 1, its peer gmID 2. So
+aurora is 2 as seen from lucy and 1 as seen from itself. MPT requires one globally agreed node
+id per host across the array, sees the pair (2,1) for the same machine, and refuses — symmetric
+on both sides, which is why each host reports the conflict about the other.
+
+Assigning globally consistent ids by hand is not available to us: GM-2 derives node ids from
+unique ids, `_gm_set_node_id()` accepts only the id the node already has, and
+`_gm_set_unique_id()` merely confirms the existing relationship. That restriction is what forced
+the `gm_simpleroute` patch on `irix-2.0.8` to skip id assignment entirely and key the route off
+the peer's MAC. That was the right call for `gm_allsize`, which needs only a route. It is
+structurally insufficient for MPT, which needs an identity.
+
+Handing out globally unique node ids is precisely the mapper's job, and blocker 3 — "the mapper
+has never been run" — turns out not to be a matter of running it. On a back-to-back link the
+mapper cannot complete at all: the peer receives its one-hop probe with the route byte
+unconsumed and drops it (`badcrc__unstripped_route_cnt` exactly half of `netrecv_cnt`), so
+`lx_map_explore()` gives up with "mapper is disconnected".
+
+**Verdict: MPI over Myrinet is blocked on the crossbar switch, not on the port, the library, the
+ABI, or any remaining patch.** — **WRONG ON BOTH COUNTS. Superseded by the section below
+(17 September 2026): the mapper needs no switch, and the mapper was never what MPT needed.** The three original blockers are all cleared. The link itself is
+real and measured — 131.7 MB/s inbound, 80.5 MB/s outbound, 15.7 µs half round trip — and
+`gm_allsize` uses it happily, because a route without an identity is enough for it.
+
+Two side findings from the same run:
+
+1. **MPT falls back to TCP silently.** Without `MPI_GM_VERBOSE` set, a job that quietly ran over
+   ethernet looks identical to one that used Myrinet. Always set it alongside `MPI_USE_GM`.
+2. **`libgm`'s GM setup-failure path double-frees.** `gm_dma_free: pointer does not belong to
+   this port` fires twice per host during teardown (`libgm/gm_dma_malloc.c:597`). Harmless while
+   giving up, but a real defect in the IRIX port's error path.
+
+The full multi-host MPI bring-up, including the five non-MPI traps that cost most of the day,
+is written up in `doc/MPI-HELLO.md`.
+
+
+## Reversed: MPT does use GM, and no switch was ever needed (17 September 2026)
+
+Both claims in the verdict above are false, and they were false for the same reason: a
+conclusion drawn from an asymmetric test, then repeated as a fact.
+
+### The mapper maps a back-to-back pair
+
+It needs a mapper running on **both** machines. `lx_map_explore()` in
+`mapper/lx/lx_mapper.c:526` looks for a directly connected host with a zero-length route
+*before* it goes looking for a crossbar, so the topology is supported by design. But the reply
+to a scout comes from the peer's own `gm_mapper` process, via `lx_map_receive_callback()`. A
+mapper scouting a machine that is not running one is talking to nobody: the zero-route scouts
+are accepted and never answered, it falls through to the one-hop probe, and the peer drops that
+as an unstripped route. `badcrc__unstripped_route_cnt` at exactly half of `netrecv_cnt` was the
+signature of a missing daemon, not of an unsupported fabric.
+
+With `gm_mapper` running on both, both boards agree:
+
+```
+Mapper is 00:60:dd:49:56:6b.
+Map version is 21.
+2 hosts.
+Network is fully configured.
+```
+
+Two bugs had to be fixed before the daemon would start at all under 2.0.8, both now on the
+`irix-2.0.8` branch of `myrinet-gm`:
+
+- `drivers/irix/etc/init.d/myrinet` started `${MYRINET_ROOT}/sbin/mapper`; 2.0.8 installs it as
+  `gm_mapper`, so `chkconfig myrinet_mapper on` silently started nothing.
+- `drivers/irix/etc/config/myrinet_mapper.options` contained the single line
+  `/usr/myricom/etc/gm/active.args`. The init script cats that file onto the command line; GM-1's
+  mapper took an argument file that way and GM-2's parses `--flags` only, so it printed its usage
+  and exited.
+
+### The mapper is not what MPT wanted
+
+This is the part that makes the switch irrelevant. In GM-2, `gm_get_node_id()` is a constant:
+
+```c
+  /* The local loopback node ID is always 1. */
+  *node_id = 1;
+```
+
+`libgm/gm_get_node_id.c`. Every GM-2 host reports gmID 1 as its own, map or no map, switch or no
+switch. In 1.6.4 the same function asked the driver for the id the mapper had assigned, which is
+the behaviour MPT was written against. So a crossbar would have produced exactly the conflict
+above, and buying one to fix this would have bought nothing.
+
+### What MPT actually enforces
+
+Traced by instrumenting the two functions MPT resolves, and logging what it asked and got:
+
+```
+lucy   : get_node_id = 1   lookup(aurora) = 2   lookup(lucy) = 1
+aurora : get_node_id = 1   lookup(aurora) = 1   lookup(lucy) = 2
+```
+
+MPT resolves every host in the job by name, locally, on every rank, and each answer must equal
+the gmID that host reports for itself. Stock GM-2 fails the uniqueness half: both hosts claim 1.
+Forcing distinct ids (11 and 12) fails the agreement half instead, because the name lookups still
+answer 1 and 2. On a directly cabled pair exactly one value satisfies both: **2**, because each
+board's handle for the other board is 2. Sends stay correct, since "node 2" means "the other
+board" from either side.
+
+`GM_MPT_NODE_ID=2` on both hosts, read by a shim in `gm_get_node_id()` and applied to the local
+host in `gm_host_name_to_node_id()`, is the whole fix. Committed on `irix-2.0.8`. Then:
+
+```
+MPI: Using the GM (Myrinet) OS bypass interconnect.
+MPI:hrank       grank   port      gmID  Myrinet hostname
+        0           0      2         2    aurora
+        1           1      2         2    lucy
+```
+
+This reconciles two hosts and only two. A third machine needs genuinely global ids, which GM-2
+does not have, and therefore a host table plus translation on the send and receive paths. Since
+arthur has no Myrinet, a three-host job is TCP throughout anyway, so the limit costs nothing
+today.
+
+### And it is slower than the gigabit plan
+
+Measured lucy ↔ aurora, one fibre, no switch, 1 MB messages:
+
+| path | latency | 1 MB bandwidth |
+|---|---|---|
+| raw GM, `gm_allsize` | 15.4 µs | **50.9 MB/s** |
+| MPI over GM, MPT 1.9 | 18.2 µs | **10.1 MB/s** |
+
+MPT delivers one fifth of the fabric, and the gap is inside MPT. Ruled out by measurement:
+`MPI_GM_PAYLOAD` at its 16 KB ceiling changes nothing, `MPI_BUFS_PER_HOST` and
+`MPI_BUFS_PER_PROC` at 128 change nothing, copies into GM's DMA memory run at 240 MB/s on lucy
+and 1030 MB/s on aurora, and MPT registers memory **9 times for 8.5 MB at startup**, not per
+transfer. About 39 ms per megabyte per direction is spent in MPT's own protocol.
+`MPI_BUFFER_MAX` cannot help: on IRIX its single-copy path is same-host only unless XPMEM is
+involved, and XPMEM is NUMAlink.
+
+For the frame budget in DESIGN.md, a 1920×1200 frame at 3 B/px is 6.9 MB:
+
+| aurora's link | transfer | share of a 6.8 s frame |
+|---|---|---|
+| MPI over GM, measured | 0.68 s | 10% |
+| gigabit, design estimate | 0.15 s | 2.2% |
+| raw GM, measured | 0.14 s | 2.0% |
+
+So **the gigabit decision stands**, and MPI-over-GM does not replace it. What changed is the
+status of the link seam in DESIGN.md §6b: raw GM is now a measured 5× over MPT on the same
+wire, which makes the seam the obvious home for tile payloads on the lucy↔aurora pair rather
+than a someday item.
+
+Correctness of the MPT path is not in doubt, for what it is worth: a 1 byte to 1 MB ping-pong
+with rank-stamped payloads verified every byte, and the boards counted 129231 packets each way
+with no drops, bad CRCs, nacks or resends.
+
+### Side finding, corrected
+
+The "double-free" noted above is not one. `gm_dma_free: pointer does not belong to this port`
+fires during MPT's GM **setup** path, before the conflict message, not during teardown. It
+disappeared entirely once GM setup succeeded, so it is what MPT does while abandoning a failed
+attempt. Still worth a look if it ever reappears on a healthy run.

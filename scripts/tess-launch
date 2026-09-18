@@ -1,0 +1,141 @@
+#!/bin/sh
+#
+# tess-launch - size the job from what the cluster actually has, then run it.
+#
+# Nothing about the cluster's size is stored as a number (DESIGN.md, "How the
+# shape is discovered"): aurora is 4 CPUs on one brick and 20 on five, and a
+# stored 20 would oversubscribe the everyday shape by five times. So every run
+# asks each host what it is, via tess-probe over arshell, and builds the mpirun
+# line from the answers.
+#
+# The master host contributes one rank and no compute (DESIGN.md 3b): it runs X,
+# the GUI, the shading pass and rank 0. Every other host contributes one rank
+# per online CPU.
+#
+#   ./tess-launch --dry-run                    # show the mpirun line, run nothing
+#   ./tess-launch -- -arg-for-tess-node
+#   ./tess-launch -m lucy -H lucy,arthur,aurora
+#   ./tess-launch --compute-master 1           # let lucy compute too
+#
+# Bourne shell: IRIX /bin/sh, and the root shell is csh so this needs its
+# shebang. No loops in the caller's shell, no GNU tools.
+
+ARRAY=tess
+MASTER=lucy
+HOSTS=
+DIR=`cd \`dirname $0\`/.. 2>/dev/null && pwd`
+BIN=
+COMPUTE_MASTER=0
+DRYRUN=0
+VERBOSE=-v
+
+usage() {
+    echo "usage: $0 [-m master] [-H host,host,...] [-a array] [-d dir]" >&2
+    echo "          [-b binary] [--compute-master N] [--dry-run] [-- args]" >&2
+    exit 2
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -m) MASTER=$2; shift 2 ;;
+        -H) HOSTS=`echo "$2" | tr ',' ' '`; shift 2 ;;
+        -a) ARRAY=$2; shift 2 ;;
+        -d) DIR=$2; shift 2 ;;
+        -b) BIN=$2; shift 2 ;;
+        --compute-master) COMPUTE_MASTER=$2; shift 2 ;;
+        --dry-run) DRYRUN=1; shift ;;
+        -q) VERBOSE=; shift ;;
+        --) shift; break ;;
+        -h|--help) usage ;;
+        *) usage ;;
+    esac
+done
+
+# Host list: what the array says, unless told otherwise.
+if [ -z "$HOSTS" ]; then
+    HOSTS=`ainfo machines 2>/dev/null | sed -n 's/^[ 	]*machine[ 	][ 	]*\([^ 	]*\).*/\1/p'`
+    if [ -z "$HOSTS" ]; then
+        echo "$0: ainfo machines gave nothing. Is arrayd running?" >&2
+        echo "$0: pass -H host,host,... to go anyway." >&2
+        exit 1
+    fi
+fi
+
+# Binaries are per-architecture, because one shared NFS tree is built by
+# several machine types. mpirun's colon form gives each host group its own
+# path, which is the whole reason the build directories are split.
+NODE_REL=build/ARCH/tess-node
+PROBE_REL=build/ARCH/tess-probe
+if [ -n "$BIN" ]; then
+    NODE_REL=$BIN
+fi
+
+# Ask each host what it is. A host that will not answer is dropped with a
+# warning rather than failing the run: a powered-down brick is normal here.
+GROUPS=
+MASTER_GROUP=
+TOTAL=0
+for h in $HOSTS
+do
+    arch=`arshell $h uname -m 2>/dev/null | tr -d '\015' | sed -n '1p'`
+    if [ -z "$arch" ]; then
+        echo "$0: $h did not answer arshell, skipping" >&2
+        continue
+    fi
+    probe=$DIR/`echo $PROBE_REL | sed "s/ARCH/$arch/"`
+    node=$DIR/`echo $NODE_REL | sed "s/ARCH/$arch/"`
+    line=`arshell $h $probe 2>/dev/null | sed -n '/^# tess-probe /p'`
+    if [ -z "$line" ]; then
+        echo "$0: $h ($arch) has no working tess-probe at $probe, skipping" >&2
+        echo "$0:   build it there: cd $DIR && gmake" >&2
+        continue
+    fi
+
+    online=`echo "$line" | sed -n 's/.*online=\([0-9][0-9]*\).*/\1/p'`
+    cpus=`echo "$line" | sed -n 's/.*cpus=\([0-9][0-9]*\).*/\1/p'`
+    [ -n "$online" ] || online=0
+    [ -n "$cpus" ] || cpus=0
+
+    if [ "$h" = "$MASTER" ]; then
+        n=`expr 1 + $COMPUTE_MASTER`
+        note="master + $COMPUTE_MASTER compute"
+    else
+        n=$online
+        note="$online of $cpus CPUs online"
+    fi
+
+    if [ "$n" -le 0 ]; then
+        echo "$0: $h contributes no ranks, skipping" >&2
+        continue
+    fi
+
+    echo "$0: $h	$arch	$n rank(s)	($note)" >&2
+
+    if [ "$h" = "$MASTER" ]; then
+        MASTER_GROUP="$h $n $node"
+    else
+        GROUPS="${GROUPS:+$GROUPS : }$h $n $node"
+    fi
+    TOTAL=`expr $TOTAL + $n`
+done
+
+# Master first so rank 0 lands on the display host (DESIGN.md 3b).
+if [ -n "$MASTER_GROUP" ]; then
+    SPEC="${MASTER_GROUP}${GROUPS:+ : $GROUPS}"
+else
+    echo "$0: warning: master $MASTER contributed no ranks" >&2
+    SPEC="$GROUPS"
+fi
+
+if [ -z "$SPEC" ]; then
+    echo "$0: no hosts left to run on" >&2
+    exit 1
+fi
+
+echo "$0: $TOTAL rank(s) total" >&2
+echo "mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC ${1+$@}"
+
+if [ $DRYRUN -eq 1 ]; then
+    exit 0
+fi
+eval exec mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC ${1+"$@"}

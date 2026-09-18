@@ -33,9 +33,14 @@ From *IRIX 6.5 Applications August 2006*: `inst -f /CDROM/dist`, then
 ```sh
 versions -av | egrep -i 'mpi|mpt|arraysvc'    # MPI 4.4 (MPT 1.9), Array Services 3.7
 ls /usr/lib64/libmpi.so /usr/include/mpi.h /usr/include/mpio.h
-mpirun -np 2 hostname                         # prints the local host twice
+cc -64 -mips4 -O2 -o mpi-hello mpi-hello.c -lmpi   # tools/mpi-hello.c
+mpirun -d $PWD -np 2 ./mpi-hello              # prints rank 0 and rank 1, both local
 ```
 ☐ Single-host `mpirun` works. **Stop here if not** — nothing later can work.
+
+**Do not test with `mpirun -np 2 hostname`.** It is the documented smoke test and it does not
+work here: `hostname` exits before MPT's startup handshake, and MPT reports that as
+`MPI: could not run executable`. Use a real MPI binary. See `doc/MPI-HELLO.md`.
 
 ### 3 · Hosts file, ethernet only  ·  all three
 Identical `/etc/hosts` everywhere, ethernet addresses only for now:
@@ -56,9 +61,15 @@ ainfo arrays ; array uptime ; arshell arthur hostname ; arshell aurora hostname
 ```
 ☐ `ascheck` clean, `array uptime` answers from all three, `arshell` works.
 If `arshell` is missing you have Secure Array Services — different daemon, no `arshell`.
+Under `AUTHENTICATION SIMPLE`, try `ascheck -F` before believing a reported failure.
+`IDENT unknown` in `ainfo machines` is the `asmachid` suggestion, not an error, and does
+**not** block multi-host MPI.
+Before step 5, confirm `csh -c true` and `csh -l -c true` are **silent** on every host —
+any output from a login file breaks rank launch. See `doc/MPI-HELLO.md`.
 
 ### 5 · Three-host mpirun over ethernet  ·  **the milestone**
 ```sh
+setenv MPI_USE_TCP 1                                             # every host — MPI-HELLO.md trap 6
 cd /work/tess
 cc -64 -mips4 -O2 -o mandelmpi mandelmpi-ppm-tiler.c -lmpi -lm   # fix line 171 first
 mpirun -v -a tess -d /work/tess lucy 2, arthur 4, aurora 4 ./mandelmpi \

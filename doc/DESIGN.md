@@ -157,6 +157,16 @@ whenever you power bricks up or down, and the panel should be re-askable without
 - When GM does bind, MPT probes XPMEM → GSN → GM → TCP and selects it by itself — but only if
   *every* host in the job has it.
 
+- **CORRECTION (17 September 2026) — MPT does bind this GM, and no switch was needed.**
+  `GM_MPT_NODE_ID=2` on both hosts satisfies MPT's gmID check, and MPT reports *"Using the GM
+  (Myrinet) OS bypass interconnect"* on a real two-host job. The earlier reasoning here, that
+  global node ids required the mapper and the mapper required a crossbar, was wrong twice:
+  `gm_mapper` maps a directly cabled pair when run on **both** ends, and `gm_get_node_id()` is a
+  constant in GM-2, so no map would ever have produced what MPT wanted. What this does **not**
+  change is the gigabit decision below: MPI over GM measures **10.1 MB/s** against raw GM's
+  **50.9**, so it is slower than the gigabit estimate, not faster. It raises the value of the
+  link seam (§6b) instead. Full evidence in `doc/GM-MPT-INTEROP.md`, last section.
+
 ### What one-interconnect-per-job means for this cluster
 
 | job | MPT's interconnect | note |
@@ -647,9 +657,20 @@ only from the master's single MPI thread.
 Two targets, one source tree, C89 throughout.
 
 ```sh
-make sgi     # rsync → ssh → MIPSpro on an SGI. Authoritative.
-make mac     # clang -std=c89 -pedantic + openmotif + open-mpi. Fast iteration.
+gmake        # on an SGI: MIPSpro into build/`uname -m`. Authoritative.
+make         # on the Mac: clang -std=c89 -pedantic. The portability gate.
 ```
+
+**CORRECTION (18 September 2026) — no rsync, no ssh.** This section originally proposed
+`make sgi` pushing the tree to an SGI over ssh. Neither lucy nor aurora runs sshd, and the tree
+now lives on the NFS share at `/cluster/dev/sgi-tess`, so every machine builds natively from one
+checkout instead. Output goes to `build/$(uname -m)` — `IP27`, `IP30`, `IP35`, `arm64` — so
+three machine types can build at once without overwriting each other's objects, and
+`scripts/tess-launch` hands each host group its own binary path through `mpirun`'s colon form.
+
+The split is about the shared filesystem, **not** about per-machine code: the flags below stay
+identical everywhere, for the reason given in the first bullet — identical machine code is the
+only guarantee of identical pixels across hosts.
 
 The authoritative line:
 

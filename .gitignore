@@ -1,2 +1,5 @@
 design/frames/
 design/capture.html
+
+# per-architecture build output: IP27, IP30, IP35, arm64
+build/
