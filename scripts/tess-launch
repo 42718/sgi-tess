@@ -51,6 +51,12 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# Everything after -- goes to every rank, not just the last group: with
+# mpirun's colon form, trailing arguments attach to the final binary only, and
+# rank 0 would then parse defaults and broadcast them to workers that had been
+# given the real flags.
+ARGS="$*"
+
 # Host list: what the array says, unless told otherwise.
 if [ -z "$HOSTS" ]; then
     HOSTS=`ainfo machines 2>/dev/null | sed -n 's/^[ 	]*machine[ 	][ 	]*\([^ 	]*\).*/\1/p'`
@@ -112,9 +118,9 @@ do
     echo "$0: $h	$arch	$n rank(s)	($note)" >&2
 
     if [ "$h" = "$MASTER" ]; then
-        MASTER_GROUP="$h $n $node"
+        MASTER_GROUP="$h $n $node${ARGS:+ $ARGS}"
     else
-        GROUPS="${GROUPS:+$GROUPS : }$h $n $node"
+        GROUPS="${GROUPS:+$GROUPS : }$h $n $node${ARGS:+ $ARGS}"
     fi
     TOTAL=`expr $TOTAL + $n`
 done
@@ -133,9 +139,9 @@ if [ -z "$SPEC" ]; then
 fi
 
 echo "$0: $TOTAL rank(s) total" >&2
-echo "mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC ${1+$@}"
+echo "mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC"
 
 if [ $DRYRUN -eq 1 ]; then
     exit 0
 fi
-eval exec mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC ${1+"$@"}
+eval exec mpirun $VERBOSE -a $ARRAY -d $DIR $SPEC
