@@ -568,3 +568,47 @@ The "double-free" noted above is not one. `gm_dma_free: pointer does not belong 
 fires during MPT's GM **setup** path, before the conflict message, not during teardown. It
 disappeared entirely once GM setup succeeded, so it is what MPT does while abandoning a failed
 attempt. Still worth a look if it ever reappears on a healthy run.
+
+## Do not use GM_MPT_NODE_ID for real work (18 September 2026)
+
+The shim gets MPT past its gmID check, and then the data path fails
+intermittently. Nine runs of the tiler across lucy and aurora:
+
+| mapper | ranks on aurora | frame | result |
+|---|---|---|---|
+| live | 1 | 800×600 | `seqno error packet(252) seq = 454 exp seq = 540` |
+| live | 2 | 800×600 | completed |
+| live | 4 | 1920×1200 | `misdirected packet(253) sender node = 2 port = 2` |
+| off, static routes | 2 | 800×600 | completed |
+| off, static routes | **4** | 800×600 | **misdirected, three times in one run** |
+| off, static routes | 2 | 1920×1200 | completed |
+| off, static routes | 4 | 1920×1200 | completed |
+
+Two ranks on aurora never failed. Four ranks failed three times in four. The
+mapper makes it worse — it reinstalls routes under a live job, and the sequence
+error above is a connection reset mid-flight — but stopping it does not fix the
+problem, so the mapper is not the cause.
+
+The cause is the trick itself. `GM_MPT_NODE_ID=2` on both hosts makes every host
+claim node 2 and every name resolve to 2. That is coherent for *sending*, where
+"node 2" means the other board from either side, and incoherent for *receiving*,
+where a packet from aurora arrives at lucy as `sender node = 2 port = 2` and
+lucy's own rank is also node 2 port 2. MPT demultiplexes on that pair. With one
+or two ranks the port numbers usually keep it distinguishable; with four they do
+not, and a header lands on the wrong connection — hence tags like 271041792.
+
+**So the shim is a diagnostic, not a setting to run production work under.** It
+proved what MPT requires and what GM-2 cannot provide. It does not make MPI over
+Myrinet safe here, and a run that completes may have done so by luck of port
+assignment rather than because the addressing was sound.
+
+Making it sound needs genuine per-host identity: a host table plus translation on
+the send and receive paths inside libgm, rewriting node ids in both directions.
+That is real work for a transport measured at **10.1 MB/s**, against gigabit's
+~46 and raw GM's 50.9. It is not worth doing.
+
+**Standing recommendation.** MPI runs over TCP on this cluster, which is what
+DESIGN.md already chose with the gigabit card to aurora. GM stays for raw
+transport behind the link seam (§6b), where we own the protocol and get the full
+50.9 MB/s. Leave `MPI_USE_GM` and `GM_MPT_NODE_ID` unset for real runs; set them
+only to reproduce the findings above.
