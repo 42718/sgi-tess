@@ -246,7 +246,7 @@ hinv -c processor ; hinv -m                        # CPU model/count, memory
 |---|---|
 | CPU count | `sysconf(_SC_NPROC_CONF / _SC_NPROC_ONLN)` or `sysmp(MP_NPROCS / MP_NAPROCS)` |
 | CPU model, MHz, cache | `getinvent(3)` — in libc, no `-linvent`. For `INV_PROCESSOR`/`INV_CPUBOARD`, `inv_controller` is the clock in MHz |
-| Memory total/free | `sysget(SGT_RMINFO)` × `getpagesize()` — prefer this over `sysmp(MP_SAGET, MPSA_RMINFO)`; never `MP_KERNADDR` |
+| Memory total/free | `sysget(SGT_RMINFO)` × `getpagesize()` — prefer this over `sysmp(MP_SAGET, MPSA_RMINFO)`; never `MP_KERNADDR`. **But see the correction below: the obvious `sysget` call returns EFAULT on lucy and `MP_SAGET` is what answers today.** |
 | Swap | `swapctl(SC_GETFREESWAP)` |
 | Load average | `sysget(SGT_KSYM, "avenrun")` ÷ 1024.0 — unprivileged, this is what `uptime` does |
 | Per-CPU %busy | two samples of `struct sysinfo` `cpu[]` ticks; per-CPU form `sysmp(MP_SAGET1, MPSA_SINFO, …, cpuid)` |
@@ -258,6 +258,24 @@ hinv -c processor ; hinv -m                        # CPU model/count, memory
 
 `sysget(2)` is the supported, unprivileged, node-aware replacement for the `sysmp`
 `MP_SAGET` family and should be the default choice on 6.5.
+
+**Measured correction (18 September 2026, lucy, IRIX 6.5.30).** Called as
+
+```c
+sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ, (void *)0);
+```
+
+it returns −1 with `errno` 14, EFAULT, and leaves `rmi` zeroed. The older
+`sysmp(MP_SAGET, MPSA_RMINFO, &rmi, sizeof rmi)` on the same machine returns the right
+answer: 2560 MB physical, 2352 MB free, matching `hinv -c memory`. So the preference above
+is not wrong about which call to want, but the invocation in this table is incomplete —
+EFAULT means the kernel could not read an argument, most likely the fifth, which some
+`SGT_*` selectors use to name a node or CPU. `src/common/tess_inventory.c` tries `sysget`
+first and falls back, and its `-v` output names whichever answered.
+
+This matters for more than tidiness: `sysget` is the *unprivileged* path. The probe ran as
+root. If `MP_SAGET` turns out to need privilege, memory reads zero as soon as anything runs
+as an ordinary user, so the correct `sysget` call is still worth having.
 
 ## Motif conventions worth honouring
 
