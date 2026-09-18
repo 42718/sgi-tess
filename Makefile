@@ -8,6 +8,7 @@
 #
 #   gmake              everything this machine can build
 #   gmake probe        tess-probe    (inventory, needs nothing)
+#   gmake tiler        tess-tiler    (the milestone 0 backend, from baseline/)
 #   gmake node         tess-node     (MPI, no Motif)
 #   gmake ui           tess-ui       (Motif, no MPI)
 #   gmake info         what this machine looks like to the build
@@ -53,15 +54,16 @@ MPICC     = mpicc
 endif
 
 PROBE  = $(BUILD)/tess-probe
+TILER  = $(BUILD)/tess-tiler
 NODE   = $(BUILD)/tess-node
 UI     = $(BUILD)/tess-ui
 
 NODE_SRCS = $(wildcard src/node/*.c)
 UI_SRCS   = $(wildcard src/ui/*.c)
 
-.PHONY: all probe node ui info clean distclean
+.PHONY: all probe tiler node ui info clean distclean
 
-all: probe node ui
+all: probe tiler node ui
 
 info:
 	@echo "arch      $(ARCH) ($(SYS))"
@@ -78,6 +80,20 @@ probe: $(PROBE)
 
 $(PROBE): src/probe/tess_probe.c $(INVENTORY_SRC) $(COMMON)/tess_inventory.h | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/probe/tess_probe.c $(INVENTORY_SRC)
+
+# ---- tess-tiler: milestone 0. The 2001 row tiler, C89 corrected, kept
+#      buildable so there is always a working MPI backend to test the cluster
+#      with while tess-node is being written. Not the design's architecture:
+#      rows not tiles, RGB not iteration counts, no epochs. ----
+tiler:
+ifeq ($(findstring IP,$(ARCH)),IP)
+	@$(MAKE) $(TILER)
+else
+	@echo "tiler: needs MPT, IRIX only"
+endif
+
+$(TILER): baseline/mandelmpi-ppm-tiler.c | $(BUILD)
+	$(CC) $(NODE_CFLAGS) -o $@ baseline/mandelmpi-ppm-tiler.c $(NODE_LIBS)
 
 # ---- tess-node: MPI plus the compute modules. No Motif, ever. ----
 node:

@@ -32,6 +32,7 @@
 #include <sys/utsname.h>
 
 #ifdef __sgi
+#include <errno.h>
 #include <invent.h>
 #include <sys/sysmp.h>
 #include <sys/sysget.h>
@@ -75,6 +76,54 @@ static int probe_mhz(void)
     return best;
 }
 
+/*
+ * Physical and free memory, in pages, from whichever call answers.
+ *
+ * PLATFORM-FACTS.md prefers sysget(SGT_RMINFO) and says never MP_KERNADDR. On
+ * lucy the sysget form returned zeros, so the older sysmp(MP_SAGET, MPSA_RMINFO)
+ * is tried next; note it may need privilege where sysget does not. why[] records
+ * which path answered, so -v can say rather than imply.
+ */
+static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
+{
+    struct rminfo rmi;
+    long pgkb;
+    int rc;
+
+    *memkb = 0;
+    *freekb = 0;
+    pgkb = (long)getpagesize() / 1024;
+    if (pgkb < 1) {
+        pgkb = 1;
+    }
+
+    memset((char *)&rmi, 0, sizeof rmi);
+    rc = sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ, (void *)0);
+    if (rc != -1 && rmi.physmem > 0) {
+        *memkb = (long)rmi.physmem * pgkb;
+        *freekb = (long)rmi.freemem * pgkb;
+        sprintf(why, "sysget(SGT_RMINFO) ok");
+        why[whylen - 1] = '\0';
+        return 1;
+    }
+    sprintf(why, "sysget rc=%d errno=%d physmem=%ld; ", rc, errno,
+            (long)rmi.physmem);
+
+    memset((char *)&rmi, 0, sizeof rmi);
+    rc = (int)sysmp(MP_SAGET, MPSA_RMINFO, (char *)&rmi, sizeof rmi);
+    if (rc != -1 && rmi.physmem > 0) {
+        *memkb = (long)rmi.physmem * pgkb;
+        *freekb = (long)rmi.freemem * pgkb;
+        strncat(why, "sysmp(MP_SAGET,MPSA_RMINFO) ok", whylen - strlen(why) - 1);
+        why[whylen - 1] = '\0';
+        return 1;
+    }
+    sprintf(why + strlen(why), "sysmp rc=%d errno=%d physmem=%ld", rc, errno,
+            (long)rmi.physmem);
+    why[whylen - 1] = '\0';
+    return 0;
+}
+
 /* A HIPPI interface by either driver's name: SGI's hip*, Essential's ess*. */
 static int probe_hippi(void)
 {
@@ -112,6 +161,7 @@ void tess_inventory(TessInventory *inv)
 
     memset(inv, 0, sizeof *inv);
     inv->abi = (int)(sizeof(long) * 8);
+    set_unknown(inv->memwhy, TESS_WHYLEN);
 
     if (gethostname(inv->host, TESS_HOSTLEN) != 0) {
         set_unknown(inv->host, TESS_HOSTLEN);
@@ -144,9 +194,6 @@ void tess_inventory(TessInventory *inv)
 
 #ifdef __sgi
     {
-        struct rminfo rmi;
-        long pgkb;
-
         inv->mhz = probe_mhz();
 
         inv->nodes = (int)sysmp(MP_NUMNODES);
@@ -154,15 +201,8 @@ void tess_inventory(TessInventory *inv)
             inv->nodes = 1;
         }
 
-        pgkb = (long)getpagesize() / 1024;
-        if (pgkb < 1) {
-            pgkb = 1;
-        }
-        if (sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ, (void *)0)
-            != -1) {
-            inv->memkb  = (long)rmi.physmem * pgkb;
-            inv->freekb = (long)rmi.freemem * pgkb;
-        }
+        (void)probe_memory(&inv->memkb, &inv->freekb, inv->memwhy,
+                           TESS_WHYLEN);
 
         inv->gm    = (access(GM_LIB_PATH, F_OK) == 0) ? 1 : 0;
         inv->hippi = probe_hippi();

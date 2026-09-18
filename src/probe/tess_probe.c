@@ -47,6 +47,7 @@ int main(int argc, char **argv)
         printf("NUMA nodes    %d\n", inv.nodes);
         printf("memory        %ld MB total, %ld MB free\n",
                inv.memkb / 1024, inv.freekb / 1024);
+        printf("  via        %s\n", inv.memwhy);
         printf("release       %s\n", inv.irix);
         printf("ABI           %d-bit\n", inv.abi);
         printf("GM            %s\n", inv.gm ? "libgm present" : "no");

@@ -128,7 +128,6 @@ int main(int argc, char **argv) {
     double xmin, xmax, ymin, ymax;
     char outpath[512];
     int preview_every;
-    int provided;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -158,7 +157,7 @@ int main(int argc, char **argv) {
         /* Controller/assembler */
         int y_next = 0;
         int active_workers = 0;
-        int y;
+        int w;
         unsigned char *image = (unsigned char*)calloc(3*width*height, 1);
         int *row_done = (int*)calloc(height, sizeof(int));
         int rows_completed = 0;
@@ -168,7 +167,6 @@ int main(int argc, char **argv) {
         }
 
         /* Seed each worker with first row */
-        int w;
         for (w = 1; w < size && y_next < height; ++w) {
             MPI_Send(&y_next, 1, MPI_INT, w, TAG_WORK, MPI_COMM_WORLD);
             ++y_next;

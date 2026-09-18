@@ -15,6 +15,7 @@
 #define TESS_INV_FORMAT 1               /* bump when a field's meaning changes */
 #define TESS_HOSTLEN    64
 #define TESS_RELLEN     32
+#define TESS_WHYLEN     96
 
 typedef struct TessInventory {
     char            host[TESS_HOSTLEN];
@@ -29,6 +30,7 @@ typedef struct TessInventory {
     int             abi;                /* 32 or 64, compile time */
     int             gm;                 /* libgm present where MPT dlopens it */
     int             hippi;              /* a hip* or ess* interface exists */
+    char            memwhy[TESS_WHYLEN];/* which call answered, or how each failed */
 } TessInventory;
 
 /* Fills inv. Never fails: unknown fields are 0 or "?". */
