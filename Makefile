@@ -12,8 +12,15 @@
 #   gmake node         tess-node     (MPI, no Motif)
 #   gmake ui           tess-ui       (Motif, no MPI)
 #   gmake info         what this machine looks like to the build
+#   gmake fresh        clean this architecture, then rebuild it
 #   gmake clean        this architecture only
 #   gmake distclean    every architecture
+#
+# Use `gmake fresh` after editing from the Mac. The SGI clocks run ahead of the
+# Mac's and the tree is shared, so a file written over NFS arrives looking older
+# than the binary built from the previous version, and make will report success
+# having done nothing. There is no git on the SGIs and none is needed: the NFS
+# folder is the working tree, so a commit on the Mac is already visible here.
 #
 # The per-architecture split is about not colliding on a shared filesystem, not
 # about producing different code. DESIGN.md section 8 requires identical machine
@@ -61,7 +68,7 @@ UI     = $(BUILD)/tess-ui
 NODE_SRCS = $(wildcard src/node/*.c)
 UI_SRCS   = $(wildcard src/ui/*.c)
 
-.PHONY: all probe tiler node ui info clean distclean
+.PHONY: all probe tiler node ui info fresh clean distclean
 
 all: probe tiler node ui
 
@@ -116,6 +123,10 @@ endif
 
 $(UI): $(UI_SRCS) | $(BUILD)
 	$(CC) $(UI_CFLAGS) -o $@ $(UI_SRCS) $(UI_LIBS)
+
+fresh:
+	@$(MAKE) clean
+	@$(MAKE) all
 
 clean:
 	rm -rf $(BUILD)
