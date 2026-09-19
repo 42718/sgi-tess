@@ -177,6 +177,63 @@ static const TessParamDesc colour_params[] = {
 
 /* ------------------------------------------------------------- plumbing */
 
+/*
+ * What this window manager does to a window: how much bigger the frame is than
+ * the client, and where the client sits inside it.
+ *
+ * These cannot be known before a window is realized, and a window cannot be
+ * moved after it is mapped without the frame jumping. So they are measured on
+ * the first run and remembered: the layout is approximate once, then exact
+ * every time after. Estimating them cost four rounds of overlapping windows.
+ */
+typedef struct WmMetrics {
+    int decor_x, decor_y;      /* frame size minus client size */
+    int border_x, border_y;    /* client position within the frame */
+} WmMetrics;
+
+static void wm_metrics_path(char *out, int len)
+{
+    const char *home = getenv("HOME");
+
+    sprintf(out, "%s/.tess-wm", home ? home : "/tmp");
+    out[len - 1] = '\0';
+}
+
+static void wm_metrics_load(WmMetrics *m)
+{
+    char path[512];
+    FILE *f;
+
+    m->decor_x = 16;           /* 4Dwm's usual, as a first guess */
+    m->decor_y = 40;
+    m->border_x = 8;
+    m->border_y = 30;
+
+    wm_metrics_path(path, (int)sizeof path);
+    f = fopen(path, "r");
+    if (!f) {
+        return;
+    }
+    fscanf(f, "%d %d %d %d", &m->decor_x, &m->decor_y, &m->border_x,
+           &m->border_y);
+    fclose(f);
+}
+
+static void wm_metrics_save(const WmMetrics *m)
+{
+    char path[512];
+    FILE *f;
+
+    wm_metrics_path(path, (int)sizeof path);
+    f = fopen(path, "w");
+    if (!f) {
+        return;
+    }
+    fprintf(f, "%d %d %d %d\n", m->decor_x, m->decor_y, m->border_x,
+            m->border_y);
+    fclose(f);
+}
+
 static void die(const char *msg)
 {
     fprintf(stderr, "tess-ui: %s\n", msg);
@@ -1221,6 +1278,7 @@ int main(int argc, char **argv)
     Ui u;
     char *host = "localhost";
     int port = TESS_DEFAULT_PORT;
+    WmMetrics wm;
     int width_given = 0;
     int height_given = 0;
     int i;
@@ -1248,6 +1306,7 @@ int main(int argc, char **argv)
     if (tess_types_check() != 0) {
         die("integer widths are not what the wire format assumes");
     }
+    wm_metrics_load(&wm);
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-host") == 0 && i + 1 < argc) {
@@ -1300,7 +1359,10 @@ int main(int argc, char **argv)
         u.screen_h = sh;
 
         if (!width_given) {
-            u.width = total - TESS_CTRL_W - TESS_GAP - 2 * TESS_DECOR;
+            /* screen = origin + render frame + gap + panel frame, solved for
+               the render's inner width with the metrics we learned last time */
+            u.width = sw - (int)((double)sw * (1.0 - TESS_USE)) -
+                      wm.decor_x - TESS_GAP - TESS_CTRL_W - wm.decor_x;
             if (u.width < 320) {
                 u.width = 320;
             }
@@ -1322,8 +1384,8 @@ int main(int argc, char **argv)
          * client". The decoration is an estimate at this point; the panel is
          * placed later from a measurement, so the pair still meets exactly.
          */
-        u.origin_x = sw - (u.width + TESS_CTRL_W + 2 * TESS_GAP +
-                           2 * TESS_DECOR);
+        u.origin_x = sw - (u.width + wm.decor_x + TESS_GAP + TESS_CTRL_W +
+                           wm.decor_x) + wm.border_x;
         if (u.origin_x < 0) {
             u.origin_x = 0;
         }
@@ -1439,6 +1501,18 @@ int main(int argc, char **argv)
                 u.border_y = 0;
             }
         }
+
+        wm.decor_x = fwid - u.width;
+        wm.decor_y = fhgt - u.height;
+        wm.border_x = u.border_x;
+        wm.border_y = u.border_y;
+        if (wm.decor_x < 0) {
+            wm.decor_x = 0;
+        }
+        if (wm.decor_y < 0) {
+            wm.decor_y = 0;
+        }
+        wm_metrics_save(&wm);
 
         u.ctrl_x = fx + fwid + TESS_GAP + u.border_x;
         u.ctrl_y = fy + u.border_y;
