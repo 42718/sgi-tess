@@ -302,14 +302,14 @@ static void refresh_rows(TessCluster *c)
                 compute = 0;
             }
             if (c->host[i].reachable && c->host[i].load >= 0.0) {
-                sprintf(buf, "%-7s %-5s %d/%d cpu  load %.1f",
+                sprintf(buf, "%-8.8s %-5.5s %d/%-2d  %4.1f",
                         c->host[i].name, c->host[i].arch, compute,
                         c->host[i].online, c->host[i].load);
             } else if (c->host[i].reachable) {
-                sprintf(buf, "%-7s %-5s %d of %d CPUs", c->host[i].name,
+                sprintf(buf, "%-8.8s %-5.5s %d/%-2d", c->host[i].name,
                         c->host[i].arch, compute, c->host[i].online);
             } else {
-                sprintf(buf, "%-7s %-5s %s", c->host[i].name,
+                sprintf(buf, "%-8.8s %-5.5s %s", c->host[i].name,
                         c->host[i].arch[0] ? c->host[i].arch : "-",
                         c->host[i].note);
             }
@@ -744,6 +744,7 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                   xmToggleButtonWidgetClass,
                                                   row,
                                                   XmNlabelString, empty,
+                                                  XmNindicatorSize, 14,
                                                   XmNleftAttachment,
                                                   XmATTACH_FORM,
                                                   NULL);

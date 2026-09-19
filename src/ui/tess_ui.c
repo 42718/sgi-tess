@@ -301,6 +301,14 @@ static void cluster_update(Ui *u)
  * the same ones tile-ownership colouring will use, so the panel and the
  * picture will agree.
  */
+static double now_secs(void)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, (struct timezone *)0);
+    return (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
+}
+
 static unsigned long pix(Ui *u, const char *spec)
 {
     XColor want, exact;
@@ -341,7 +349,7 @@ static void stats_draw(Ui *u)
     XFillRectangle(d, w, u->statsgc, 0, 0, (unsigned)wid, (unsigned)hgt);
 
     barx = 108;
-    barw = (int)wid - barx - 44;
+    barw = (int)wid - barx - 76;
     if (barw < 20) {
         barw = 20;
     }
@@ -361,10 +369,9 @@ static void stats_draw(Ui *u)
     if (u->workers > 0 && y + 30 < (int)hgt) {
         y += 15;
         tess_cluster_rank_label(u->cl, 0, label, (int)sizeof label);
-        strcat(label, " (master)");
         XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
         XDrawString(d, w, u->statsgc, 4, y, label, (int)strlen(label));
-        XDrawString(d, w, u->statsgc, barx, y, "schedules, no compute", 21);
+        XDrawString(d, w, u->statsgc, barx, y, "master, schedules only", 22);
     }
 
     rows = 0;
@@ -388,9 +395,24 @@ static void stats_draw(Ui *u)
         XSetForeground(d, u->statsgc, pix(u, "#8f9298"));
         XDrawRectangle(d, w, u->statsgc, barx, y - 8, (unsigned)barw, 9);
 
-        sprintf(num, "%d", u->rank_tiles[r]);
+        /*
+         * How busy that CPU was: the rank's own compute time against the
+         * frame's wall time. This is a real utilisation figure per rank, which
+         * a host load average cannot give, and it shows stragglers directly.
+         */
+        {
+            double wall = u->last_msec > 0.0 ? u->last_msec * 1000.0 :
+                          (u->epoch_t0 > 0.0 ? (now_secs() - u->epoch_t0) * 1e6
+                                             : 0.0);
+            double busy = wall > 0.0 ? 100.0 * u->rank_usec[r] / wall : 0.0;
+
+            if (busy > 100.0) {
+                busy = 100.0;
+            }
+            sprintf(num, "%4d %3.0f%%", u->rank_tiles[r], busy);
+        }
         XSetForeground(d, u->statsgc, pix(u, "#101519"));
-        XDrawString(d, w, u->statsgc, barx + barw + 6, y, num,
+        XDrawString(d, w, u->statsgc, (int)wid - 70, y, num,
                     (int)strlen(num));
     }
 
@@ -1143,6 +1165,7 @@ static void mouse_eh(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
 }
 
 static void save_cb(Widget w, XtPointer cd, XtPointer cb);
+static void tile_cb(Widget w, XtPointer cd, XtPointer cb);
 
 static void paint_ui_button(Widget b, const char *spec)
 {
@@ -1228,6 +1251,72 @@ static void save_cb(Widget w, XtPointer cd, XtPointer cb)
 
     free((void *)u->shade_rgb);
     u->shade_rgb = (tess_u32 *)0;
+}
+
+/*
+ * Lay both windows out from measurements, after both exist.
+ *
+ * Every attempt to do this before realize has been wrong by a border in one
+ * direction or the other, because a position set before mapping means
+ * different things to different window managers and cannot be measured until
+ * it is too late to use. Done here, both frames are real and measurable: we
+ * ask where each one is and how big it is, work out where the frames should
+ * go, and convert to client coordinates with the offset we just measured.
+ * Moving a mapped window is well defined, unlike guessing at one that does not
+ * exist yet.
+ */
+static void tile_windows(Ui *u)
+{
+    Display *d = u->dpy;
+    int rfx, rfy, rfw, rfh;
+    int cfx, cfy, cfw, cfh;
+    int rbx, rby, cbx, cby;
+    Window child;
+    int ax, ay, target_x;
+    char msg[160];
+
+    if (!u->dpy || !XtIsRealized(u->toplevel) || !XtIsRealized(u->control)) {
+        return;
+    }
+    XSync(d, False);
+    wm_frame_geom(d, XtWindow(u->toplevel), &rfx, &rfy, &rfw, &rfh);
+    wm_frame_geom(d, XtWindow(u->control), &cfx, &cfy, &cfw, &cfh);
+
+    XTranslateCoordinates(d, XtWindow(u->toplevel),
+                          RootWindow(d, DefaultScreen(d)), 0, 0, &ax, &ay,
+                          &child);
+    rbx = ax - rfx;
+    rby = ay - rfy;
+    XTranslateCoordinates(d, XtWindow(u->control),
+                          RootWindow(d, DefaultScreen(d)), 0, 0, &ax, &ay,
+                          &child);
+    cbx = ax - cfx;
+    cby = ay - cfy;
+
+    target_x = u->screen_w - (rfw + TESS_GAP + cfw);
+    if (target_x < 0) {
+        target_x = 0;
+    }
+
+    XMoveWindow(d, XtWindow(u->toplevel), target_x + rbx, TESS_GAP + rby);
+    XMoveWindow(d, XtWindow(u->control),
+                target_x + rfw + TESS_GAP + cbx, TESS_GAP + cby);
+    XSync(d, False);
+
+    sprintf(msg, "tiled: render %dx%d at %d, panel %dx%d at %d, screen %d",
+            rfw, rfh, target_x, cfw, cfh, target_x + rfw + TESS_GAP,
+            u->screen_w);
+    ui_log(u, msg);
+}
+
+static void tile_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    tile_windows((Ui *)cd);
+}
+
+static void tile_once_cb(XtPointer cd, XtIntervalId *id)
+{
+    tile_windows((Ui *)cd);
 }
 
 static void render_cb(Widget w, XtPointer cd, XtPointer cb)
@@ -1375,6 +1464,10 @@ static void build_control(Ui *u)
                                 NULL);
     XtAddCallback(b, XmNactivateCallback, save_cb, (XtPointer)u);
     paint_ui_button(b, "#a8b4bc");
+    b = XtVaCreateManagedWidget("Tile", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, tile_cb, (XtPointer)u);
+    paint_ui_button(b, "#a8b4bc");
 
     {
         Widget cframe;
@@ -1398,7 +1491,7 @@ static void build_control(Ui *u)
          */
         u->cluster = XtVaCreateManagedWidget("stats",
                                              xmDrawingAreaWidgetClass, cframe,
-                                             XmNheight, 150,
+                                             XmNheight, 172,
                                              XmNwidth, TESS_CTRL_W - 28,
                                              NULL);
         XtAddCallback(u->cluster, XmNexposeCallback, stats_expose_cb,
@@ -1459,6 +1552,7 @@ static String fallbacks[] = {
     "*XmTextField.fontList: -*-helvetica-medium-r-normal--10-*-*-*-*-*-iso8859-1",
     "*log.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
     "*cluster.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
+    "*info.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
     "*shadowThickness: 1",
     "*highlightThickness: 1",
     "*XmRowColumn.marginHeight: 1",
@@ -1813,6 +1907,8 @@ int main(int argc, char **argv)
     strncpy(u.host, host, sizeof u.host - 1);
     u.host[sizeof u.host - 1] = '\0';
     u.port = port;
+    XtAppAddTimeOut(app, 700, tile_once_cb, (XtPointer)&u);
+
     u.fd = u.attach ? connect_master(host, port) : -1;
     if (u.fd < 0) {
         char msg[160];

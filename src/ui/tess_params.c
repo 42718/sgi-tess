@@ -185,11 +185,18 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
         b->index = i;
 
         if (descs[i].type == TESS_P_BOOL) {
-            XmString empty = XmStringCreateLocalized("");
+            /*
+             * A labelled indicator. An empty label left a box a few pixels
+             * across that read as neither on nor off, which is worse than no
+             * control at all: you could not tell what state it was in.
+             */
+            XmString on = XmStringCreateLocalized("on");
 
             p->w[i] = XtVaCreateManagedWidget("toggle",
                                               xmToggleButtonWidgetClass, row,
-                                              XmNlabelString, empty,
+                                              XmNlabelString, on,
+                                              XmNindicatorSize, 14,
+                                              XmNspacing, 4,
                                               XmNleftAttachment,
                                               XmATTACH_POSITION,
                                               XmNleftPosition, 46,
@@ -197,7 +204,7 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
                                               XmNbottomAttachment,
                                               XmATTACH_FORM,
                                               NULL);
-            XmStringFree(empty);
+            XmStringFree(on);
             XtAddCallback(p->w[i], XmNvalueChangedCallback, toggle_cb,
                           (XtPointer)b);
         } else if (descs[i].type == TESS_P_ENUM) {
