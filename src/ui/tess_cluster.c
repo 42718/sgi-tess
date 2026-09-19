@@ -49,6 +49,7 @@ struct TessCluster {
     Widget      info[TESS_MAX_HOSTS];
     Widget      rankf[TESS_MAX_HOSTS];
     Widget      onbox[TESS_MAX_HOSTS];
+    Widget      swatch[TESS_MAX_HOSTS];
     Widget      state;
     Widget      transport;
     Widget      launchb;
@@ -335,6 +336,18 @@ static void refresh_rows(TessCluster *c)
 
         sprintf(buf, "%d", c->host[i].ranks);
         XmTextFieldSetString(c->rankf[i], buf);
+
+        if (c->swatch[i]) {
+            Display *d = XtDisplay(c->swatch[i]);
+            Colormap cm = DefaultColormap(d, DefaultScreen(d));
+            XColor want, exact;
+            const char *spec = c->host[i].reachable ?
+                               host_colour(&c->host[i]) : "#8f9298";
+
+            if (XAllocNamedColor(d, cm, (char *)spec, &want, &exact)) {
+                XtVaSetValues(c->swatch[i], XmNbackground, want.pixel, NULL);
+            }
+        }
 
         /* A disabled host is greyed rather than hidden: it stays in the list
            with its numbers, visibly not taking part. */
@@ -802,7 +815,7 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
         Widget hdr = XtVaCreateManagedWidget("hdr", xmFormWidgetClass, rc,
                                              XmNfractionBase, 100, NULL);
 
-        XtVaCreateManagedWidget("use  host     type  cpu  load",
+        XtVaCreateManagedWidget("use    host     type  cpu  load",
                                 xmLabelWidgetClass, hdr,
                                 XmNalignment, XmALIGNMENT_BEGINNING,
                                 XmNleftAttachment, XmATTACH_FORM,
@@ -837,11 +850,33 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
             XtAddCallback(c->onbox[i], XmNvalueChangedCallback, enable_cb,
                           (XtPointer)c);
         }
+        /*
+         * A colour chip per host, in the same hue its tiles are tinted with
+         * and its bars are drawn in. Three places now agree on what colour a
+         * machine is: this row, the Status bars, and the picture itself under
+         * colour-by-owner.
+         */
+        {
+            XmString blank = XmStringCreateLocalized(" ");
+
+            c->swatch[i] = XtVaCreateManagedWidget("sw", xmLabelWidgetClass,
+                                                   row,
+                                                   XmNlabelString, blank,
+                                                   XmNwidth, 12,
+                                                   XmNheight, 10,
+                                                   XmNrecomputeSize, False,
+                                                   XmNborderWidth, 1,
+                                                   XmNleftAttachment,
+                                                   XmATTACH_WIDGET,
+                                                   XmNleftWidget, c->onbox[i],
+                                                   NULL);
+            XmStringFree(blank);
+        }
         c->info[i] = XtVaCreateManagedWidget("info", xmLabelWidgetClass, row,
                                              XmNalignment,
                                              XmALIGNMENT_BEGINNING,
                                              XmNleftAttachment, XmATTACH_WIDGET,
-                                             XmNleftWidget, c->onbox[i],
+                                             XmNleftWidget, c->swatch[i],
                                              XmNrightAttachment,
                                              XmATTACH_POSITION,
                                              XmNrightPosition, 78,

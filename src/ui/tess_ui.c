@@ -75,6 +75,7 @@ typedef struct UiValues {
     int    rotate;
     int    interior;
     int    by_owner;
+    int    hud;
 } UiValues;
 
 typedef struct Ui {
@@ -103,6 +104,7 @@ typedef struct Ui {
 
     GC         bandgc;
     GC         statsgc;
+    GC         hudgc;
     XFontStruct *statsfont;
     Colormap   cmap;          /* XOR, for the rubber band */
     int        screen_w, screen_h;
@@ -183,6 +185,8 @@ static const TessParamDesc colour_params[] = {
     { "interior", TESS_P_ENUM, XtOffsetOf(UiValues, interior), 0.0, 1.0,
       TESS_LOCAL, { "black", "white", 0 } },
     { "by owner", TESS_P_BOOL, XtOffsetOf(UiValues, by_owner), 0.0, 1.0,
+      TESS_LOCAL, { 0 } },
+    { "overlay",  TESS_P_BOOL, XtOffsetOf(UiValues, hud), 0.0, 1.0,
       TESS_LOCAL, { 0 } }
 };
 
@@ -566,6 +570,8 @@ static void recreate_ximage(Ui *u)
     }
 }
 
+static void hud_draw(Ui *u);
+
 static void blit(Ui *u, int x, int y, int w, int h)
 {
     Window win;
@@ -582,9 +588,86 @@ static void blit(Ui *u, int x, int y, int w, int h)
     }
     XPutImage(u->dpy, win, u->gc, u->ximg, x, y, x, y,
               (unsigned)w, (unsigned)h);
+    hud_draw(u);
 }
 
 static void reshade_all(Ui *u);
+
+/*
+ * A readout on the picture itself.
+ *
+ * The mockup puts per-tile information over the render rather than only in the
+ * panel, and it is right: while a frame is filling, the numbers you want are
+ * the ones you are already looking at. Everything here is data the GUI already
+ * holds, so this costs a few XDrawString calls after each tile.
+ */
+static void hud_draw(Ui *u)
+{
+    Display *d = u->dpy;
+    Window win;
+    char line[96];
+    int x, y, wdt, hgt, i;
+    double dt;
+
+    if (!u->val.hud || !XtIsRealized(u->canvas)) {
+        return;
+    }
+    win = XtWindow(u->canvas);
+    if (!win) {
+        return;
+    }
+    if (!u->hudgc) {
+        XGCValues gcv;
+
+        gcv.foreground = BlackPixel(d, DefaultScreen(d));
+        u->hudgc = XCreateGC(d, win, (unsigned long)GCForeground, &gcv);
+        if (u->statsfont) {
+            XSetFont(d, u->hudgc, u->statsfont->fid);
+        }
+    }
+
+    wdt = 186;
+    hgt = 16 + 14 * 4;
+    x = 12;
+    y = 12;
+
+    XSetForeground(d, u->hudgc, pix(u, "#101519"));
+    XFillRectangle(d, win, u->hudgc, x, y, (unsigned)wdt, (unsigned)hgt);
+    XSetForeground(d, u->hudgc, pix(u, "#6fc0d4"));
+    XDrawRectangle(d, win, u->hudgc, x, y, (unsigned)wdt, (unsigned)hgt);
+
+    dt = u->epoch_t0 > 0.0 ? now_secs() - u->epoch_t0 :
+         u->last_msec / 1000.0;
+
+    XSetForeground(d, u->hudgc, pix(u, "#e6eaed"));
+    sprintf(line, "epoch %u", u->job.epoch);
+    XDrawString(d, win, u->hudgc, x + 8, y + 16, line, (int)strlen(line));
+    sprintf(line, "%d/%d tiles   %.2f s", u->tiles_in, u->tiles_expected, dt);
+    XDrawString(d, win, u->hudgc, x + 8, y + 30, line, (int)strlen(line));
+    sprintf(line, "%d worker(s)  it %u", u->workers, u->job.max_iter);
+    XDrawString(d, win, u->hudgc, x + 8, y + 44, line, (int)strlen(line));
+
+    /* A bar per rank, in its machine's colour: the panel's Status pane, small
+       enough to live on the picture. */
+    for (i = 1; i < 8; i++) {
+        double share;
+        int bw;
+
+        if (u->rank_tiles[i] <= 0) {
+            continue;
+        }
+        share = u->tiles_in > 0 ?
+                (double)u->rank_tiles[i] / (double)u->tiles_in : 0.0;
+        bw = (int)(share * (double)(wdt - 16) * 4.0);
+        if (bw > wdt - 16) {
+            bw = wdt - 16;
+        }
+        XSetForeground(d, u->hudgc,
+                       pix(u, tess_cluster_rank_colour(u->cl, i)));
+        XFillRectangle(d, win, u->hudgc, x + 8 + (i - 1) * 4, y + 52,
+                       3, (unsigned)(bw / 8 + 1));
+    }
+}
 
 /* Shade one tile out of the iteration buffer straight into the framebuffer. */
 /* Blend a shaded pixel towards the colour of the machine that drew it. */
@@ -1559,7 +1642,10 @@ static String fallbacks[] = {
     "*sgiMode: True",
     "*useSchemes: none",
     "*fontList: -*-helvetica-medium-r-normal--10-*-*-*-*-*-iso8859-1",
-    "*XmTextField.fontList: -*-helvetica-medium-r-normal--10-*-*-*-*-*-iso8859-1",
+    /* Figures in a fixed-width face, so digits line up column-wise: the
+       mockup uses mono for essentially every number, and a proportional font
+       is why 0.34731621937 and 5.834e-05 did not sit under each other. */
+    "*XmTextField.fontList: -*-screen-medium-r-normal--12-*-*-*-*-*-iso8859-1",
     "*log.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
     "*cluster.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
     "*info.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
