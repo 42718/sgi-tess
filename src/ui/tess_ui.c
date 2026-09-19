@@ -47,6 +47,9 @@
 
 #include "tess_params.h"
 
+#define TESS_CTRL_W 420      /* control window width, and the gap beside it */
+#define TESS_GAP    8
+
 #include "tess_types.h"
 #include "tess_proto.h"
 #include "tess_wire.h"
@@ -61,6 +64,7 @@ typedef struct UiValues {
     double cy;
     double scale;
     int    max_iter;
+    int    auto_iter;
     int    ramp;
     int    cycles;
     int    rotate;
@@ -83,6 +87,7 @@ typedef struct Ui {
     int        tiles_expected;
 
     GC         bandgc;          /* XOR, for the rubber band */
+    int        screen_w, screen_h;
     int        dragging;
     int        drag_x0, drag_y0;
     int        drag_x1, drag_y1;
@@ -122,6 +127,8 @@ static const TessParamDesc view_params[] = {
     { "scale",      TESS_P_DOUBLE, XtOffsetOf(UiValues, scale),    1e-15, 1.0,
       TESS_CLUSTER, { 0 } },
     { "iterations", TESS_P_INT,    XtOffsetOf(UiValues, max_iter), 16.0, 65535.0,
+      TESS_CLUSTER, { 0 } },
+    { "auto iters", TESS_P_BOOL,   XtOffsetOf(UiValues, auto_iter), 0.0, 1.0,
       TESS_CLUSTER, { 0 } }
 };
 
@@ -263,6 +270,41 @@ static void reshade_all(Ui *u)
     blit(u, 0, 0, u->width, u->height);
 }
 
+/*
+ * Iterations that follow the depth.
+ *
+ * A fixed budget goes soft as you descend: past about 2^18 the boundary needs
+ * more work than the opening view to stay sharp. The rule is linear in depth,
+ * 128 more iterations per halving of scale on top of a 500 floor, which tracks
+ * the escape-time cost closely enough and is predictable, unlike the usual
+ * exponential fits. Off by default so a manual budget stays manual.
+ */
+static void auto_iters(Ui *u)
+{
+    double home, depth;
+    int it;
+
+    if (!u->val.auto_iter) {
+        return;
+    }
+    home = 3.2 / (double)(u->width > 0 ? u->width : 1024);
+    if (u->job.scale <= 0.0) {
+        return;
+    }
+    depth = log(home / u->job.scale) / log(2.0);
+    if (depth < 0.0) {
+        depth = 0.0;
+    }
+    it = (int)(500.0 + 128.0 * depth);
+    if (it < 64) {
+        it = 64;
+    }
+    if (it > 65535) {
+        it = 65535;
+    }
+    u->job.max_iter = (tess_u32)it;
+}
+
 /* The one place the edited values become a job. */
 static void values_to_job(Ui *u)
 {
@@ -289,6 +331,12 @@ static void send_render(Ui *u)
     tess_u8 body[TESS_JOB_WIRE];
     int n;
     char msg[160];
+
+    auto_iters(u);
+    job_to_values(u);
+    if (u->view_pane) {
+        tess_params_refresh(u->view_pane);
+    }
 
     u->job.epoch++;
     u->job.width = (tess_u32)u->width;
@@ -483,10 +531,12 @@ static void zoom_at(Ui *u, int px, int py, int in)
     u->job.cy = im;
     if (in) {
         u->job.scale *= 0.5;
-        u->job.max_iter += 64;
+        if (!u->val.auto_iter) {
+            u->job.max_iter += 64;
+        }
     } else {
         u->job.scale *= 2.0;
-        if (u->job.max_iter > 128) {
+        if (!u->val.auto_iter && u->job.max_iter > 128) {
             u->job.max_iter -= 64;
         }
     }
@@ -530,7 +580,7 @@ static void zoom_box(Ui *u, int x0, int y0, int x1, int y1)
     }
     u->job.scale *= ratio;
 
-    {
+    if (!u->val.auto_iter) {
         double depth = log(1.0 / ratio) / log(2.0);
         int add = (int)(depth * 64.0);
 
@@ -649,6 +699,9 @@ static void build_control(Ui *u)
                                     topLevelShellWidgetClass,
                                     XtDisplay(u->toplevel),
                                     XmNtitle, "Tess control",
+                                    XmNx, u->width + 2 * TESS_GAP,
+                                    XmNy, TESS_GAP,
+                                    XmNwidth, TESS_CTRL_W,
                                     NULL);
     form = XtVaCreateManagedWidget("cform", xmFormWidgetClass, u->control,
                                    NULL);
@@ -755,6 +808,8 @@ int main(int argc, char **argv)
     Ui u;
     char *host = "localhost";
     int port = TESS_DEFAULT_PORT;
+    int width_given = 0;
+    int height_given = 0;
     int i;
     tess_u8 hello[4];
 
@@ -785,14 +840,49 @@ int main(int argc, char **argv)
             port = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-w") == 0 && i + 1 < argc) {
             u.width = atoi(argv[++i]);
+            width_given = 1;
         } else if (strcmp(argv[i], "-h") == 0 && i + 1 < argc) {
             u.height = atoi(argv[++i]);
+            height_given = 1;
         }
     }
 
     u.toplevel = XtVaAppInitialize(&app, "Tess", (XrmOptionDescList)0, 0,
                                   &argc, argv, fallbacks, NULL);
     u.app = app;
+
+    /*
+     * Fit the screen, and put the two windows side by side rather than on top
+     * of each other. The render window takes what is left after the control
+     * panel, so on a 1280x1024 head that is 844 pixels of fractal with the
+     * panel beside it instead of two overlapping shells to drag apart on every
+     * launch. -w and -h still win, for reproducible frame sizes.
+     */
+    {
+        Display *d = XtDisplay(u.toplevel);
+        int scr = DefaultScreen(d);
+        int sw = DisplayWidth(d, scr);
+        int sh = DisplayHeight(d, scr);
+
+        if (!width_given) {
+            u.width = sw - TESS_CTRL_W - 3 * TESS_GAP;
+            if (u.width < 256) {
+                u.width = 256;
+            }
+        }
+        if (!height_given) {
+            u.height = sh - 96;      /* title bars and the status line */
+            if (u.height < 256) {
+                u.height = 256;
+            }
+        }
+        u.screen_w = sw;
+        u.screen_h = sh;
+        XtVaSetValues(u.toplevel,
+                      XmNx, TESS_GAP,
+                      XmNy, TESS_GAP,
+                      NULL);
+    }
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,
                                    NULL);
 
@@ -864,6 +954,13 @@ int main(int argc, char **argv)
                 port);
         set_status(&u, msg);
     } else {
+        {
+            char msg[160];
+
+            sprintf(msg, "display %dx%d, render %dx%d", u.screen_w,
+                    u.screen_h, u.width, u.height);
+            ui_log(&u, msg);
+        }
         u.input_id = XtAppAddInput(app, u.fd, (XtPointer)XtInputReadMask,
                                    socket_cb, (XtPointer)&u);
         memset((char *)hello, 0, sizeof hello);
