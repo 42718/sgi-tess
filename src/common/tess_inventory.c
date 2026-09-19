@@ -214,13 +214,19 @@ double tess_cpu_busy(void)
 double tess_load1(void)
 {
 #ifdef __sgi
-    long avenrun[3];
+    int avenrun[3];
     sgt_cookie_t ck;
 
     /*
      * A kernel symbol is named through the cookie, not through the buffer
      * argument: SGT_COOKIE_SET_KSYM writes the name into the cookie's opaque
      * area after the cell id. KSYM_AVENRUN is the header's own name for it.
+     *
+     * int, not long, even in a -64 build: the kernel's avenrun is 32-bit.
+     * Measured on lucy 19 September 2026, a long[3] buffer read 255852544.08,
+     * which is 1024 x ((61 << 32) | 82) - the 1-minute and 5-minute figures
+     * of an idle machine, 0.06 and 0.08, glued into one 64-bit word by a
+     * big-endian read of twice the width.
      */
     memset((char *)avenrun, 0, sizeof avenrun);
     SGT_COOKIE_INIT(&ck);

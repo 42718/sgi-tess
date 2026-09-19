@@ -248,7 +248,7 @@ hinv -c processor ; hinv -m                        # CPU model/count, memory
 | CPU model, MHz, cache | `getinvent(3)` — in libc, no `-linvent`. For `INV_PROCESSOR`/`INV_CPUBOARD`, `inv_controller` is the clock in MHz |
 | Memory total/free | `sysget(SGT_RMINFO)` × `getpagesize()` — prefer this over `sysmp(MP_SAGET, MPSA_RMINFO)`; never `MP_KERNADDR`. Pass a real cookie as the fifth argument, see below |
 | Swap | `swapctl(SC_GETFREESWAP)` |
-| Load average | `sysget(SGT_KSYM, …)` ÷ 1024.0 — unprivileged, this is what `uptime` does. The symbol name goes in the *cookie*, not the buffer, see below |
+| Load average | `sysget(SGT_KSYM, …)` into an **`int[3]`** ÷ 1024.0 — unprivileged, this is what `uptime` does. The symbol name goes in the *cookie*, not the buffer, see below |
 | Per-CPU %busy | two samples of `struct sysinfo` `cpu[]` ticks; per-CPU form `sysmp(MP_SAGET1, MPSA_SINFO, …, cpuid)` |
 | Process RSS/VSZ | `ioctl(PIOCPSINFO)` on `/proc/pinfo/<pid>` — `getrusage` `ru_maxrss` is useless here; `syssgi(SGI_PROCSZ)` was removed in 6.5 |
 | Link speed, MTU, if counters | `ioctl(SIOCGIFDATA)` → `struct if_data` (`ifi_baudrate`, `ifi_mtu`, `ifi_type`) — what `ifconfig` uses |
@@ -286,6 +286,25 @@ sysget(SGT_KSYM, (char *)avenrun, sizeof avenrun, SGT_READ, &ck);
 `SGT_COOKIE_INIT` sets the cookie to mean every cell; `SGT_SUM` asks the kernel to add
 those cells together, which is what a whole-machine total means on a NUMA box like aurora.
 `KSYM_AVENRUN` is the header's own spelling of `"avenrun"`.
+
+**The `avenrun` buffer is `int[3]`, not `long[3]`, even in a `-64` build.** No header in
+`/usr/include` declares it: `grep -n avenrun /usr/include/sys/*.h` finds only
+`sysget.h:196`, the `KSYM_AVENRUN` string itself, because it is a kernel symbol. The width
+is established by measurement instead, on lucy, 19 September 2026:
+
+| buffer | probe reads | `uptime` says |
+|---|---|---|
+| `long[3]` | 255852544.08 | 0.20 |
+| `int[3]` | 0.20 | 0.20 |
+
+255852544.08 × 1024 is `(61 << 32) | 82`, which is the 1-minute and 5-minute figures of an
+idle machine, 0.06 and 0.08, glued into one word by a big-endian read of twice the width.
+The `int[3]` agreement with `uptime` confirms the ÷1024 scaling at the same time.
+
+`SGT_SINFO` CPU ticks were checked the same way rather than trusted for being non-zero: idle
+lucy read 4.8%, and with one `dd if=/dev/zero of=/dev/null` pinning one of its two CPUs it
+read 52.4%. A counter that had stuck at a plausible-looking value could not have tracked
+that.
 
 With this, `sysget` answers for memory, for the load average and for `SGT_SINFO` CPU ticks,
 all three unprivileged. `src/common/tess_inventory.c` uses it and keeps
