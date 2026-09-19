@@ -105,6 +105,7 @@ typedef struct Ui {
     int        origin_x;
     int        ctrl_x;
     int        ctrl_y;
+    int        ready;      /* the pixel machinery exists; resize may touch it */
     int        attach;
     int        dragging;
     int        drag_x0, drag_y0;
@@ -769,6 +770,15 @@ static void resize_cb(Widget w, XtPointer cd, XtPointer cb)
     Ui *u = (Ui *)cd;
     Dimension nw, nh;
 
+    /*
+     * Xt resizes children synchronously, so this fires from inside the
+     * XtVaSetValues that lays the windows out at startup - before the display,
+     * visual and framebuffer exist. XCreateImage then failed on a null
+     * display. Nothing here is safe until the pixel machinery is built.
+     */
+    if (!u->ready) {
+        return;
+    }
     XtVaGetValues(w, XmNwidth, &nw, XmNheight, &nh, NULL);
     if ((int)nw == u->width && (int)nh == u->height) {
         return;
@@ -1435,6 +1445,7 @@ int main(int argc, char **argv)
         die("out of memory");
     }
     recreate_ximage(&u);
+    u.ready = 1;
 
     {
         XGCValues gcv;
