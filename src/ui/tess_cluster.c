@@ -62,6 +62,7 @@ struct TessCluster {
 
     pid_t       child;
     int         tries;
+    int         relaunch;
     int         stopstage;
     XtIntervalId stopt;
     XtAppContext app;
@@ -293,7 +294,7 @@ static void refresh_rows(TessCluster *c)
         {
             int compute = c->host[i].ranks - (i == 0 ? 1 : 0);
 
-            if (compute < 0) {
+            if (compute < 0 || !c->host[i].enabled) {
                 compute = 0;
             }
             if (c->host[i].reachable) {
@@ -413,10 +414,19 @@ void tess_cluster_launch(TessCluster *c)
     char spec[TESS_MAX_HOSTS][512];
     char ranks[TESS_MAX_HOSTS][16];
     char portstr[16];
-    int argc, i, groups;
+    int argc, i, groups, ranks_here;
 
+    /*
+     * Start means apply. A change to the host set or the rank counts only
+     * reaches the cluster through a new mpirun, so pressing Start with a job
+     * running stops it first and relaunches: DESIGN.md section 2's "changing
+     * the cluster relaunches the job", rather than a button that silently does
+     * nothing because something is already running.
+     */
     if (c->child > 0) {
-        clog(c, "already running%s%d", "", 0);
+        c->relaunch = 1;
+        clog(c, "restarting to apply the new cluster%s%d", "", 0);
+        tess_cluster_stop(c);
         return;
     }
 
@@ -438,14 +448,28 @@ void tess_cluster_launch(TessCluster *c)
 
     groups = 0;
     for (i = 0; i < c->nhosts && argc < 50; i++) {
-        if (!c->host[i].enabled || !c->host[i].reachable ||
-            c->host[i].ranks <= 0) {
+        ranks_here = c->host[i].ranks;
+        if (i == 0) {
+            /*
+             * The master runs where the GUI runs: it listens on loopback and
+             * the GUI connects to it there. So the display host cannot be
+             * switched off entirely - unticking it, or setting zero, means no
+             * compute here, master only.
+             */
+            if (!c->host[i].enabled || ranks_here < 1) {
+                ranks_here = 1;
+            }
+        } else if (!c->host[i].enabled || !c->host[i].reachable ||
+                   ranks_here <= 0) {
+            continue;
+        }
+        if (!c->host[i].reachable) {
             continue;
         }
         if (groups > 0) {
             argv[argc++] = ":";
         }
-        sprintf(ranks[i], "%d", c->host[i].ranks);
+        sprintf(ranks[i], "%d", ranks_here);
         sprintf(spec[i], "%s/build/%s/tess-node", c->tree, c->host[i].arch);
         argv[argc++] = c->host[i].name;
         argv[argc++] = ranks[i];
@@ -537,6 +561,10 @@ static void stop_step(XtPointer cd, XtIntervalId *id)
         XtSetSensitive(c->launchb, True);
         XtSetSensitive(c->stopb, False);
         stop_sweep(c);          /* remote ranks outlive mpirun often enough */
+        if (c->relaunch) {
+            c->relaunch = 0;
+            tess_cluster_launch(c);
+        }
         return;
     }
 

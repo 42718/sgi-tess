@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -194,6 +195,7 @@ static const TessParamDesc colour_params[] = {
 typedef struct WmMetrics {
     int decor_x, decor_y;      /* frame size minus client size */
     int border_x, border_y;    /* client position within the frame */
+    int pos_is_client;         /* does XmNx set the client or the frame? */
 } WmMetrics;
 
 static void wm_metrics_path(char *out, int len)
@@ -213,14 +215,15 @@ static void wm_metrics_load(WmMetrics *m)
     m->decor_y = 40;
     m->border_x = 8;
     m->border_y = 30;
+    m->pos_is_client = 0;      /* most window managers place the frame */
 
     wm_metrics_path(path, (int)sizeof path);
     f = fopen(path, "r");
     if (!f) {
         return;
     }
-    fscanf(f, "%d %d %d %d", &m->decor_x, &m->decor_y, &m->border_x,
-           &m->border_y);
+    fscanf(f, "%d %d %d %d %d", &m->decor_x, &m->decor_y, &m->border_x,
+           &m->border_y, &m->pos_is_client);
     fclose(f);
 }
 
@@ -234,8 +237,8 @@ static void wm_metrics_save(const WmMetrics *m)
     if (!f) {
         return;
     }
-    fprintf(f, "%d %d %d %d\n", m->decor_x, m->decor_y, m->border_x,
-            m->border_y);
+    fprintf(f, "%d %d %d %d %d\n", m->decor_x, m->decor_y, m->border_x,
+            m->border_y, m->pos_is_client);
     fclose(f);
 }
 
@@ -1457,8 +1460,17 @@ int main(int argc, char **argv)
          * client". The decoration is an estimate at this point; the panel is
          * placed later from a measurement, so the pair still meets exactly.
          */
+        /*
+         * Where the frame should start, plus the client offset only if this
+         * window manager reads a position as the client's. Which of the two it
+         * does is measured below and remembered: assuming either way has been
+         * wrong once each, and the error is exactly one border.
+         */
         u.origin_x = sw - (u.width + wm.decor_x + TESS_GAP + TESS_CTRL_W +
-                           wm.decor_x) + wm.border_x;
+                           wm.decor_x);
+        if (wm.pos_is_client) {
+            u.origin_x += wm.border_x;
+        }
         if (u.origin_x < 0) {
             u.origin_x = 0;
         }
@@ -1579,6 +1591,23 @@ int main(int argc, char **argv)
         wm.decor_y = fhgt - u.height;
         wm.border_x = u.border_x;
         wm.border_y = u.border_y;
+
+        /*
+         * We asked for origin_x. If the FRAME landed there, the window manager
+         * reads a position as the frame's; if the CLIENT did, it reads it as
+         * the client's. One comparison settles a question that has cost four
+         * rounds of windows a border out of place.
+         */
+        {
+            int asked = u.origin_x;
+            int client_x = fx + u.border_x;
+
+            if (abs(client_x - asked) < abs(fx - asked)) {
+                wm.pos_is_client = 1;
+            } else {
+                wm.pos_is_client = 0;
+            }
+        }
         if (wm.decor_x < 0) {
             wm.decor_x = 0;
         }
@@ -1587,16 +1616,21 @@ int main(int argc, char **argv)
         }
         wm_metrics_save(&wm);
 
-        u.ctrl_x = fx + fwid + TESS_GAP + u.border_x;
-        u.ctrl_y = fy + u.border_y;
+        u.ctrl_x = fx + fwid + TESS_GAP;
+        u.ctrl_y = fy;
+        if (wm.pos_is_client) {
+            u.ctrl_x += u.border_x;
+            u.ctrl_y += u.border_y;
+        }
 
         {
             char msg[160];
 
             sprintf(msg,
-                    "display %dx%d render %dx%d frame %d,%d %dx%d border %d,%d",
-                    u.screen_w, u.screen_h, u.width, u.height, fx, fy,
-                    fwid, fhgt, u.border_x, u.border_y);
+                    "render %dx%d frame %d,%d %dx%d border %d,%d pos=%s",
+                    u.width, u.height, fx, fy, fwid, fhgt,
+                    u.border_x, u.border_y,
+                    wm.pos_is_client ? "client" : "frame");
             u.pending_log[0] = '\0';
             strncpy(u.pending_log, msg, sizeof u.pending_log - 1);
         }
