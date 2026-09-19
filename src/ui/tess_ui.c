@@ -87,7 +87,6 @@ typedef struct Ui {
     Widget     clusterframe;
     TessCluster *cl;
     Widget     elapsed;
-    Widget     transport;
     TessParamPane *view_pane;
     TessParamPane *colour_pane;
     UiValues   val;
@@ -451,11 +450,8 @@ static void stats_expose_cb(Widget w, XtPointer cd, XtPointer cb)
 static void transport_update(Ui *u)
 {
     char t[96];
-    XmString s;
 
-    if (!u->transport) {
-        return;
-    }
+
     if (!u->tr.known) {
         strcpy(t, "transport:  MPT will not say");
     } else if (u->tr.kb_gm > u->tr.kb_tcp) {
@@ -471,9 +467,9 @@ static void transport_update(Ui *u)
     } else {
         strcpy(t, "transport:  nothing measured yet");
     }
-    s = XmStringCreateLocalized(t);
-    XtVaSetValues(u->transport, XmNlabelString, s, NULL);
-    XmStringFree(s);
+    if (u->cl) {
+        tess_cluster_set_transport(u->cl, t);
+    }
 }
 
 static void set_status(Ui *u, const char *text)
@@ -930,9 +926,13 @@ static void tick_cb(XtPointer cd, XtIntervalId *id)
     if (u->cl && tess_cluster_dirty(u->cl)) {
         set_status(u, "cluster changed - press Restart for it to take effect");
     }
-    /* Poll for load only when no job is running: while one is, the tiles
-       carry it, which costs nothing and works during the render. */
-    if (++u->ticks % 5 == 0 && u->cl && !tess_cluster_running(u->cl)) {
+    /*
+     * Poll for load whenever nothing is rendering. During a render the tiles
+     * carry it for free; between renders they stop, and the numbers used to
+     * freeze at whatever the last frame left behind. Being idle is the
+     * condition, not being stopped.
+     */
+    if (++u->ticks % 5 == 0 && u->cl && u->epoch_t0 <= 0.0) {
         tess_cluster_poll(u->cl);
     }
     u->tick = XtAppAddTimeOut(u->app, 200, tick_cb, (XtPointer)u);
@@ -1526,16 +1526,6 @@ static void build_control(Ui *u)
                   XmNrightAttachment, XmATTACH_FORM,
                   NULL);
 
-    u->transport = XtVaCreateManagedWidget("transport:  not measured yet",
-                                           xmLabelWidgetClass, form,
-                                           XmNalignment, XmALIGNMENT_BEGINNING,
-                                           XmNtopAttachment, XmATTACH_WIDGET,
-                                           XmNtopWidget,
-                                           tess_cluster_widget(u->cl),
-                                           XmNleftAttachment, XmATTACH_FORM,
-                                           XmNrightAttachment, XmATTACH_FORM,
-                                           NULL);
-
     u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
     XtVaSetValues(u->log,
                   XmNeditable, False,
@@ -1545,7 +1535,7 @@ static void build_control(Ui *u)
                   NULL);
     XtVaSetValues(XtParent(u->log),
                   XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, u->transport,
+                  XmNtopWidget, tess_cluster_widget(u->cl),
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
                   XmNbottomAttachment, XmATTACH_FORM,

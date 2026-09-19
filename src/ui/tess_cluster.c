@@ -50,6 +50,7 @@ struct TessCluster {
     Widget      rankf[TESS_MAX_HOSTS];
     Widget      onbox[TESS_MAX_HOSTS];
     Widget      state;
+    Widget      transport;
     Widget      launchb;
     Widget      stopb;
 
@@ -340,7 +341,23 @@ static void refresh_rows(TessCluster *c)
  * these machines, while tess-probe over arshell is proven and already running.
  * So the panel uses the proven path now, and PCP can replace it when someone
  * confirms what it actually offers here.
+ *
+ * The caller decides when: during a render the tiles carry the load for free,
+ * so this is for the time in between, when a job is alive but idle and the
+ * numbers would otherwise freeze at whatever the last frame left behind.
  */
+void tess_cluster_set_transport(TessCluster *c, const char *text)
+{
+    XmString s;
+
+    if (!c->transport) {
+        return;
+    }
+    s = XmStringCreateLocalized((char *)text);
+    XtVaSetValues(c->transport, XmNlabelString, s, NULL);
+    XmStringFree(s);
+}
+
 void tess_cluster_set_load(TessCluster *c, int rank, double load)
 {
     int cpu = 0;
@@ -364,9 +381,6 @@ void tess_cluster_poll(TessCluster *c)
 {
     int i, saved;
 
-    if (c->child > 0) {
-        return;                 /* a running job needs the CPUs, not this */
-    }
     for (i = 0; i < c->nhosts; i++) {
         saved = c->host[i].ranks;
         probe_host(c, i);
@@ -764,6 +778,12 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                             XmNchildType, XmFRAME_TITLE_CHILD, NULL);
     rc = XtVaCreateManagedWidget("clrc", xmRowColumnWidgetClass, c->frame,
                                  XmNorientation, XmVERTICAL, NULL);
+
+    /* First line in the box: which fabric this cluster is actually using. */
+    c->transport = XtVaCreateManagedWidget("transport:  not measured yet",
+                                           xmLabelWidgetClass, rc,
+                                           XmNalignment,
+                                           XmALIGNMENT_BEGINNING, NULL);
 
     {
         Widget hdr = XtVaCreateManagedWidget("hdr", xmFormWidgetClass, rc,

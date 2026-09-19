@@ -61,6 +61,9 @@ const char *tess_cluster_rank_colour(TessCluster *c, int rank);
 void tess_cluster_rescan(TessCluster *c);
 void tess_cluster_poll(TessCluster *c);      /* load averages only */
 
+/* The transport line, which belongs to the cluster rather than to a frame. */
+void tess_cluster_set_transport(TessCluster *c, const char *text);
+
 /* Live load for a host, from the tiles its ranks are returning. */
 void tess_cluster_set_load(TessCluster *c, int rank, double load);
 
