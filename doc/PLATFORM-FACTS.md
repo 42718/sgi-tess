@@ -277,6 +277,17 @@ This matters for more than tidiness: `sysget` is the *unprivileged* path. The pr
 root. If `MP_SAGET` turns out to need privilege, memory reads zero as soon as anything runs
 as an ordinary user, so the correct `sysget` call is still worth having.
 
+## arshell needs root here, so tess-ui does too (19 September 2026, measured)
+
+`tess-ui` discovers the cluster by running `tess-probe` over `arshell`. Run as an
+ordinary user the GUI got nothing back and every host showed "no answer"; run as root the
+same code discovered both machines immediately.
+
+So on this cluster the GUI is a root process, which follows from the Array Services
+configuration rather than from anything Tess does. Worth knowing before build 4 is used on
+arthur, and worth revisiting if the array is ever reconfigured with per-user
+authentication, because a root GUI is not something to keep by choice.
+
 ## MPI_NAP does not stop a parked rank spinning (19 September 2026, measured)
 
 `MPI(1)` presents `MPI_NAP` as the answer to an idle rank pegging a CPU: undefined
