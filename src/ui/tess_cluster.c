@@ -427,11 +427,24 @@ static void probe_load_only(TessCluster *c, int i)
             h->name, c->tree, h->arch);
     if (run_capture(cmd, line, (int)sizeof line) != 0 ||
         !strstr(line, "cpus=")) {
+        if (h->load >= 0.0) {
+            /* Say it once, on the transition, rather than every second. */
+            clog1(c, "load poll: no probe line from:");
+            clog1(c, cmd);
+        }
         h->load = -1.0;
         return;
     }
     lp = strstr(line, "busy=");
-    h->load = lp ? atof(lp + 5) : -1.0;
+    if (!lp) {
+        if (h->load >= 0.0) {
+            clog1(c, "load poll: probe line has no busy= field, stale binary?");
+            clog1(c, line);
+        }
+        h->load = -1.0;
+        return;
+    }
+    h->load = atof(lp + 5);
 }
 
 /*
