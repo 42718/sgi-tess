@@ -9,10 +9,20 @@ failure mode we actually hit, it says so.
 
 ## 1. What you need
 
+**Every machine must be 64-bit MIPS, R10000-class or later.** The build is `-64 -mips4`
+with no per-machine tuning, because `doc/DESIGN.md` section 8 requires identical machine
+code on every host: tiles computed on different machines have to land on the same
+escape-time boundaries, and they will not if the floating point differs. `-mips4` means
+R8000, R10000, R12000, R14000 or R16000. An R4400 Indy or an R5000 O2 cannot run these
+binaries, and building `-mips3` for them would break the identical-output guarantee rather
+than just running slower. Verified here on IP30 (R14000) and IP35 (R16000); IP27 (R12000)
+is the same family.
+
 **On every machine that will compute or display:**
 
 | | |
 |---|---|
+| Hardware | 64-bit MIPS, R10000-class or later. `uname -m` gives IP27, IP30, IP35 |
 | IRIX | 6.5.30 (6.5.x should be fine; the statistics calls are 6.5 APIs) |
 | Compiler | MIPSpro 7.4.4m. `cc`, not gcc: the build is `-64 -mips4` |
 | MPI | SGI MPT 1.9 (MPI 4.4). Needs `libmpi` and `mpirun` on `PATH` |
