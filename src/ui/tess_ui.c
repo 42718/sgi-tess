@@ -418,9 +418,12 @@ static void stats_draw(Ui *u)
             } else if (u->tr.kb_tcp > 0) {
                 sprintf(t, "transport: TCP  %lu KB",
                         (unsigned long)u->tr.kb_tcp);
-            } else if (u->tr.kb_shmem > 0 || u->tr.kb_xpmem > 0) {
-                sprintf(t, "transport: on-host  %lu KB",
-                        (unsigned long)(u->tr.kb_shmem + u->tr.kb_xpmem));
+            } else if (u->tr.kb_hippi > 0) {
+                sprintf(t, "transport: HIPPI  %lu KB",
+                        (unsigned long)u->tr.kb_hippi);
+            } else if (u->tr.kb_shmem > 0) {
+                sprintf(t, "transport: shared memory  %lu KB",
+                        (unsigned long)u->tr.kb_shmem);
             } else {
                 strcpy(t, "transport: nothing measured yet");
             }
@@ -859,7 +862,7 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
         u->tr.kb_gm = tess_get_u32(buf + 4);
         u->tr.kb_gsn = tess_get_u32(buf + 8);
         u->tr.kb_shmem = tess_get_u32(buf + 12);
-        u->tr.kb_xpmem = tess_get_u32(buf + 16);
+        u->tr.kb_hippi = tess_get_u32(buf + 16);
         u->tr.known = tess_get_u32(buf + 20);
         cluster_update(u);
     } else if (type == TESS_MSG_DONE) {

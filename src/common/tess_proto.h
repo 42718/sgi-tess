@@ -77,7 +77,7 @@ typedef struct TessTransport {
     tess_u32 kb_gm;
     tess_u32 kb_gsn;
     tess_u32 kb_shmem;
-    tess_u32 kb_xpmem;
+    tess_u32 kb_hippi;
     tess_u32 known;        /* 0: MPT would not tell us */
 } TessTransport;
 

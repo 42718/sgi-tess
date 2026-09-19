@@ -518,32 +518,53 @@ static void read_transport(TessTransport *t)
     memset((char *)t, 0, sizeof *t);
 #if TESS_HAVE_MPI_EXT
     {
-        long long v = 0;
+        /*
+         * The real call, from doc/mpt/man/MPI_SGI_stat.txt and the constants in
+         * doc/mpt/include/mpi_ext.h:
+         *
+         *   MPI_SGI_stat_get(unsigned int stats_num, unsigned int *stat_types,
+         *                    __uint64_t *stat_values, __uint64_t *stat_gen)
+         *
+         * It takes arrays and returns void: stats_num counters named by index
+         * in stat_types, values out through stat_values, and stat_gen counting
+         * how often each counter has been reset. My first attempt passed
+         * counter names as strings and tested a return code, which is what
+         * happens when the shape of a description is mistaken for an API.
+         *
+         * Not thread-safe, so it is called here and only here, on the master's
+         * single MPI thread.
+         */
+        unsigned int types[5];
+        __uint64_t values[5];
+        __uint64_t gen[5];
+        int support[5];
+        int i;
 
-        if (MPI_SGI_stat_get("BYTES_PT2PT_TCP", &v) == MPI_SUCCESS) {
-            t->kb_tcp = (tess_u32)(v / 1024);
-            t->known = 1;
+        types[0] = MPI_SGI_BYTES_PT2PT_TCP;
+        types[1] = MPI_SGI_BYTES_PT2PT_GM;
+        types[2] = MPI_SGI_BYTES_PT2PT_GSN;
+        types[3] = MPI_SGI_BYTES_PT2PT_SHMEM;
+        types[4] = MPI_SGI_BYTES_PT2PT_HIPPI;
+
+        for (i = 0; i < 5; i++) {
+            values[i] = 0;
+            gen[i] = 0;
+            support[i] = 0;
         }
-        v = 0;
-        if (MPI_SGI_stat_get("BYTES_PT2PT_GM", &v) == MPI_SUCCESS) {
-            t->kb_gm = (tess_u32)(v / 1024);
-            t->known = 1;
+
+        MPI_SGI_stat_support(5, types, support);
+        MPI_SGI_stat_get(5, types, values, gen);
+
+        for (i = 0; i < 5; i++) {
+            if (support[i]) {
+                t->known = 1;
+            }
         }
-        v = 0;
-        if (MPI_SGI_stat_get("BYTES_PT2PT_GSN", &v) == MPI_SUCCESS) {
-            t->kb_gsn = (tess_u32)(v / 1024);
-            t->known = 1;
-        }
-        v = 0;
-        if (MPI_SGI_stat_get("BYTES_PT2PT_SHMEM", &v) == MPI_SUCCESS) {
-            t->kb_shmem = (tess_u32)(v / 1024);
-            t->known = 1;
-        }
-        v = 0;
-        if (MPI_SGI_stat_get("BYTES_PT2PT_XPMEM", &v) == MPI_SUCCESS) {
-            t->kb_xpmem = (tess_u32)(v / 1024);
-            t->known = 1;
-        }
+        t->kb_tcp   = (tess_u32)(values[0] / 1024);
+        t->kb_gm    = (tess_u32)(values[1] / 1024);
+        t->kb_gsn   = (tess_u32)(values[2] / 1024);
+        t->kb_shmem = (tess_u32)(values[3] / 1024);
+        t->kb_hippi = (tess_u32)(values[4] / 1024);
     }
 #endif
 }
@@ -784,7 +805,7 @@ replay:
                     tn += tess_put_u32(tb + tn, tr.kb_gm);
                     tn += tess_put_u32(tb + tn, tr.kb_gsn);
                     tn += tess_put_u32(tb + tn, tr.kb_shmem);
-                    tn += tess_put_u32(tb + tn, tr.kb_xpmem);
+                    tn += tess_put_u32(tb + tn, tr.kb_hippi);
                     tn += tess_put_u32(tb + tn, tr.known);
                     if (tess_frame_write(cfd, TESS_MSG_STATS, tb, tn) != 0) {
                         break;
