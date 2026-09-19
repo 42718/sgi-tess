@@ -67,6 +67,7 @@ struct TessCluster {
     int         relaunch;
     int         dirty;          /* config changed since the job started */
     int         stopstage;
+    int         pollhost;       /* idle poll visits one host per tick */
     XtIntervalId stopt;
     XtAppContext app;
     XtIntervalId poll;
@@ -403,15 +404,55 @@ int tess_cluster_dirty(TessCluster *c)
     return c->child > 0 && c->dirty;
 }
 
+/*
+ * Load only, for the idle poll.
+ *
+ * The architecture and the CPU counts came from the scan and do not change
+ * between renders, so this skips the uname round trip and reads nothing but
+ * busy=. It also leaves reachable and note alone: a host that stops answering
+ * for one second has not been rediscovered as broken, and overwriting the
+ * discovery note would throw away why it was unreachable in the first place.
+ */
+static void probe_load_only(TessCluster *c, int i)
+{
+    TessHost *h = &c->host[i];
+    const char *lp;
+    char cmd[512];
+    char line[512];
+
+    if (!h->arch[0] || !h->reachable) {
+        return;
+    }
+    sprintf(cmd, "arshell %s %s/build/%s/tess-probe 2>&1",
+            h->name, c->tree, h->arch);
+    if (run_capture(cmd, line, (int)sizeof line) != 0 ||
+        !strstr(line, "cpus=")) {
+        h->load = -1.0;
+        return;
+    }
+    lp = strstr(line, "busy=");
+    h->load = lp ? atof(lp + 5) : -1.0;
+}
+
+/*
+ * One host per call, round robin.
+ *
+ * run_capture is synchronous, so every host visited here is a blocked event
+ * loop: two arshell invocations plus the probe's own 200 ms sample. Doing all
+ * of them once a second was most of a second of frozen interface, every
+ * second, for as long as nothing was rendering. One host per tick keeps each
+ * stall short and still refreshes a two-host cluster every two seconds.
+ */
 void tess_cluster_poll(TessCluster *c)
 {
-    int i, saved;
-
-    for (i = 0; i < c->nhosts; i++) {
-        saved = c->host[i].ranks;
-        probe_host(c, i);
-        c->host[i].ranks = saved;
+    if (c->nhosts < 1) {
+        return;
     }
+    c->pollhost++;
+    if (c->pollhost >= c->nhosts) {
+        c->pollhost = 0;
+    }
+    probe_load_only(c, c->pollhost);
     refresh_rows(c);
 }
 

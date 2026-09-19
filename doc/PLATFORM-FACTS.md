@@ -306,6 +306,14 @@ lucy read 4.8%, and with one `dd if=/dev/zero of=/dev/null` pinning one of its t
 read 52.4%. A counter that had stuck at a plausible-looking value could not have tracked
 that.
 
+Confirmed on both architectures, 19 September 2026:
+
+| | lucy (IP30) | aurora (IP35) |
+|---|---|---|
+| memory | `sysget(SGT_RMINFO) ok`, 2560 MB | `sysget(SGT_RMINFO) ok`, 4096 MB |
+| load | 0.20, matching `uptime` | 0.12 |
+| busy | 4.8% idle, 52.4% with one CPU pinned | 1.2% idle |
+
 With this, `sysget` answers for memory, for the load average and for `SGT_SINFO` CPU ticks,
 all three unprivileged. `src/common/tess_inventory.c` uses it and keeps
 `sysmp(MP_SAGET, …)` only as a fallback; `-v` names whichever answered. That the
