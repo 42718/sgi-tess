@@ -97,10 +97,14 @@ typedef struct Ui {
     int        rshift, gshift, bshift;
     int        rbits, gbits, bbits;
 
-    GC         bandgc;          /* XOR, for the rubber band */
+    GC         bandgc;
+    GC         statsgc;
+    XFontStruct *statsfont;
+    Colormap   cmap;          /* XOR, for the rubber band */
     int        screen_w, screen_h;
     int        origin_x;
     int        ctrl_x;
+    int        ctrl_y;
     int        attach;
     int        dragging;
     int        drag_x0, drag_y0;
@@ -207,45 +211,132 @@ static void set_elapsed(Ui *u, const char *text)
  * carries the rank that computed it and how long it took, so who is pulling
  * their weight needs no extra protocol and no second connection.
  */
+static void stats_draw(Ui *u);
+
 static void cluster_update(Ui *u)
 {
-    char buf[1024];
-    char line[128];
-    int r, shown;
-
     if (!u->cluster) {
         return;
     }
-    sprintf(buf, "master   %s:%d\nranks    %d total, %d worker(s)\n",
-            u->host, u->port, u->ranks, u->workers);
-    sprintf(line, "epoch    %u, %d/%d tiles, %.0f KB in\n",
-            u->job.epoch, u->tiles_in, u->tiles_expected,
-            (double)u->bytes_in / 1024.0);
-    strcat(buf, line);
-    if (u->last_msec > 0.0) {
-        sprintf(line, "last     %.2f s\n", u->last_msec / 1000.0);
-        strcat(buf, line);
+    stats_draw(u);
+}
+
+/*
+ * Per-rank contribution, drawn rather than tabulated.
+ *
+ * One row per rank, named for the machine and CPU it is on rather than by an
+ * MPI number, with a bar in that machine's colour showing its share of the
+ * frame. The hues are the ones the design assigns per machine, and they are
+ * the same ones tile-ownership colouring will use, so the panel and the
+ * picture will agree.
+ */
+static unsigned long pix(Ui *u, const char *spec)
+{
+    XColor want, exact;
+
+    if (!XAllocNamedColor(u->dpy, u->cmap, (char *)spec, &want, &exact)) {
+        return BlackPixel(u->dpy, DefaultScreen(u->dpy));
     }
-    strcat(buf, "\nrank  tiles   avg ms   share\n");
+    return want.pixel;
+}
 
-    shown = 0;
-    for (r = 1; r < 64 && shown < 12; r++) {
-        if (u->rank_tiles[r] > 0) {
-            double avg = u->rank_usec[r] / (double)u->rank_tiles[r] / 1000.0;
-            double share = u->tiles_in > 0 ?
-                           100.0 * (double)u->rank_tiles[r] /
-                           (double)u->tiles_in : 0.0;
+static void stats_draw(Ui *u)
+{
+    Display *d = u->dpy;
+    Window w;
+    Dimension wid, hgt;
+    char label[64];
+    char num[64];
+    int y, r, rows, barx, barw;
+    double share;
 
-            sprintf(line, "%4d  %5d  %7.1f  %4.0f%%\n", r, u->rank_tiles[r],
-                    avg, share);
-            strcat(buf, line);
-            shown++;
+    if (!XtIsRealized(u->cluster)) {
+        return;
+    }
+    w = XtWindow(u->cluster);
+    XtVaGetValues(u->cluster, XmNwidth, &wid, XmNheight, &hgt, NULL);
+
+    if (!u->statsgc) {
+        XGCValues gcv;
+
+        gcv.foreground = BlackPixel(d, DefaultScreen(d));
+        u->statsgc = XCreateGC(d, w, (unsigned long)GCForeground, &gcv);
+        if (u->statsfont) {
+            XSetFont(d, u->statsgc, u->statsfont->fid);
         }
     }
-    if (!shown) {
-        strcat(buf, "  (no tiles yet)\n");
+
+    XSetForeground(d, u->statsgc, pix(u, "#e4e7ea"));
+    XFillRectangle(d, w, u->statsgc, 0, 0, (unsigned)wid, (unsigned)hgt);
+
+    barx = 108;
+    barw = (int)wid - barx - 44;
+    if (barw < 20) {
+        barw = 20;
     }
-    XmTextSetString(u->cluster, buf);
+
+    y = 13;
+    XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
+    XDrawString(d, w, u->statsgc, 4, y, "node/cpu", 8);
+    XDrawString(d, w, u->statsgc, barx, y, "share of frame", 14);
+    y += 6;
+    XDrawLine(d, w, u->statsgc, 4, y, (int)wid - 6, y);
+
+    rows = 0;
+    for (r = 0; r < 64 && rows < 7; r++) {
+        if (u->rank_tiles[r] <= 0) {
+            continue;
+        }
+        y += 15;
+        rows++;
+        share = u->tiles_in > 0 ?
+                (double)u->rank_tiles[r] / (double)u->tiles_in : 0.0;
+
+        tess_cluster_rank_label(u->cl, r, label, (int)sizeof label);
+        XSetForeground(d, u->statsgc, pix(u, "#101519"));
+        XDrawString(d, w, u->statsgc, 4, y, label, (int)strlen(label));
+
+        XSetForeground(d, u->statsgc,
+                       pix(u, tess_cluster_rank_colour(u->cl, r)));
+        XFillRectangle(d, w, u->statsgc, barx, y - 8,
+                       (unsigned)(int)(share * (double)barw), 9);
+        XSetForeground(d, u->statsgc, pix(u, "#8f9298"));
+        XDrawRectangle(d, w, u->statsgc, barx, y - 8, (unsigned)barw, 9);
+
+        sprintf(num, "%d", u->rank_tiles[r]);
+        XSetForeground(d, u->statsgc, pix(u, "#101519"));
+        XDrawString(d, w, u->statsgc, barx + barw + 6, y, num,
+                    (int)strlen(num));
+    }
+
+    if (!rows) {
+        XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
+        XDrawString(d, w, u->statsgc, 4, y + 18, "idle - no tiles yet", 19);
+    }
+
+    /* A coloured state line: green while the frame is arriving, grey when
+       there is nothing to do. Visible from across the room, which is the
+       point of a status light. */
+    y = (int)hgt - 8;
+    XSetForeground(d, u->statsgc,
+                   pix(u, u->epoch_t0 > 0.0 ? "#5f9e4a" : "#a8b4bc"));
+    XFillRectangle(d, w, u->statsgc, 4, y - 9, 10, 10);
+    XSetForeground(d, u->statsgc, pix(u, "#101519"));
+    if (u->epoch_t0 > 0.0) {
+        sprintf(num, "rendering  %d/%d tiles  %d worker(s)", u->tiles_in,
+                u->tiles_expected, u->workers);
+    } else if (u->workers > 0) {
+        sprintf(num, "idle  %d worker(s)  last %.2f s", u->workers,
+                u->last_msec / 1000.0);
+    } else {
+        strcpy(num, "no cluster");
+    }
+    XDrawString(d, w, u->statsgc, 20, y, num, (int)strlen(num));
+}
+
+static void stats_expose_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    stats_draw((Ui *)cd);
 }
 
 static void set_status(Ui *u, const char *text)
@@ -877,7 +968,8 @@ static void home_cb(Widget w, XtPointer cd, XtPointer cb)
  * child of the root that contains our window, and the difference in their
  * geometries is the decoration.
  */
-static void wm_frame_extra(Display *d, Window w, int *ex, int *ey)
+static void wm_frame_geom(Display *d, Window w, int *fx, int *fy,
+                          int *fwid, int *fhgt)
 {
     Window root, parent, *kids;
     unsigned int nkids;
@@ -885,11 +977,17 @@ static void wm_frame_extra(Display *d, Window w, int *ex, int *ey)
     int x, y;
     unsigned int fw, fh, iw, ih, bw, depth;
 
-    *ex = 0;
-    *ey = 0;
+    *fx = 0;
+    *fy = 0;
+    *fwid = 0;
+    *fhgt = 0;
     if (!XGetGeometry(d, w, &root, &x, &y, &iw, &ih, &bw, &depth)) {
         return;
     }
+    *fwid = (int)iw;
+    *fhgt = (int)ih;
+    *fx = x;
+    *fy = y;
     frame = w;
     for (;;) {
         kids = (Window *)0;
@@ -905,15 +1003,17 @@ static void wm_frame_extra(Display *d, Window w, int *ex, int *ey)
         frame = parent;
     }
     if (frame == w) {
-        return;                     /* not reparented: no decoration to add */
+        return;                     /* not reparented: the window is the frame */
     }
     if (!XGetGeometry(d, frame, &root, &x, &y, &fw, &fh, &bw, &depth)) {
         return;
     }
-    *ex = (int)fw - (int)iw;
-    *ey = (int)fh - (int)ih;
-    if (*ex < 0) *ex = 0;
-    if (*ey < 0) *ey = 0;
+    /* Where the decorated window really is and how big it really is. Guessing
+       at the decoration was wrong three times; this asks. */
+    *fx = x;
+    *fy = y;
+    *fwid = (int)fw + 2 * (int)bw;
+    *fhgt = (int)fh + 2 * (int)bw;
 }
 
 /* The second top-level shell: same app context, no MPI, no blocking. */
@@ -926,7 +1026,7 @@ static void build_control(Ui *u)
                                     XtDisplay(u->toplevel),
                                     XmNtitle, "Tess control",
                                     XmNx, u->ctrl_x,
-                                    XmNy, TESS_GAP,
+                                    XmNy, u->ctrl_y,
                                     XmNwidth, TESS_CTRL_W,
                                     NULL);
     form = XtVaCreateManagedWidget("cform", xmFormWidgetClass, u->control,
@@ -990,15 +1090,12 @@ static void build_control(Ui *u)
         XtVaCreateManagedWidget("Cluster", xmLabelWidgetClass, cframe,
                                 XmNchildType, XmFRAME_TITLE_CHILD,
                                 NULL);
-        u->cluster = XmCreateText(cframe, "cluster", (ArgList)0, 0);
-        XtVaSetValues(u->cluster,
-                      XmNeditable, False,
-                      XmNeditMode, XmMULTI_LINE_EDIT,
-                      XmNcursorPositionVisible, False,
-                      XmNrows, 11,
-                      XmNcolumns, 40,
-                      NULL);
-        XtManageChild(u->cluster);
+        u->cluster = XtVaCreateManagedWidget("stats",
+                                             xmDrawingAreaWidgetClass, cframe,
+                                             XmNheight, 132,
+                                             NULL);
+        XtAddCallback(u->cluster, XmNexposeCallback, stats_expose_cb,
+                      (XtPointer)u);
         u->clusterframe = cframe;
     }
 
@@ -1229,11 +1326,11 @@ int main(int argc, char **argv)
      * window's frame rather than floating away from it.
      */
     {
-        int ex, ey;
+        int fx, fy, fwid, fhgt;
         Display *d = XtDisplay(u.toplevel);
 
         XSync(d, False);
-        wm_frame_extra(d, XtWindow(u.toplevel), &ex, &ey);
+        wm_frame_geom(d, XtWindow(u.toplevel), &fx, &fy, &fwid, &fhgt);
 
         /*
          * Only the control window is positioned from this measurement, and it
@@ -1243,14 +1340,15 @@ int main(int argc, char **argv)
          * exactly how the render window lost its title bar off the top of the
          * screen while the panel sat 40 pixels lower.
          */
-        /* origin_x is where we asked for the render frame before realizing
-           it, so its right edge is origin_x + width + the measured frame. */
-        u.ctrl_x = u.origin_x + u.width + ex + TESS_GAP;
+        /* The panel goes at the render window's actual right edge. */
+        u.ctrl_x = fx + fwid + TESS_GAP;
+        u.ctrl_y = fy;
         {
             char msg[160];
 
-            sprintf(msg, "display %dx%d, render %dx%d, wm frame %d x %d",
-                    u.screen_w, u.screen_h, u.width, u.height, ex, ey);
+            sprintf(msg, "display %dx%d, render %dx%d, frame at %d,%d %dx%d",
+                    u.screen_w, u.screen_h, u.width, u.height, fx, fy,
+                    fwid, fhgt);
             u.pending_log[0] = '\0';
             strncpy(u.pending_log, msg, sizeof u.pending_log - 1);
         }
@@ -1266,6 +1364,12 @@ int main(int argc, char **argv)
     u.dpy = XtDisplay(u.toplevel);
     u.visual = DefaultVisual(u.dpy, DefaultScreen(u.dpy));
     u.depth = DefaultDepth(u.dpy, DefaultScreen(u.dpy));
+    u.cmap = DefaultColormap(u.dpy, DefaultScreen(u.dpy));
+    u.statsfont = XLoadQueryFont(u.dpy,
+                                 "-*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1");
+    if (!u.statsfont) {
+        u.statsfont = XLoadQueryFont(u.dpy, "fixed");
+    }
     mask_decode(u.visual->red_mask, &u.rshift, &u.rbits);
     mask_decode(u.visual->green_mask, &u.gshift, &u.gbits);
     mask_decode(u.visual->blue_mask, &u.bshift, &u.bbits);

@@ -95,6 +95,74 @@ static void set_state(TessCluster *c, const char *text)
     XmStringFree(s);
 }
 
+/*
+ * Host hues, from design/ui-design.html: Octane blue, Origin green, Onyx
+ * purple, with an amber fallback for anything unrecognised. Matched on the
+ * machine type the probe reported, not on the hostname, so a new Origin gets
+ * the Origin colour without anyone editing a table.
+ */
+static const char *host_colour(const TessHost *h)
+{
+    if (strcmp(h->arch, "IP30") == 0) {
+        return "#4f8fbf";               /* Octane2 */
+    }
+    if (strcmp(h->arch, "IP35") == 0) {
+        return "#5f9e4a";               /* Origin 350 */
+    }
+    if (strcmp(h->arch, "IP27") == 0) {
+        return "#9a6cc0";               /* Onyx2 */
+    }
+    return "#c8863c";
+}
+
+/* rank -> which host, and which CPU of that host. -1 if it is past the end. */
+static int rank_to_host(TessCluster *c, int rank, int *cpu)
+{
+    int i, base = 0;
+
+    for (i = 0; i < c->nhosts; i++) {
+        if (c->host[i].ranks <= 0) {
+            continue;
+        }
+        if (rank < base + c->host[i].ranks) {
+            if (cpu) {
+                *cpu = rank - base;
+            }
+            return i;
+        }
+        base += c->host[i].ranks;
+    }
+    return -1;
+}
+
+int tess_cluster_rank_label(TessCluster *c, int rank, char *buf, int len)
+{
+    int cpu = 0;
+    int i = rank_to_host(c, rank, &cpu);
+
+    if (i < 0) {
+        sprintf(buf, "rank %d", rank);
+        return -1;
+    }
+    /*
+     * The display host's first rank is the master and computes nothing, so its
+     * workers start at cpu1. Everywhere else rank n is cpu n.
+     */
+    sprintf(buf, "%.20s/cpu%d", c->host[i].name, cpu);
+    buf[len - 1] = '\0';
+    return i;
+}
+
+const char *tess_cluster_rank_colour(TessCluster *c, int rank)
+{
+    int i = rank_to_host(c, rank, (int *)0);
+
+    if (i < 0) {
+        return "#8f9298";
+    }
+    return host_colour(&c->host[i]);
+}
+
 /* ------------------------------------------------------------ discovery */
 
 /*

@@ -45,6 +45,17 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                  void (*logf)(void *, const char *),
                                  void *logctx);
 
+/*
+ * Which machine and which CPU a rank landed on, and the colour that host owns.
+ *
+ * MPT assigns ranks in mpirun's group order, so the launch configuration is
+ * the mapping: group one takes the first ranks, group two the next, and so on.
+ * The hues are the ones design/ui-design.html assigns per machine, and they
+ * double as the tile-ownership colours in build 3.
+ */
+int tess_cluster_rank_label(TessCluster *c, int rank, char *buf, int len);
+const char *tess_cluster_rank_colour(TessCluster *c, int rank);
+
 void tess_cluster_rescan(TessCluster *c);
 void tess_cluster_launch(TessCluster *c);
 void tess_cluster_stop(TessCluster *c);
