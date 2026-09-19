@@ -94,6 +94,7 @@ typedef struct Ui {
     GC         bandgc;          /* XOR, for the rubber band */
     int        screen_w, screen_h;
     int        origin_x;
+    int        ctrl_x;
     int        dragging;
     int        drag_x0, drag_y0;
     int        drag_x1, drag_y1;
@@ -120,6 +121,7 @@ typedef struct Ui {
     double     last_msec;
     char       host[64];
     int        port;
+    char       pending_log[160];
 
     /* per-rank accounting, straight out of the tile headers */
     int        rank_tiles[64];
@@ -762,6 +764,53 @@ static void home_cb(Widget w, XtPointer cd, XtPointer cb)
     }
 }
 
+/*
+ * How much bigger the window manager makes a window than its contents.
+ *
+ * Guessing at this was wrong twice: too small and the windows overlap, too
+ * large and they drift apart with a gap. 4Dwm reparents, so the frame is the
+ * child of the root that contains our window, and the difference in their
+ * geometries is the decoration.
+ */
+static void wm_frame_extra(Display *d, Window w, int *ex, int *ey)
+{
+    Window root, parent, *kids;
+    unsigned int nkids;
+    Window frame;
+    int x, y;
+    unsigned int fw, fh, iw, ih, bw, depth;
+
+    *ex = 0;
+    *ey = 0;
+    if (!XGetGeometry(d, w, &root, &x, &y, &iw, &ih, &bw, &depth)) {
+        return;
+    }
+    frame = w;
+    for (;;) {
+        kids = (Window *)0;
+        if (!XQueryTree(d, frame, &root, &parent, &kids, &nkids)) {
+            return;
+        }
+        if (kids) {
+            XFree((char *)kids);
+        }
+        if (parent == root || parent == 0) {
+            break;
+        }
+        frame = parent;
+    }
+    if (frame == w) {
+        return;                     /* not reparented: no decoration to add */
+    }
+    if (!XGetGeometry(d, frame, &root, &x, &y, &fw, &fh, &bw, &depth)) {
+        return;
+    }
+    *ex = (int)fw - (int)iw;
+    *ey = (int)fh - (int)ih;
+    if (*ex < 0) *ex = 0;
+    if (*ey < 0) *ey = 0;
+}
+
 /* The second top-level shell: same app context, no MPI, no blocking. */
 static void build_control(Ui *u)
 {
@@ -771,8 +820,7 @@ static void build_control(Ui *u)
                                     topLevelShellWidgetClass,
                                     XtDisplay(u->toplevel),
                                     XmNtitle, "Tess control",
-                                    XmNx, u->origin_x + u->width +
-                                          TESS_GAP + 2 * TESS_DECOR,
+                                    XmNx, u->ctrl_x,
                                     XmNy, TESS_GAP,
                                     XmNwidth, TESS_CTRL_W,
                                     NULL);
@@ -993,14 +1041,12 @@ int main(int argc, char **argv)
             }
         }
 
-        u.origin_x = sw - (u.width + TESS_CTRL_W + TESS_GAP + 2 * TESS_DECOR);
-        if (u.origin_x < 0) {
-            u.origin_x = 0;
-        }
-        XtVaSetValues(u.toplevel,
-                      XmNx, u.origin_x,
-                      XmNy, TESS_GAP,
-                      NULL);
+        /*
+         * The opening view is framed from the window we actually got, not from
+         * a hardcoded 1024: 3.2 units across whatever width this is, so the set
+         * sits in the frame at any aspect or screen size.
+         */
+        u.job.scale = 3.2 / (double)u.width;
     }
 
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,
@@ -1036,8 +1082,41 @@ int main(int argc, char **argv)
 
     XtRealizeWidget(u.toplevel);
 
+    /*
+     * Now that the render window exists, ask the window manager what it did to
+     * it, and lay both windows out from the measurement: together they occupy
+     * TESS_USE of the screen, flush right, with the panel touching the render
+     * window's frame rather than floating away from it.
+     */
+    {
+        int ex, ey, total;
+        Display *d = XtDisplay(u.toplevel);
+
+        XSync(d, False);
+        wm_frame_extra(d, XtWindow(u.toplevel), &ex, &ey);
+
+        total = (int)((double)u.screen_w * TESS_USE);
+        u.origin_x = u.screen_w - total;
+        if (u.origin_x < 0) {
+            u.origin_x = 0;
+        }
+        u.ctrl_x = u.origin_x + u.width + ex + TESS_GAP;
+        XtVaSetValues(u.toplevel, XmNx, u.origin_x, XmNy, TESS_GAP, NULL);
+        {
+            char msg[160];
+
+            sprintf(msg, "display %dx%d, render %dx%d, wm frame %d x %d",
+                    u.screen_w, u.screen_h, u.width, u.height, ex, ey);
+            u.pending_log[0] = '\0';
+            strncpy(u.pending_log, msg, sizeof u.pending_log - 1);
+        }
+    }
+
     job_to_values(&u);
     build_control(&u);
+    if (u.pending_log[0]) {
+        ui_log(&u, u.pending_log);
+    }
     u.tick = XtAppAddTimeOut(app, 200, tick_cb, (XtPointer)&u);
 
     u.dpy = XtDisplay(u.toplevel);
