@@ -1,0 +1,543 @@
+/*
+ * tess_node.c - the MPI half of Tess: one master, N workers.
+ *
+ * Rank 0 is the master. It owns the tile queue, hands tiles out on request,
+ * collects results, and either writes a PPM (-o) or serves them to the GUI over
+ * a socket (-listen). It computes nothing itself, which is DESIGN.md section 3b:
+ * the display host runs X, the GUI and the shading pass, and 3-10% of throughput
+ * is worth paying to keep it responsive.
+ *
+ * Ranks 1..N-1 are workers: ask, compute, return, ask again. Credit-based
+ * prefetch is not in v1.
+ *
+ *   mpirun ... lucy 1 tess-node -listen : aurora 4 tess-node -listen
+ *   mpirun ... lucy 1 tess-node -o out.ppm -w 1920 -h 1200 : aurora 4 ...
+ *
+ * C89 throughout. No Motif, ever: this binary never links X.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+
+#include <mpi.h>
+
+#include "tess_types.h"
+#include "tess_proto.h"
+#include "tess_wire.h"
+#include "tess_mandel.h"
+#include "tess_inventory.h"
+
+typedef struct Tile {
+    tess_u32 x, y, w, h;
+    int      order;          /* centre-out rank, smaller is sooner */
+} Tile;
+
+static double now_sec(void)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, (struct timezone *)0);
+    return (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
+}
+
+/* ---------------------------------------------------------------- tiles */
+
+static int tile_cmp(const void *pa, const void *pb)
+{
+    const Tile *a = (const Tile *)pa;
+    const Tile *b = (const Tile *)pb;
+
+    if (a->order < b->order) return -1;
+    if (a->order > b->order) return 1;
+    return 0;
+}
+
+/*
+ * Centre-out, because the interesting part of a fractal is the middle and a
+ * human watching the frame fill should see it resolve there first.
+ * DESIGN.md section 3.
+ */
+static Tile *plan_tiles(const TessJob *j, int *ntiles)
+{
+    Tile *t;
+    unsigned int x, y;
+    int n, cap;
+    double cxp, cyp, dx, dy;
+
+    cap = (int)(((j->width + j->tile - 1) / j->tile) *
+                ((j->height + j->tile - 1) / j->tile));
+    t = (Tile *)malloc((size_t)cap * sizeof(Tile));
+    if (!t) {
+        *ntiles = 0;
+        return (Tile *)0;
+    }
+
+    cxp = (double)j->width * 0.5;
+    cyp = (double)j->height * 0.5;
+    n = 0;
+    for (y = 0; y < j->height; y += j->tile) {
+        for (x = 0; x < j->width; x += j->tile) {
+            t[n].x = x;
+            t[n].y = y;
+            t[n].w = (x + j->tile <= j->width) ? j->tile : j->width - x;
+            t[n].h = (y + j->tile <= j->height) ? j->tile : j->height - y;
+            dx = ((double)x + (double)t[n].w * 0.5) - cxp;
+            dy = ((double)y + (double)t[n].h * 0.5) - cyp;
+            t[n].order = (int)(dx * dx + dy * dy);
+            n++;
+        }
+    }
+    qsort((void *)t, (size_t)n, sizeof(Tile), tile_cmp);
+    *ntiles = n;
+    return t;
+}
+
+/* ---------------------------------------------------------------- worker */
+
+static void worker_loop(int rank)
+{
+    TessAssign a;
+    TessResultHdr rh;
+    MPI_Status st;
+    tess_u8 *buf;
+    int req;
+    double t0;
+
+    buf = (tess_u8 *)malloc((size_t)TESS_MAX_TILE * TESS_MAX_TILE *
+                            TESS_BYTES_PER_PX);
+    if (!buf) {
+        fprintf(stderr, "rank %d: out of memory\n", rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    for (;;) {
+        req = rank;
+        MPI_Send(&req, 1, MPI_INT, 0, TESS_TAG_REQ, MPI_COMM_WORLD);
+        MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+        if (st.MPI_TAG == TESS_TAG_STOP) {
+            MPI_Recv(&req, 1, MPI_INT, 0, TESS_TAG_STOP, MPI_COMM_WORLD, &st);
+            break;
+        }
+        MPI_Recv((void *)&a, (int)sizeof a, MPI_BYTE, 0, TESS_TAG_ASSIGN,
+                 MPI_COMM_WORLD, &st);
+
+        t0 = now_sec();
+        tess_mandel_tile(&a, buf);
+
+        rh.epoch = a.epoch;
+        rh.x = a.x;
+        rh.y = a.y;
+        rh.w = a.w;
+        rh.h = a.h;
+        rh.rank = (tess_u32)rank;
+        rh.usec = (tess_u32)((now_sec() - t0) * 1e6);
+        MPI_Send((void *)&rh, (int)sizeof rh, MPI_BYTE, 0, TESS_TAG_RESULT,
+                 MPI_COMM_WORLD);
+        MPI_Send((void *)buf, (int)(a.w * a.h * TESS_BYTES_PER_PX), MPI_BYTE, 0,
+                 TESS_TAG_RESULT, MPI_COMM_WORLD);
+    }
+    free((void *)buf);
+}
+
+/* ---------------------------------------------------------------- master */
+
+/*
+ * Run one epoch to completion, calling sink() for each tile as it lands.
+ * Returns tiles completed. The sink is what makes this reusable: PPM assembly
+ * and the GUI socket are the same loop with a different sink.
+ */
+typedef void (*TileSink)(void *ctx, const TessResultHdr *rh, const tess_u8 *px);
+
+static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
+{
+    Tile *tiles;
+    TessAssign a;
+    TessResultHdr rh;
+    MPI_Status st;
+    tess_u8 *px;
+    int ntiles, next, done, live, src, req, stop;
+
+    tiles = plan_tiles(job, &ntiles);
+    if (!tiles) {
+        return 0;
+    }
+    px = (tess_u8 *)malloc((size_t)TESS_MAX_TILE * TESS_MAX_TILE *
+                           TESS_BYTES_PER_PX);
+    if (!px) {
+        free((void *)tiles);
+        return 0;
+    }
+
+    next = 0;
+    done = 0;
+    live = nranks - 1;
+
+    while (done < ntiles && live > 0) {
+        MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+        src = st.MPI_SOURCE;
+
+        if (st.MPI_TAG == TESS_TAG_REQ) {
+            MPI_Recv(&req, 1, MPI_INT, src, TESS_TAG_REQ, MPI_COMM_WORLD, &st);
+            if (next < ntiles) {
+                a.epoch = job->epoch;
+                a.x = tiles[next].x;
+                a.y = tiles[next].y;
+                a.w = tiles[next].w;
+                a.h = tiles[next].h;
+                a.width = job->width;
+                a.height = job->height;
+                a.max_iter = job->max_iter;
+                a.cx = job->cx;
+                a.cy = job->cy;
+                a.scale = job->scale;
+                MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, src,
+                         TESS_TAG_ASSIGN, MPI_COMM_WORLD);
+                next++;
+            } else {
+                stop = 0;
+                MPI_Send(&stop, 1, MPI_INT, src, TESS_TAG_STOP,
+                         MPI_COMM_WORLD);
+                live--;
+            }
+        } else if (st.MPI_TAG == TESS_TAG_RESULT) {
+            MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src,
+                     TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
+            MPI_Recv((void *)px,
+                     (int)(rh.w * rh.h * TESS_BYTES_PER_PX), MPI_BYTE, src,
+                     TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
+            if (rh.epoch == job->epoch) {
+                sink(ctx, &rh, px);
+                done++;
+            }
+            /* a tile from an abandoned epoch is dropped, which is what the
+               epoch counter is for: DESIGN.md section 3 */
+        } else {
+            MPI_Recv(&req, 1, MPI_INT, src, st.MPI_TAG, MPI_COMM_WORLD, &st);
+        }
+    }
+
+    /* Drain: every worker still expecting an answer gets a stop. */
+    while (live > 0) {
+        MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+        src = st.MPI_SOURCE;
+        if (st.MPI_TAG == TESS_TAG_REQ) {
+            MPI_Recv(&req, 1, MPI_INT, src, TESS_TAG_REQ, MPI_COMM_WORLD, &st);
+            stop = 0;
+            MPI_Send(&stop, 1, MPI_INT, src, TESS_TAG_STOP, MPI_COMM_WORLD);
+            live--;
+        } else {
+            MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src, st.MPI_TAG,
+                     MPI_COMM_WORLD, &st);
+            MPI_Recv((void *)px, (int)(rh.w * rh.h * TESS_BYTES_PER_PX),
+                     MPI_BYTE, src, TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
+        }
+    }
+
+    free((void *)px);
+    free((void *)tiles);
+    return done;
+}
+
+/* ------------------------------------------------------------ PPM sink */
+
+typedef struct PpmCtx {
+    tess_u8 *iter;          /* whole image, 3 bytes per pixel */
+    const TessJob *job;
+} PpmCtx;
+
+static void ppm_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
+{
+    PpmCtx *c = (PpmCtx *)ctx;
+    unsigned int row;
+    size_t dst, src, rowbytes;
+
+    rowbytes = (size_t)rh->w * TESS_BYTES_PER_PX;
+    for (row = 0; row < rh->h; row++) {
+        dst = ((size_t)(rh->y + row) * (size_t)c->job->width + (size_t)rh->x) *
+              TESS_BYTES_PER_PX;
+        src = (size_t)row * rowbytes;
+        memcpy((char *)c->iter + dst, (const char *)px + src, rowbytes);
+    }
+}
+
+static int write_ppm(const char *path, const TessJob *job, const tess_u8 *iter)
+{
+    FILE *f;
+    tess_u32 *rgb;
+    unsigned int y, x;
+    size_t npix;
+
+    npix = (size_t)job->width * (size_t)job->height;
+    rgb = (tess_u32 *)malloc(npix * sizeof(tess_u32));
+    if (!rgb) {
+        return -1;
+    }
+    tess_shade(iter, (int)npix, (int)job->max_iter, 0, rgb);
+
+    f = fopen(path, "wb");
+    if (!f) {
+        free((void *)rgb);
+        return -1;
+    }
+    fprintf(f, "P6\n%u %u\n255\n", job->width, job->height);
+    for (y = 0; y < job->height; y++) {
+        for (x = 0; x < job->width; x++) {
+            tess_u32 v = rgb[(size_t)y * job->width + x];
+            fputc((int)((v >> 16) & 0xff), f);
+            fputc((int)((v >> 8) & 0xff), f);
+            fputc((int)(v & 0xff), f);
+        }
+    }
+    fclose(f);
+    free((void *)rgb);
+    return 0;
+}
+
+/* ------------------------------------------------------------ GUI sink */
+
+typedef struct GuiCtx {
+    int fd;
+    int broken;
+} GuiCtx;
+
+static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
+{
+    GuiCtx *g = (GuiCtx *)ctx;
+    tess_u8 body[TESS_MAX_FRAME];
+    TessTileHdr th;
+    int n, bytes;
+
+    if (g->broken) {
+        return;
+    }
+    th.epoch = rh->epoch;
+    th.x = rh->x;
+    th.y = rh->y;
+    th.w = rh->w;
+    th.h = rh->h;
+    th.rank = rh->rank;
+    th.usec = rh->usec;
+
+    n = tess_put_tilehdr(body, &th);
+    bytes = (int)(rh->w * rh->h * TESS_BYTES_PER_PX);
+    memcpy((char *)body + n, (const char *)px, (size_t)bytes);
+    if (tess_frame_write(g->fd, TESS_MSG_TILE, body, n + bytes) != 0) {
+        g->broken = 1;
+    }
+}
+
+/* Wait for one GUI to connect, then serve epochs until it goes away. */
+static int serve_gui(int port, int nranks)
+{
+    int lfd, cfd, one, type, len;
+    struct sockaddr_in sa;
+    tess_u8 buf[TESS_MAX_FRAME];
+    TessJob job;
+    TessWelcome wel;
+    GuiCtx g;
+    double t0;
+    int tiles;
+
+    lfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (lfd < 0) {
+        perror("socket");
+        return -1;
+    }
+    one = 1;
+    setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof one);
+    memset((char *)&sa, 0, sizeof sa);
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = INADDR_ANY;
+    sa.sin_port = htons((unsigned short)port);
+    if (bind(lfd, (struct sockaddr *)&sa, sizeof sa) < 0) {
+        perror("bind");
+        close(lfd);
+        return -1;
+    }
+    listen(lfd, 1);
+    printf("tess-node: master listening on port %d, %d rank(s)\n",
+           port, nranks);
+    fflush(stdout);
+
+    /* null length: IRIX declares the third argument int *, macOS socklen_t *,
+       and a null pointer satisfies both without a per-platform typedef. */
+    cfd = accept(lfd, (struct sockaddr *)0, (void *)0);
+    if (cfd < 0) {
+        perror("accept");
+        close(lfd);
+        return -1;
+    }
+    printf("tess-node: GUI connected\n");
+    fflush(stdout);
+
+    g.fd = cfd;
+    g.broken = 0;
+
+    for (;;) {
+        if (tess_frame_read(cfd, &type, buf, &len) != 0) {
+            break;
+        }
+        if (type == TESS_MSG_HELLO) {
+            tess_u8 wb[12];
+            int n = 0;
+
+            wel.version = TESS_PROTO_VER;
+            wel.ranks = (tess_u32)nranks;
+            wel.workers = (tess_u32)(nranks - 1);
+            n += tess_put_u32(wb + n, wel.version);
+            n += tess_put_u32(wb + n, wel.ranks);
+            n += tess_put_u32(wb + n, wel.workers);
+            if (tess_frame_write(cfd, TESS_MSG_WELCOME, wb, n) != 0) {
+                break;
+            }
+        } else if (type == TESS_MSG_RENDER) {
+            tess_u8 db[12];
+            int n = 0;
+
+            tess_get_job(buf, &job);
+            if (job.tile == 0 || job.tile > TESS_MAX_TILE) {
+                job.tile = TESS_TILE;
+            }
+            t0 = now_sec();
+            tiles = run_epoch(&job, nranks, gui_sink, (void *)&g);
+            if (g.broken) {
+                break;
+            }
+            n += tess_put_u32(db + n, job.epoch);
+            n += tess_put_u32(db + n, (tess_u32)tiles);
+            n += tess_put_u32(db + n, (tess_u32)((now_sec() - t0) * 1000.0));
+            if (tess_frame_write(cfd, TESS_MSG_DONE, db, n) != 0) {
+                break;
+            }
+        } else if (type == TESS_MSG_BYE) {
+            break;
+        }
+    }
+
+    close(cfd);
+    close(lfd);
+    return 0;
+}
+
+/* ---------------------------------------------------------------- main */
+
+static void usage(const char *me)
+{
+    fprintf(stderr, "usage: %s [-listen [port]] [-o file.ppm]\n", me);
+    fprintf(stderr, "          [-w px] [-h px] [-max n] [-tile n]\n");
+    fprintf(stderr, "          [-cx v] [-cy v] [-scale v]\n");
+    exit(2);
+}
+
+int main(int argc, char **argv)
+{
+    int rank, nranks, i;
+    int listen_port = 0;
+    const char *ppm = (const char *)0;
+    TessJob job;
+    TessInventory inv;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nranks);
+
+    if (tess_types_check() != 0) {
+        fprintf(stderr, "rank %d: integer widths are not what the wire format "
+                        "assumes\n", rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    job.epoch = 1;
+    job.width = 1024;
+    job.height = 768;
+    job.max_iter = 1000;
+    job.tile = TESS_TILE;
+    job.cx = -0.6;
+    job.cy = 0.0;
+    job.scale = 3.2 / 1024.0;
+
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-listen") == 0) {
+            listen_port = TESS_DEFAULT_PORT;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                listen_port = atoi(argv[++i]);
+            }
+        } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+            ppm = argv[++i];
+        } else if (strcmp(argv[i], "-w") == 0 && i + 1 < argc) {
+            job.width = (tess_u32)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-h") == 0 && i + 1 < argc) {
+            job.height = (tess_u32)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-max") == 0 && i + 1 < argc) {
+            job.max_iter = (tess_u32)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-tile") == 0 && i + 1 < argc) {
+            job.tile = (tess_u32)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-cx") == 0 && i + 1 < argc) {
+            job.cx = atof(argv[++i]);
+        } else if (strcmp(argv[i], "-cy") == 0 && i + 1 < argc) {
+            job.cy = atof(argv[++i]);
+        } else if (strcmp(argv[i], "-scale") == 0 && i + 1 < argc) {
+            job.scale = atof(argv[++i]);
+        } else if (rank == 0) {
+            usage(argv[0]);
+        }
+    }
+
+    if (nranks < 2) {
+        if (rank == 0) {
+            fprintf(stderr, "tess-node: need at least 2 ranks, master computes "
+                            "nothing\n");
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
+    if (rank != 0) {
+        worker_loop(rank);
+        MPI_Finalize();
+        return 0;
+    }
+
+    /* master */
+    tess_inventory(&inv);
+    printf("tess-node: master on %s, %d rank(s), %d worker(s)\n",
+           inv.host, nranks, nranks - 1);
+    fflush(stdout);
+
+    if (listen_port > 0) {
+        serve_gui(listen_port, nranks);
+    } else {
+        PpmCtx c;
+        double t0;
+        int tiles;
+
+        c.job = &job;
+        c.iter = (tess_u8 *)calloc((size_t)job.width * job.height *
+                                   TESS_BYTES_PER_PX, 1);
+        if (!c.iter) {
+            fprintf(stderr, "tess-node: out of memory\n");
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+        t0 = now_sec();
+        tiles = run_epoch(&job, nranks, ppm_sink, (void *)&c);
+        printf("tess-node: %d tiles in %.2f s\n", tiles, now_sec() - t0);
+        if (ppm) {
+            if (write_ppm(ppm, &job, c.iter) != 0) {
+                fprintf(stderr, "tess-node: could not write %s\n", ppm);
+            } else {
+                printf("tess-node: wrote %s\n", ppm);
+            }
+        }
+        free((void *)c.iter);
+    }
+
+    MPI_Finalize();
+    return 0;
+}

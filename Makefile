@@ -36,7 +36,11 @@ COMMON  := src/common
 VPATH    = $(COMMON):src/probe:src/node:src/ui
 
 INVENTORY_SRC = $(COMMON)/tess_inventory.c
-INVENTORY_OBJ = $(BUILD)/tess_inventory.o
+WIRE_SRC      = $(COMMON)/tess_wire.c
+MANDEL_SRC    = $(COMMON)/tess_mandel.c
+COMMON_SRCS   = $(WIRE_SRC) $(MANDEL_SRC)
+COMMON_HDRS   = $(COMMON)/tess_types.h $(COMMON)/tess_proto.h \
+                $(COMMON)/tess_wire.h $(COMMON)/tess_mandel.h
 
 ifeq ($(findstring IP,$(ARCH)),IP)
 # ---- IRIX, MIPSpro. The authoritative build. DESIGN.md section 8. ----
@@ -68,7 +72,7 @@ UI     = $(BUILD)/tess-ui
 NODE_SRCS = $(wildcard src/node/*.c)
 UI_SRCS   = $(wildcard src/ui/*.c)
 
-.PHONY: all probe tiler node ui info fresh clean distclean
+.PHONY: all probe tiler node ui info gate fresh clean distclean
 
 all: probe tiler node ui
 
@@ -107,26 +111,44 @@ node:
 ifeq ($(strip $(NODE_SRCS)),)
 	@echo "node: no sources in src/node yet, nothing to build"
 else
+ifeq ($(findstring IP,$(ARCH)),IP)
 	@$(MAKE) $(NODE)
+else
+	@echo "node: needs MPI headers, IRIX only on this machine"
+endif
 endif
 
-$(NODE): $(NODE_SRCS) $(INVENTORY_SRC) $(COMMON)/tess_inventory.h | $(BUILD)
-	$(CC) $(NODE_CFLAGS) -o $@ $(NODE_SRCS) $(INVENTORY_SRC) $(NODE_LIBS)
+$(NODE): $(NODE_SRCS) $(COMMON_SRCS) $(INVENTORY_SRC) $(COMMON_HDRS) | $(BUILD)
+	$(CC) $(NODE_CFLAGS) -o $@ $(NODE_SRCS) $(COMMON_SRCS) $(INVENTORY_SRC) \
+	  $(NODE_LIBS)
 
 # ---- tess-ui: Motif, no MPI. Only where Motif is installed. ----
 ui:
 ifeq ($(strip $(UI_SRCS)),)
 	@echo "ui: no sources in src/ui yet, nothing to build"
 else
+ifeq ($(findstring IP,$(ARCH)),IP)
 	@$(MAKE) $(UI)
+else
+	@echo "ui: needs X11 and Motif headers, IRIX only on this machine"
+endif
 endif
 
-$(UI): $(UI_SRCS) | $(BUILD)
-	$(CC) $(UI_CFLAGS) -o $@ $(UI_SRCS) $(UI_LIBS)
+$(UI): $(UI_SRCS) $(COMMON_SRCS) $(COMMON_HDRS) | $(BUILD)
+	$(CC) $(UI_CFLAGS) -o $@ $(UI_SRCS) $(COMMON_SRCS) $(UI_LIBS)
 
 fresh:
 	@$(MAKE) clean
 	@$(MAKE) all
+
+# What the Mac can still verify without MPI, X or Motif: the portable half,
+# which is where byte-order and C89 mistakes live. DESIGN.md section 8 calls the
+# Mac build a gate, not a substitute.
+gate:
+	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(WIRE_SRC) -o /dev/null
+	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(MANDEL_SRC) -o /dev/null
+	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(INVENTORY_SRC) -o /dev/null
+	@echo "gate: portable sources are C89 clean"
 
 clean:
 	rm -rf $(BUILD)
