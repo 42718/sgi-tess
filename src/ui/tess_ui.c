@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -80,6 +81,11 @@ typedef struct Ui {
     XtIntervalId tick;
     double     epoch_t0;
     int        tiles_expected;
+
+    GC         bandgc;          /* XOR, for the rubber band */
+    int        dragging;
+    int        drag_x0, drag_y0;
+    int        drag_x1, drag_y1;
     Display   *dpy;
     Visual    *visual;
     int        depth;
@@ -491,140 +497,153 @@ static void zoom_at(Ui *u, int px, int py, int in)
     send_render(u);
 }
 
-static void input_cb(Widget w, XtPointer cd, XtPointer cb)
+/*
+ * Zoom to a dragged box. The box sets both the centre and the scale, and the
+ * larger of the two ratios is used so the whole selection fits rather than
+ * being cropped by the window's aspect. Iterations follow the depth: every
+ * halving of the scale adds 64, which is the same rule click-zoom uses.
+ */
+static void zoom_box(Ui *u, int x0, int y0, int x1, int y1)
 {
-    Ui *u = (Ui *)cd;
-    XmDrawingAreaCallbackStruct *cbs = (XmDrawingAreaCallbackStruct *)cb;
-    XButtonEvent *e;
+    double bw, bh, rx, ry, ratio, cxp, cyp;
+    int t;
 
-    if (!cbs || !cbs->event || u->fd < 0) {
+    if (x1 < x0) { t = x0; x0 = x1; x1 = t; }
+    if (y1 < y0) { t = y0; y0 = y1; y1 = t; }
+    bw = (double)(x1 - x0);
+    bh = (double)(y1 - y0);
+    if (bw < 4.0 || bh < 4.0) {
+        zoom_at(u, x0, y0, 1);          /* a click, not a drag */
         return;
     }
-    if (cbs->event->type != ButtonPress) {
-        return;
+
+    cxp = (double)(x0 + x1) * 0.5;
+    cyp = (double)(y0 + y1) * 0.5;
+    u->job.cx += (cxp - (double)u->width * 0.5) * u->job.scale;
+    u->job.cy += (cyp - (double)u->height * 0.5) * u->job.scale;
+
+    rx = bw / (double)u->width;
+    ry = bh / (double)u->height;
+    ratio = rx > ry ? rx : ry;
+    if (ratio < 1e-6) {
+        ratio = 1e-6;
     }
-    e = (XButtonEvent *)cbs->event;
-    if (e->button == Button1) {
-        zoom_at(u, e->x, e->y, 1);
-    } else if (e->button == Button3) {
-        zoom_at(u, e->x, e->y, 0);
-    } else if (e->button == Button2) {
-        /* palette only: no cluster traffic, which is the point of shipping
-           iteration counts rather than colour */
-        u->val.ramp = !u->val.ramp;
-        values_to_job(u);
-        if (u->colour_pane) {
-            tess_params_refresh(u->colour_pane);
+    u->job.scale *= ratio;
+
+    {
+        double depth = log(1.0 / ratio) / log(2.0);
+        int add = (int)(depth * 64.0);
+
+        if (add > 0) {
+            u->job.max_iter += (tess_u32)add;
         }
-        reshade_all(u);
-        ui_log(u, "ramp toggled: re-shaded locally, no cluster traffic");
+    }
+
+    job_to_values(u);
+    if (u->view_pane) {
+        tess_params_refresh(u->view_pane);
+    }
+    send_render(u);
+}
+
+static void band_draw(Ui *u)
+{
+    int x, y, w, h;
+
+    if (!u->bandgc || !XtIsRealized(u->canvas)) {
+        return;
+    }
+    x = u->drag_x0 < u->drag_x1 ? u->drag_x0 : u->drag_x1;
+    y = u->drag_y0 < u->drag_y1 ? u->drag_y0 : u->drag_y1;
+    w = u->drag_x1 > u->drag_x0 ? u->drag_x1 - u->drag_x0 : u->drag_x0 - u->drag_x1;
+    h = u->drag_y1 > u->drag_y0 ? u->drag_y1 - u->drag_y0 : u->drag_y0 - u->drag_y1;
+    if (w > 0 && h > 0) {
+        XDrawRectangle(u->dpy, XtWindow(u->canvas), u->bandgc, x, y,
+                       (unsigned)w, (unsigned)h);
     }
 }
 
-static void render_cb(Widget w, XtPointer cd, XtPointer cb)
+/*
+ * All mouse handling in one place. The DrawingArea's XmNinputCallback does not
+ * report motion, and a rubber band needs it, so this is an event handler
+ * rather than a Motif callback.
+ */
+static void mouse_eh(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
 {
     Ui *u = (Ui *)cd;
+    XButtonEvent *be;
+    XMotionEvent *me;
 
-    values_to_job(u);
-    if (u->fd >= 0) {
-        send_render(u);
+    if (u->fd < 0) {
+        return;
     }
-}
 
-static void home_cb(Widget w, XtPointer cd, XtPointer cb)
-{
-    Ui *u = (Ui *)cd;
-
-    u->val.cx = -0.6;
-    u->val.cy = 0.0;
-    u->val.scale = 3.2 / (double)(u->width > 0 ? u->width : 1024);
-    u->val.max_iter = 1000;
-    values_to_job(u);
-    tess_params_refresh(u->view_pane);
-    ui_log(u, "home");
-    if (u->fd >= 0) {
-        send_render(u);
+    if (ev->type == ButtonPress) {
+        be = (XButtonEvent *)ev;
+        if (be->button == Button1) {
+            u->dragging = 1;
+            u->drag_x0 = u->drag_x1 = be->x;
+            u->drag_y0 = u->drag_y1 = be->y;
+        } else if (be->button == Button3) {
+            zoom_at(u, be->x, be->y, 0);
+        } else if (be->button == Button2) {
+            u->val.ramp = !u->val.ramp;
+            values_to_job(u);
+            if (u->colour_pane) {
+                tess_params_refresh(u->colour_pane);
+            }
+            reshade_all(u);
+            ui_log(u, "ramp toggled: re-shaded locally, no cluster traffic");
+        }
+    } else if (ev->type == MotionNotify && u->dragging) {
+        me = (XMotionEvent *)ev;
+        band_draw(u);                   /* XOR: erases the previous box */
+        u->drag_x1 = me->x;
+        u->drag_y1 = me->y;
+        band_draw(u);
+    } else if (ev->type == ButtonRelease && u->dragging) {
+        be = (XButtonEvent *)ev;
+        if (be->button != Button1) {
+            return;
+        }
+        band_draw(u);                   /* erase */
+        u->dragging = 0;
+        u->drag_x1 = be->x;
+        u->drag_y1 = be->y;
+        zoom_box(u, u->drag_x0, u->drag_y0, u->drag_x1, u->drag_y1);
     }
-}
-
-/* The second top-level shell: same app context, no MPI, no blocking. */
-static void build_control(Ui *u)
-{
-    Widget form, buttons, b;
-
-    u->control = XtVaAppCreateShell("control", "Tess",
-                                    topLevelShellWidgetClass,
-                                    XtDisplay(u->toplevel),
-                                    XmNtitle, "Tess control",
-                                    NULL);
-    form = XtVaCreateManagedWidget("cform", xmFormWidgetClass, u->control,
-                                   NULL);
-
-    u->view_pane = tess_params_build(form, "View",
-                                     view_params,
-                                     (int)(sizeof view_params /
-                                           sizeof view_params[0]),
-                                     (void *)&u->val, param_applied,
-                                     (void *)u);
-    XtVaSetValues(XtParent(u->view_pane->form),
-                  XmNtopAttachment, XmATTACH_FORM,
-                  XmNleftAttachment, XmATTACH_FORM,
-                  XmNrightAttachment, XmATTACH_FORM,
-                  NULL);
-
-    u->colour_pane = tess_params_build(form, "Colour",
-                                       colour_params,
-                                       (int)(sizeof colour_params /
-                                             sizeof colour_params[0]),
-                                       (void *)&u->val, param_applied,
-                                       (void *)u);
-    XtVaSetValues(XtParent(u->colour_pane->form),
-                  XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, XtParent(u->view_pane->form),
-                  XmNleftAttachment, XmATTACH_FORM,
-                  XmNrightAttachment, XmATTACH_FORM,
-                  NULL);
-
-    buttons = XtVaCreateManagedWidget("buttons", xmRowColumnWidgetClass, form,
-                                      XmNorientation, XmHORIZONTAL,
-                                      XmNtopAttachment, XmATTACH_WIDGET,
-                                      XmNtopWidget,
-                                      XtParent(u->colour_pane->form),
-                                      XmNleftAttachment, XmATTACH_FORM,
-                                      NULL);
-    b = XtVaCreateManagedWidget("Render", xmPushButtonWidgetClass, buttons,
-                                NULL);
-    XtAddCallback(b, XmNactivateCallback, render_cb, (XtPointer)u);
-    b = XtVaCreateManagedWidget("Home", xmPushButtonWidgetClass, buttons,
-                                NULL);
-    XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
-
-    u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass, form,
-                                         XmNtopAttachment, XmATTACH_WIDGET,
-                                         XmNtopWidget, buttons,
-                                         XmNleftAttachment, XmATTACH_FORM,
-                                         NULL);
-
-    u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
-    XtVaSetValues(u->log,
-                  XmNeditable, False,
-                  XmNeditMode, XmMULTI_LINE_EDIT,
-                  XmNrows, 10,
-                  XmNcolumns, 52,
-                  NULL);
-    XtVaSetValues(XtParent(u->log),
-                  XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, u->elapsed,
-                  XmNleftAttachment, XmATTACH_FORM,
-                  XmNrightAttachment, XmATTACH_FORM,
-                  XmNbottomAttachment, XmATTACH_FORM,
-                  NULL);
-    XtManageChild(u->log);
-
-    XtRealizeWidget(u->control);
 }
 
 /* ----------------------------------------------------------------- main */
+
+/*
+ * Fallback resources. Motif's defaults are built for 1989 screens: big fonts,
+ * 2-pixel shadows, generous margins everywhere. These tighten it and switch on
+ * the IRIX Interactive Desktop look that PLATFORM-FACTS.md recommends. A real
+ * app-defaults file under /usr/lib/X11/app-defaults/Tess overrides all of it,
+ * which is the point of the resource class being the framework, not the module.
+ */
+static String fallbacks[] = {
+    "*sgiMode: True",
+    "*useSchemes: none",
+    "*fontList: -*-helvetica-medium-r-normal--10-*-*-*-*-*-iso8859-1",
+    "*XmTextField.fontList: -*-screen-medium-r-normal--12-*-*-*-*-*-iso8859-1",
+    "*log.fontList: -*-screen-medium-r-normal--12-*-*-*-*-*-iso8859-1",
+    "*shadowThickness: 1",
+    "*highlightThickness: 1",
+    "*XmRowColumn.marginHeight: 1",
+    "*XmRowColumn.marginWidth: 1",
+    "*XmRowColumn.spacing: 2",
+    "*XmFrame.marginHeight: 2",
+    "*XmFrame.marginWidth: 2",
+    "*XmLabel.marginHeight: 1",
+    "*XmLabel.marginWidth: 2",
+    "*XmTextField.marginHeight: 1",
+    "*XmPushButton.marginHeight: 2",
+    "*XmToggleButton.marginHeight: 0",
+    "*status.marginHeight: 2",
+    (String)0
+};
 
 int main(int argc, char **argv)
 {
@@ -669,7 +688,7 @@ int main(int argc, char **argv)
     }
 
     u.toplevel = XtVaAppInitialize(&app, "Tess", (XrmOptionDescList)0, 0,
-                                  &argc, argv, (String *)0, NULL);
+                                  &argc, argv, fallbacks, NULL);
     u.app = app;
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,
                                    NULL);
@@ -697,7 +716,10 @@ int main(int argc, char **argv)
 
     XtAddCallback(u.canvas, XmNexposeCallback, expose_cb, (XtPointer)&u);
     XtAddCallback(u.canvas, XmNresizeCallback, resize_cb, (XtPointer)&u);
-    XtAddCallback(u.canvas, XmNinputCallback, input_cb, (XtPointer)&u);
+    XtAddEventHandler(u.canvas,
+                      (EventMask)(ButtonPressMask | ButtonReleaseMask |
+                                  ButtonMotionMask),
+                      False, mouse_eh, (XtPointer)&u);
 
     XtRealizeWidget(u.toplevel);
 
@@ -716,6 +738,20 @@ int main(int argc, char **argv)
         die("out of memory");
     }
     recreate_ximage(&u);
+
+    {
+        XGCValues gcv;
+
+        gcv.function = GXxor;
+        gcv.foreground = WhitePixel(u.dpy, DefaultScreen(u.dpy)) ^
+                         BlackPixel(u.dpy, DefaultScreen(u.dpy));
+        gcv.line_width = 0;
+        gcv.subwindow_mode = IncludeInferiors;
+        u.bandgc = XCreateGC(u.dpy, XtWindow(u.canvas),
+                             (unsigned long)(GCFunction | GCForeground |
+                                             GCLineWidth | GCSubwindowMode),
+                             &gcv);
+    }
 
     u.fd = connect_master(host, port);
     if (u.fd < 0) {
