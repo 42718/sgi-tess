@@ -88,6 +88,7 @@ static int probe_mhz(void)
 static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
 {
     struct rminfo rmi;
+    sgt_cookie_t ck;
     long pgkb;
     int rc;
 
@@ -98,8 +99,17 @@ static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
         pgkb = 1;
     }
 
+    /*
+     * The fifth argument is a cookie STRUCT, not a null pointer: sysget.h
+     * declares sysget(int, char *, int, int, sgt_cookie_t *) and the kernel
+     * dereferences it, which is why every call here returned EFAULT. The
+     * header's own macro initialises it to mean "all cells", and SGT_SUM adds
+     * them together, which is what a whole-machine total means on a NUMA box.
+     */
     memset((char *)&rmi, 0, sizeof rmi);
-    rc = sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ, (void *)0);
+    SGT_COOKIE_INIT(&ck);
+    rc = sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ | SGT_SUM,
+                &ck);
     if (rc != -1 && rmi.physmem > 0) {
         *memkb = (long)rmi.physmem * pgkb;
         *freekb = (long)rmi.freemem * pgkb;
@@ -153,9 +163,21 @@ double tess_cpu_busy(void)
     long dtot = 0, didle = 0;
     int i;
 
+    /*
+     * SGT_SINFO through sysget rather than sysmp(MP_SAGET): same data,
+     * unprivileged, and summed across cells by the same cookie mechanism.
+     * MP_SAGET stays as the fallback for anything that refuses.
+     */
     memset((char *)&si, 0, sizeof si);
-    if (sysmp(MP_SAGET, MPSA_SINFO, (char *)&si, sizeof si) == -1) {
-        return -1.0;
+    {
+        sgt_cookie_t ck;
+
+        SGT_COOKIE_INIT(&ck);
+        if (sysget(SGT_SINFO, (char *)&si, sizeof si, SGT_READ | SGT_SUM,
+                   &ck) == -1 &&
+            sysmp(MP_SAGET, MPSA_SINFO, (char *)&si, sizeof si) == -1) {
+            return -1.0;
+        }
     }
     for (i = 0; i < CPU_STATES; i++) {
         now[i] = (long)si.cpu[i];
@@ -192,10 +214,18 @@ double tess_load1(void)
 {
 #ifdef __sgi
     long avenrun[3];
+    sgt_cookie_t ck;
 
+    /*
+     * A kernel symbol is named through the cookie, not through the buffer
+     * argument: SGT_COOKIE_SET_KSYM writes the name into the cookie's opaque
+     * area after the cell id. KSYM_AVENRUN is the header's own name for it.
+     */
     memset((char *)avenrun, 0, sizeof avenrun);
+    SGT_COOKIE_INIT(&ck);
+    SGT_COOKIE_SET_KSYM(&ck, KSYM_AVENRUN);
     if (sysget(SGT_KSYM, (char *)avenrun, sizeof avenrun, SGT_READ,
-               (void *)"avenrun") == -1) {
+               &ck) == -1) {
         return -1.0;
     }
     return (double)avenrun[0] / 1024.0;
@@ -207,14 +237,7 @@ double tess_load1(void)
 #ifdef __sgi
 static double probe_load(void)
 {
-    long avenrun[3];
-
-    memset((char *)avenrun, 0, sizeof avenrun);
-    if (sysget(SGT_KSYM, (char *)avenrun, sizeof avenrun, SGT_READ,
-               (void *)"avenrun") == -1) {
-        return -1.0;
-    }
-    return (double)avenrun[0] / 1024.0;
+    return tess_load1();
 }
 #endif
 
