@@ -28,10 +28,14 @@ failure mode we actually hit, it says so.
 
 **Shared between them:**
 
-An NFS export mounted at the same path on every machine. This tree lives at
-`/cluster/dev/sgi-tess`, exported from a Mac as `/Users/rutger/cluster`. One checkout,
-every machine building natively in it. That is not a convenience, it is the design:
-lucy and aurora have no ssh, and a cross compiler is not MIPSpro.
+An NFS share, mounted at the same path on every SGI. This tree lives at
+`/cluster/dev/sgi-tess`, so `/cluster` is the mount point throughout this guide;
+substitute your own. One checkout, every machine building natively in it. That is not a
+convenience, it is the design: lucy and aurora have no ssh, and a cross compiler is not
+MIPSpro.
+
+[doc/NFS-SERVER.md](NFS-SERVER.md) covers setting the share up, including the UID agreement
+the SGIs need.
 
 Check the pieces are there before going further:
 
@@ -43,16 +47,22 @@ ar t /usr/lib64/libmpi.so > /dev/null && echo mpt ok
 
 ## 2. Getting the source
 
-**There is no git on IRIX.** Clone on a machine that has it, directly into the exported
-directory, and the SGIs see the result immediately:
+**There is no git on IRIX.** Use any machine that has git and can reach the share: the
+NFS server itself, a workstation with it mounted, whatever is convenient. Clone straight
+into the shared directory and the SGIs see the result immediately.
+
+From that machine, with the share mounted at `<share>`:
 
 ```
-git clone git@github.com:42718/sgi-tess.git /Users/rutger/cluster/dev/sgi-tess
+git clone git@github.com:42718/sgi-tess.git <share>/dev/sgi-tess
 ```
 
-From then on, a commit on that machine is already live on every SGI. There is nothing to
-pull, push or copy, and no deployment step. If you would rather not export a working tree,
-`tar` it across and skip to the next section; the build does not care.
+so that the SGIs, which mount the same share at `/cluster`, find it at
+`/cluster/dev/sgi-tess`. From then on a commit on that machine is already live on every
+SGI. There is nothing to pull, push or copy, and no deployment step.
+
+If you would rather not share a working tree at all, `tar` it across to each machine and
+skip to the next section. The build does not care, you just lose the single checkout.
 
 ## 3. Building
 

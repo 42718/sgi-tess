@@ -9,8 +9,9 @@ see `doc/BUILD-PLAN.md` for what each build closed and what remains. `baseline/`
 NFS tree the machines build from, so an edit is live on both the moment it is written and
 there is nothing to pull.
 
-**The repo lives on the NFS share at `/cluster/dev/sgi-tess`** (`/Users/rutger/cluster/dev/...`
-from the Mac), so every machine builds natively from one checkout. It moved there on
+**The repo lives on the NFS share at `/cluster/dev/sgi-tess`**, which is the same
+directory reached through the share's mount point on whichever machine holds git, so every
+machine builds natively from one checkout. It moved there on
 18 September 2026; the old `~/dev/sgi-tess` is kept as `sgi-tess.moved-2026-09-18` until you
 delete it.
 
