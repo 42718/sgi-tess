@@ -47,9 +47,14 @@ ifeq ($(findstring IP,$(ARCH)),IP)
 CC        = cc
 ABI       = -64 -mips4
 CFLAGS    = $(ABI) -O2 -I$(COMMON)
-# MPI_SGI_stat_get lives in mpi_ext.h. Probe for it rather than assume: where
-# it is missing, the transport counters report "unknown" instead of guessing.
-HAVE_MPI_EXT := $(shell test -f /usr/include/mpi_ext.h && echo 1 || echo 0)
+# MPI_SGI_stat_get lives in mpi_ext.h. The header is present on these machines
+# but its signature is not what DESIGN.md's description implies: it takes an
+# unsigned index rather than a counter name, writes through unsigned int *, and
+# returns void. Until the real declaration is read off the machine and written
+# down, the counters stay off and the panel says so. Set TESS_MPI_STAT=1 on the
+# make line to build against it.
+TESS_MPI_STAT ?= 0
+HAVE_MPI_EXT := $(shell test -f /usr/include/mpi_ext.h && echo $(TESS_MPI_STAT) || echo 0)
 NODE_CFLAGS = $(ABI) -O3 -OPT:roundoff=0:IEEE_arithmetic=1 -I$(COMMON) \
               -DTESS_HAVE_MPI_EXT=$(HAVE_MPI_EXT)
 # -lpthread goes back when threads do: DESIGN.md section 8 puts it after
