@@ -102,7 +102,25 @@ getting exactly the frame a click-zoom to the same place produces.
 
 ---
 
-## Build 3 — Progressive, cancellable, and honest about who drew what
+## Build 3 — Progressive, cancellable, and honest about who drew what — **CLOSED 19 September 2026**
+
+**Result.** Renders in two passes: an eighth-scale pass over the whole frame, then full
+resolution. A zoom now fills immediately and sharpens, rather than tiling in from the
+centre against black, and it reads as much faster although the work is unchanged. Cancel
+works: a new render abandons the one in flight, the master stops handing out tiles, and
+the epoch counter makes the ones already out harmless. Colour by owner tints each pixel a
+quarter towards its machine's hue, as a shading parameter, so it costs no network traffic.
+
+Two fixes fell out of building it. The master was spinning in MPI_Probe on the display
+host's CPU alongside X and the GUI; it now polls with a backoff like the workers, and lucy
+sits at one busy CPU during a render instead of two. And Start now means apply: changing
+the host set or the rank counts restarts the job, which is what DESIGN.md §2 always said
+and what the button did not do.
+
+**Still not built from the original list:** dirty-rect blitting was already effectively
+done, since tiles blit their own rectangle as they land.
+
+### Original definition
 
 **Do.** The ⅛-scale whole-image pass before full tiles. Cancel that abandons an
 epoch in flight. Dirty-rect blitting instead of whole-window `XPutImage`.
