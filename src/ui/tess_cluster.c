@@ -63,6 +63,7 @@ struct TessCluster {
     pid_t       child;
     int         tries;
     int         relaunch;
+    int         dirty;          /* config changed since the job started */
     int         stopstage;
     XtIntervalId stopt;
     XtAppContext app;
@@ -320,6 +321,13 @@ static void refresh_rows(TessCluster *c)
 
         sprintf(buf, "%d", c->host[i].ranks);
         XmTextFieldSetString(c->rankf[i], buf);
+
+        /* A disabled host is greyed rather than hidden: it stays in the list
+           with its numbers, visibly not taking part. */
+        XtSetSensitive(c->info[i], c->host[i].enabled ? True : False);
+        XtSetSensitive(c->rankf[i], c->host[i].enabled ? True : False);
+        XmToggleButtonSetState(c->onbox[i],
+                               c->host[i].enabled ? True : False, False);
     }
 }
 
@@ -333,6 +341,25 @@ static void refresh_rows(TessCluster *c)
  * So the panel uses the proven path now, and PCP can replace it when someone
  * confirms what it actually offers here.
  */
+void tess_cluster_set_load(TessCluster *c, int rank, double load)
+{
+    int cpu = 0;
+    int i = rank_to_host(c, rank, &cpu);
+
+    if (i < 0 || load < 0.0) {
+        return;
+    }
+    if (c->host[i].load != load) {
+        c->host[i].load = load;
+        refresh_rows(c);
+    }
+}
+
+int tess_cluster_dirty(TessCluster *c)
+{
+    return c->child > 0 && c->dirty;
+}
+
 void tess_cluster_poll(TessCluster *c)
 {
     int i, saved;
@@ -521,6 +548,7 @@ void tess_cluster_launch(TessCluster *c)
     }
 
     c->tries = 0;
+    c->dirty = 0;
     c->child = fork();
     if (c->child < 0) {
         set_state(c, "fork failed");
@@ -655,6 +683,8 @@ static void enable_cb(Widget w, XtPointer cd, XtPointer cb)
     for (i = 0; i < c->nhosts; i++) {
         if (c->onbox[i] == w) {
             c->host[i].enabled = s->set ? 1 : 0;
+            c->dirty = 1;
+            refresh_rows(c);
             clog(c, "%s: %s", c->host[i].name,
                  0);
             clog1(c, c->host[i].enabled ? "  enabled" :
@@ -678,6 +708,7 @@ static void rank_cb(Widget w, XtPointer cd, XtPointer cb)
                 if (c->host[i].ranks < 0) {
                     c->host[i].ranks = 0;
                 }
+                c->dirty = 1;
                 XtFree(text);
             }
             refresh_rows(c);
@@ -734,6 +765,21 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
     rc = XtVaCreateManagedWidget("clrc", xmRowColumnWidgetClass, c->frame,
                                  XmNorientation, XmVERTICAL, NULL);
 
+    {
+        Widget hdr = XtVaCreateManagedWidget("hdr", xmFormWidgetClass, rc,
+                                             XmNfractionBase, 100, NULL);
+
+        XtVaCreateManagedWidget("use  host     type  cpu  load",
+                                xmLabelWidgetClass, hdr,
+                                XmNalignment, XmALIGNMENT_BEGINNING,
+                                XmNleftAttachment, XmATTACH_FORM,
+                                XmNrightAttachment, XmATTACH_POSITION,
+                                XmNrightPosition, 78, NULL);
+        XtVaCreateManagedWidget("ranks", xmLabelWidgetClass, hdr,
+                                XmNleftAttachment, XmATTACH_POSITION,
+                                XmNleftPosition, 78, NULL);
+    }
+
     for (i = 0; i < c->nhosts; i++) {
         row = XtVaCreateManagedWidget("clrow", xmFormWidgetClass, rc,
                                       XmNfractionBase, 100, NULL);
@@ -744,6 +790,8 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                   xmToggleButtonWidgetClass,
                                                   row,
                                                   XmNlabelString, empty,
+                                                  XmNindicatorType,
+                                                  XmN_OF_MANY,
                                                   XmNindicatorSize, 14,
                                                   XmNleftAttachment,
                                                   XmATTACH_FORM,
@@ -789,6 +837,10 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                          buttons, NULL);
     XtAddCallback(c->launchb, XmNactivateCallback, launch_cb, (XtPointer)c);
     paint_button(c->launchb, "#5f9e4a");
+    b = XtVaCreateManagedWidget("Restart", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, launch_cb, (XtPointer)c);
+    paint_button(b, "#d9a441");
     c->stopb = XtVaCreateManagedWidget("Stop", xmPushButtonWidgetClass,
                                        buttons, NULL);
     XtAddCallback(c->stopb, XmNactivateCallback, stop_cb, (XtPointer)c);

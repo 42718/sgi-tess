@@ -233,6 +233,25 @@ static void worker_loop(int rank)
         rh.rank = (tess_u32)rank;
         rh.step = a.step;
         rh.usec = (tess_u32)((now_sec() - t0) * 1e6);
+
+        /*
+         * Live load, carried on the work that is already flowing. Sampled at
+         * most once a second so a tile never pays for a syscall it does not
+         * need, and it reaches the GUI during a render, which an arshell poll
+         * cannot do without competing with the render for the machine.
+         */
+        {
+            static double last_sample = 0.0;
+            static double last_load = -1.0;
+            double nowt = now_sec();
+
+            if (nowt - last_sample > 1.0) {
+                last_load = tess_load1();
+                last_sample = nowt;
+            }
+            rh.load = last_load >= 0.0 ?
+                      (tess_u32)(last_load * 100.0 + 0.5) : 0;
+        }
         MPI_Send((void *)&rh, (int)sizeof rh, MPI_BYTE, 0, TESS_TAG_RESULT,
                  MPI_COMM_WORLD);
         MPI_Send((void *)buf, (int)(TESS_SAMPLES(rh) * TESS_BYTES_PER_PX),
@@ -636,6 +655,7 @@ static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
     th.rank = rh->rank;
     th.usec = rh->usec;
     th.step = rh->step;
+    th.load = rh->load;
 
     n = tess_put_tilehdr(body, &th);
     bytes = (int)(TESS_SAMPLES(th) * TESS_BYTES_PER_PX);

@@ -60,6 +60,12 @@ const char *tess_cluster_rank_colour(TessCluster *c, int rank);
 
 void tess_cluster_rescan(TessCluster *c);
 void tess_cluster_poll(TessCluster *c);      /* load averages only */
+
+/* Live load for a host, from the tiles its ranks are returning. */
+void tess_cluster_set_load(TessCluster *c, int rank, double load);
+
+/* Has the configuration changed since the running job was launched? */
+int  tess_cluster_dirty(TessCluster *c);
 void tess_cluster_launch(TessCluster *c);
 void tess_cluster_stop(TessCluster *c);
 int  tess_cluster_running(TessCluster *c);

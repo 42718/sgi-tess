@@ -17,7 +17,7 @@
 #include "tess_types.h"
 
 #define TESS_MAGIC        0x54455353u    /* "TESS" */
-#define TESS_PROTO_VER    2
+#define TESS_PROTO_VER    3
 #define TESS_DEFAULT_PORT 7333
 #define TESS_TILE         64             /* default tile edge, DESIGN.md 3 */
 #define TESS_MAX_TILE     256
@@ -58,6 +58,7 @@ typedef struct TessTileHdr {
     tess_u32 rank;         /* who computed it, for colour-by-owner */
     tess_u32 usec;         /* how long it took that rank */
     tess_u32 step;         /* 1 = every pixel; 8 = the eighth-scale pass */
+    tess_u32 load;         /* that host's 1-minute load x100, live telemetry */
 } TessTileHdr;
 
 typedef struct TessDone {
@@ -123,6 +124,7 @@ typedef struct TessResultHdr {
     tess_u32 rank;
     tess_u32 usec;
     tess_u32 step;
+    tess_u32 load;        /* sampled at most once a second on the worker */
 } TessResultHdr;
 
 /* Samples in a tile, given its coverage and its step. */

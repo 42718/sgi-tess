@@ -87,6 +87,7 @@ typedef struct Ui {
     Widget     clusterframe;
     TessCluster *cl;
     Widget     elapsed;
+    Widget     transport;
     TessParamPane *view_pane;
     TessParamPane *colour_pane;
     UiValues   val;
@@ -421,38 +422,6 @@ static void stats_draw(Ui *u)
         XDrawString(d, w, u->statsgc, 4, y + 18, "idle - no tiles yet", 19);
     }
 
-    /*
-     * Which interconnect actually carried it, measured rather than assumed.
-     * This line exists because of the GM week: MPT falls back to TCP in
-     * silence, and a job that quietly ran over ethernet looks exactly like one
-     * that used Myrinet.
-     */
-    {
-        char t[96];
-
-        y += 17;
-        if (y + 12 < (int)hgt) {
-            XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
-            if (!u->tr.known) {
-                strcpy(t, "transport: MPT will not say");
-            } else if (u->tr.kb_gm > u->tr.kb_tcp) {
-                sprintf(t, "transport: GM  %lu KB", (unsigned long)u->tr.kb_gm);
-            } else if (u->tr.kb_tcp > 0) {
-                sprintf(t, "transport: TCP  %lu KB",
-                        (unsigned long)u->tr.kb_tcp);
-            } else if (u->tr.kb_hippi > 0) {
-                sprintf(t, "transport: HIPPI  %lu KB",
-                        (unsigned long)u->tr.kb_hippi);
-            } else if (u->tr.kb_shmem > 0) {
-                sprintf(t, "transport: shared memory  %lu KB",
-                        (unsigned long)u->tr.kb_shmem);
-            } else {
-                strcpy(t, "transport: nothing measured yet");
-            }
-            XDrawString(d, w, u->statsgc, 4, y, t, (int)strlen(t));
-        }
-    }
-
     /* A coloured state line: green while the frame is arriving, grey when
        there is nothing to do. Visible from across the room, which is the
        point of a status light. */
@@ -476,6 +445,35 @@ static void stats_draw(Ui *u)
 static void stats_expose_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     stats_draw((Ui *)cd);
+}
+
+/* Its own line, under the Cluster section: which fabric carried the frame. */
+static void transport_update(Ui *u)
+{
+    char t[96];
+    XmString s;
+
+    if (!u->transport) {
+        return;
+    }
+    if (!u->tr.known) {
+        strcpy(t, "transport:  MPT will not say");
+    } else if (u->tr.kb_gm > u->tr.kb_tcp) {
+        sprintf(t, "transport:  GM  %lu KB", (unsigned long)u->tr.kb_gm);
+    } else if (u->tr.kb_tcp > 0) {
+        sprintf(t, "transport:  TCP  %lu KB", (unsigned long)u->tr.kb_tcp);
+    } else if (u->tr.kb_hippi > 0) {
+        sprintf(t, "transport:  HIPPI  %lu KB",
+                (unsigned long)u->tr.kb_hippi);
+    } else if (u->tr.kb_shmem > 0) {
+        sprintf(t, "transport:  shared memory  %lu KB",
+                (unsigned long)u->tr.kb_shmem);
+    } else {
+        strcpy(t, "transport:  nothing measured yet");
+    }
+    s = XmStringCreateLocalized(t);
+    XtVaSetValues(u->transport, XmNlabelString, s, NULL);
+    XmStringFree(s);
 }
 
 static void set_status(Ui *u, const char *text)
@@ -837,6 +835,9 @@ static void handle_tile(Ui *u, const tess_u8 *body, int len)
         u->rank_usec[th.rank] += (double)th.usec;
     }
     u->bytes_in += (long)bytes;
+    if (th.load > 0 && u->cl) {
+        tess_cluster_set_load(u->cl, (int)th.rank, (double)th.load / 100.0);
+    }
 }
 
 /* Xt calls this whenever the master has something to say, which is how the
@@ -886,6 +887,7 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
         u->tr.kb_shmem = tess_get_u32(buf + 12);
         u->tr.kb_hippi = tess_get_u32(buf + 16);
         u->tr.known = tess_get_u32(buf + 20);
+        transport_update(u);
         cluster_update(u);
     } else if (type == TESS_MSG_DONE) {
         tess_u32 tiles = tess_get_u32(buf + 4);
@@ -925,7 +927,12 @@ static void tick_cb(XtPointer cd, XtIntervalId *id)
         set_elapsed(u, msg);
         cluster_update(u);
     }
-    if (++u->ticks % 30 == 0 && u->cl) {
+    if (u->cl && tess_cluster_dirty(u->cl)) {
+        set_status(u, "cluster changed - press Restart for it to take effect");
+    }
+    /* Poll for load only when no job is running: while one is, the tiles
+       carry it, which costs nothing and works during the render. */
+    if (++u->ticks % 5 == 0 && u->cl && !tess_cluster_running(u->cl)) {
         tess_cluster_poll(u->cl);
     }
     u->tick = XtAppAddTimeOut(u->app, 200, tick_cb, (XtPointer)u);
@@ -1519,6 +1526,16 @@ static void build_control(Ui *u)
                   XmNrightAttachment, XmATTACH_FORM,
                   NULL);
 
+    u->transport = XtVaCreateManagedWidget("transport:  not measured yet",
+                                           xmLabelWidgetClass, form,
+                                           XmNalignment, XmALIGNMENT_BEGINNING,
+                                           XmNtopAttachment, XmATTACH_WIDGET,
+                                           XmNtopWidget,
+                                           tess_cluster_widget(u->cl),
+                                           XmNleftAttachment, XmATTACH_FORM,
+                                           XmNrightAttachment, XmATTACH_FORM,
+                                           NULL);
+
     u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
     XtVaSetValues(u->log,
                   XmNeditable, False,
@@ -1528,7 +1545,7 @@ static void build_control(Ui *u)
                   NULL);
     XtVaSetValues(XtParent(u->log),
                   XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, tess_cluster_widget(u->cl),
+                  XmNtopWidget, u->transport,
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
                   XmNbottomAttachment, XmATTACH_FORM,

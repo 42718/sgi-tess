@@ -131,6 +131,23 @@ static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
  * what uptime does and needs no privilege. Reported as -1 when the call is not
  * available rather than as a plausible zero.
  */
+double tess_load1(void)
+{
+#ifdef __sgi
+    long avenrun[3];
+
+    memset((char *)avenrun, 0, sizeof avenrun);
+    if (sysget(SGT_KSYM, (char *)avenrun, sizeof avenrun, SGT_READ,
+               (void *)"avenrun") == -1) {
+        return -1.0;
+    }
+    return (double)avenrun[0] / 1024.0;
+#else
+    return -1.0;
+#endif
+}
+
+#ifdef __sgi
 static double probe_load(void)
 {
     long avenrun[3];
@@ -142,6 +159,7 @@ static double probe_load(void)
     }
     return (double)avenrun[0] / 1024.0;
 }
+#endif
 
 /* A HIPPI interface by either driver's name: SGI's hip*, Essential's ess*. */
 static int probe_hippi(void)

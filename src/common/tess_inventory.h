@@ -34,6 +34,9 @@ typedef struct TessInventory {
     double          load1;              /* 1-minute load average, -1 unknown */
 } TessInventory;
 
+/* Just the one-minute load average, cheap enough to call often. -1 unknown. */
+double tess_load1(void);
+
 /* Fills inv. Never fails: unknown fields are 0 or "?". */
 void tess_inventory(TessInventory *inv);
 
