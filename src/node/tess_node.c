@@ -172,16 +172,16 @@ static void worker_loop(int rank)
  */
 typedef void (*TileSink)(void *ctx, const TessResultHdr *rh, const tess_u8 *px);
 
-static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
+static int run_epoch(const TessJob *job, int nranks, int *parked,
+                     TileSink sink, void *ctx)
 {
     Tile *tiles;
     TessAssign a;
     TessResultHdr rh;
     MPI_Status st;
     tess_u8 *px;
-    int ntiles, next, done, src, req, stop;
-    int nworkers, stopped, i;
-    int *parked;
+    int ntiles, next, done, src, req;
+    int i;
 
     tiles = plan_tiles(job, &ntiles);
     if (!tiles) {
@@ -196,12 +196,33 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
 
     next = 0;
     done = 0;
-    nworkers = nranks - 1;
-    parked = (int *)calloc((size_t)nranks, sizeof(int));
-    if (!parked) {
-        free((void *)px);
-        free((void *)tiles);
-        return 0;
+
+    /*
+     * Workers parked at the end of the previous epoch are blocked waiting for
+     * a reply from us, so a new epoch starts by handing them work. This is why
+     * an epoch must never stop a worker: a stopped worker calls MPI_Finalize
+     * and exits, and the next frame has nobody to compute it. Stops belong to
+     * the end of the job, in stop_workers().
+     */
+    for (i = 1; i < nranks && next < ntiles; i++) {
+        if (parked[i]) {
+            a.epoch = job->epoch;
+            a.x = tiles[next].x;
+            a.y = tiles[next].y;
+            a.w = tiles[next].w;
+            a.h = tiles[next].h;
+            a.width = job->width;
+            a.height = job->height;
+            a.max_iter = job->max_iter;
+            a.cx = job->cx;
+            a.cy = job->cy;
+            a.scale = job->scale;
+            MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, i,
+                     TESS_TAG_ASSIGN, MPI_COMM_WORLD);
+            next++;
+            parked[i] = 0;
+            VLOG(0, "woke parked rank %d with tile %d", i, next);
+        }
     }
 
     /*
@@ -259,18 +280,37 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
         }
     }
 
-    /* Every tile is in, so nothing is outstanding: stop the parked workers,
-       then whoever asks next, until all of them have been told. */
-    VLOG(0, "all %d tiles in, stopping %d worker(s)", ntiles, nranks - 1);
+    VLOG(0, "epoch complete, %d of %d tiles", done, ntiles);
+
+    free((void *)px);
+    free((void *)tiles);
+    return done;
+}
+
+/*
+ * End of job, not end of epoch. Parked workers are told directly; the rest are
+ * still computing or about to ask, so we wait for each to speak and answer with
+ * a stop. Late results are drained so nobody is left blocked in MPI_Send.
+ */
+static void stop_workers(int nranks, int *parked)
+{
+    TessResultHdr rh;
+    MPI_Status st;
+    tess_u8 *px;
+    int stopped, i, src, req, stop;
+
+    px = (tess_u8 *)malloc((size_t)TESS_MAX_TILE * TESS_MAX_TILE *
+                           TESS_BYTES_PER_PX);
     stopped = 0;
     for (i = 1; i < nranks; i++) {
         if (parked[i]) {
             stop = 0;
             MPI_Send(&stop, 1, MPI_INT, i, TESS_TAG_STOP, MPI_COMM_WORLD);
+            parked[i] = 0;
             stopped++;
         }
     }
-    while (stopped < nworkers) {
+    while (stopped < nranks - 1) {
         MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
         src = st.MPI_SOURCE;
         if (st.MPI_TAG == TESS_TAG_REQ) {
@@ -278,19 +318,17 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
             stop = 0;
             MPI_Send(&stop, 1, MPI_INT, src, TESS_TAG_STOP, MPI_COMM_WORLD);
             stopped++;
-        } else {
+        } else if (px) {
             MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src, st.MPI_TAG,
                      MPI_COMM_WORLD, &st);
             MPI_Recv((void *)px, (int)(rh.w * rh.h * TESS_BYTES_PER_PX),
                      MPI_BYTE, src, TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
         }
     }
-
-    VLOG(0, "stopped %d worker(s), epoch complete (%d)", stopped, 0);
-    free((void *)parked);
-    free((void *)px);
-    free((void *)tiles);
-    return done;
+    if (px) {
+        free((void *)px);
+    }
+    VLOG(0, "stopped %d worker(s) (%d)", stopped, 0);
 }
 
 /* ------------------------------------------------------------ PPM sink */
@@ -382,7 +420,7 @@ static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
 }
 
 /* Wait for one GUI to connect, then serve epochs until it goes away. */
-static int serve_gui(int port, int nranks)
+static int serve_gui(int port, int nranks, int *parked)
 {
     int lfd, cfd, one, type, len;
     struct sockaddr_in sa;
@@ -454,7 +492,7 @@ static int serve_gui(int port, int nranks)
                 job.tile = TESS_TILE;
             }
             t0 = now_sec();
-            tiles = run_epoch(&job, nranks, gui_sink, (void *)&g);
+            tiles = run_epoch(&job, nranks, parked, gui_sink, (void *)&g);
             if (g.broken) {
                 break;
             }
@@ -492,6 +530,7 @@ int main(int argc, char **argv)
     const char *ppm = (const char *)0;
     TessJob job;
     TessInventory inv;
+    int *parked;
 
     /* -v before the real parse, so the trace covers the parse itself. */
     for (i = 1; i < argc; i++) {
@@ -597,13 +636,18 @@ int main(int argc, char **argv)
     }
 
     /* master */
+    parked = (int *)calloc((size_t)nranks, sizeof(int));
+    if (!parked) {
+        fprintf(stderr, "tess-node: out of memory\n");
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
     tess_inventory(&inv);
     printf("tess-node: master on %s, %d rank(s), %d worker(s)\n",
            inv.host, nranks, nranks - 1);
     fflush(stdout);
 
     if (listen_port > 0) {
-        serve_gui(listen_port, nranks);
+        serve_gui(listen_port, nranks, parked);
     } else {
         PpmCtx c;
         double t0;
@@ -617,7 +661,7 @@ int main(int argc, char **argv)
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
         t0 = now_sec();
-        tiles = run_epoch(&job, nranks, ppm_sink, (void *)&c);
+        tiles = run_epoch(&job, nranks, parked, ppm_sink, (void *)&c);
         printf("tess-node: %d tiles in %.2f s\n", tiles, now_sec() - t0);
         if (ppm) {
             if (write_ppm(ppm, &job, c.iter) != 0) {
@@ -628,6 +672,9 @@ int main(int argc, char **argv)
         }
         free((void *)c.iter);
     }
+
+    stop_workers(nranks, parked);
+    free((void *)parked);
 
     MPI_Finalize();
     return 0;
