@@ -340,8 +340,6 @@ int main(int argc, char **argv)
     int port = TESS_DEFAULT_PORT;
     int i;
     tess_u8 hello[4];
-    Arg args[8];
-    int nargs;
 
     memset((char *)&u, 0, sizeof u);
     u.width = 1024;
@@ -376,23 +374,26 @@ int main(int argc, char **argv)
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,
                                    NULL);
 
-    nargs = 0;
-    XtSetArg(args[nargs], XmNleftAttachment, XmATTACH_FORM); nargs++;
-    XtSetArg(args[nargs], XmNrightAttachment, XmATTACH_FORM); nargs++;
-    XtSetArg(args[nargs], XmNbottomAttachment, XmATTACH_FORM); nargs++;
-    u.status = XmCreateLabel(form, "status", args, (Cardinal)nargs);
-    XtManageChild(u.status);
+    /* The varargs form, not XtSetArg: passing a Widget through an Arg array
+       converts a pointer to XtArgVal, which MIPSpro warns about at -64 and
+       which no cast can silence, since XtSetArg casts again inside the macro.
+       Varargs pass the pointer as a pointer. */
+    u.status = XtVaCreateManagedWidget("status", xmLabelWidgetClass, form,
+                                       XmNleftAttachment, XmATTACH_FORM,
+                                       XmNrightAttachment, XmATTACH_FORM,
+                                       XmNbottomAttachment, XmATTACH_FORM,
+                                       NULL);
 
-    nargs = 0;
-    XtSetArg(args[nargs], XmNwidth, u.width); nargs++;
-    XtSetArg(args[nargs], XmNheight, u.height); nargs++;
-    XtSetArg(args[nargs], XmNleftAttachment, XmATTACH_FORM); nargs++;
-    XtSetArg(args[nargs], XmNrightAttachment, XmATTACH_FORM); nargs++;
-    XtSetArg(args[nargs], XmNtopAttachment, XmATTACH_FORM); nargs++;
-    XtSetArg(args[nargs], XmNbottomAttachment, XmATTACH_WIDGET); nargs++;
-    XtSetArg(args[nargs], XmNbottomWidget, (XtArgVal)u.status); nargs++;
-    u.canvas = XmCreateDrawingArea(form, "canvas", args, (Cardinal)nargs);
-    XtManageChild(u.canvas);
+    u.canvas = XtVaCreateManagedWidget("canvas", xmDrawingAreaWidgetClass,
+                                       form,
+                                       XmNwidth, u.width,
+                                       XmNheight, u.height,
+                                       XmNleftAttachment, XmATTACH_FORM,
+                                       XmNrightAttachment, XmATTACH_FORM,
+                                       XmNtopAttachment, XmATTACH_FORM,
+                                       XmNbottomAttachment, XmATTACH_WIDGET,
+                                       XmNbottomWidget, u.status,
+                                       NULL);
 
     XtAddCallback(u.canvas, XmNexposeCallback, expose_cb, (XtPointer)&u);
     XtAddCallback(u.canvas, XmNresizeCallback, resize_cb, (XtPointer)&u);
