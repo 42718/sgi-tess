@@ -39,6 +39,7 @@
 #include <Xm/PushB.h>
 #include <Xm/RowColumn.h>
 #include <Xm/TextF.h>
+#include <Xm/ToggleB.h>
 
 #include "tess_cluster.h"
 
