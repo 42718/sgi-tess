@@ -284,7 +284,7 @@ static void stats_draw(Ui *u)
     XDrawLine(d, w, u->statsgc, 4, y, (int)wid - 6, y);
 
     rows = 0;
-    for (r = 0; r < 64 && rows < 7; r++) {
+    for (r = 0; r < 64 && rows < 7 && y + 30 < (int)hgt; r++) {
         if (u->rank_tiles[r] <= 0) {
             continue;
         }
@@ -1111,38 +1111,37 @@ static void build_control(Ui *u)
         XtVaCreateManagedWidget("Status", xmLabelWidgetClass, cframe,
                                 XmNchildType, XmFRAME_TITLE_CHILD,
                                 NULL);
-        {
-            Widget crc;
-
-            crc = XtVaCreateManagedWidget("crc", xmRowColumnWidgetClass,
-                                          cframe,
-                                          XmNorientation, XmVERTICAL,
-                                          NULL);
-            u->cluster = XtVaCreateManagedWidget("stats",
-                                                 xmDrawingAreaWidgetClass,
-                                                 crc,
-                                                 XmNheight, 132,
-                                                 XmNwidth, TESS_CTRL_W - 24,
-                                                 NULL);
-            XtAddCallback(u->cluster, XmNexposeCallback, stats_expose_cb,
-                          (XtPointer)u);
-            /* The render's progress belongs beside the cluster's, not at the
-               far end of the panel from it. */
-            u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass,
-                                                 crc,
-                                                 XmNalignment,
-                                                 XmALIGNMENT_BEGINNING,
-                                                 NULL);
-        }
+        /*
+         * The drawing area is the frame's only child. Wrapping it in a
+         * RowColumn cost it its height: it was clipped to a sliver and two
+         * draws overlapped inside it. The elapsed line goes below the frame,
+         * which keeps render progress and cluster progress together without
+         * nesting managers that argue about size.
+         */
+        u->cluster = XtVaCreateManagedWidget("stats",
+                                             xmDrawingAreaWidgetClass, cframe,
+                                             XmNheight, 150,
+                                             XmNwidth, TESS_CTRL_W - 28,
+                                             NULL);
+        XtAddCallback(u->cluster, XmNexposeCallback, stats_expose_cb,
+                      (XtPointer)u);
         u->clusterframe = cframe;
     }
+
+    u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass, form,
+                                         XmNalignment, XmALIGNMENT_BEGINNING,
+                                         XmNtopAttachment, XmATTACH_WIDGET,
+                                         XmNtopWidget, u->clusterframe,
+                                         XmNleftAttachment, XmATTACH_FORM,
+                                         XmNrightAttachment, XmATTACH_FORM,
+                                         NULL);
 
     u->cl = tess_cluster_create(form, u->tree, u->hostlist, u->port,
                                 cluster_ready_cb, (void *)u,
                                 ui_log_cb, (void *)u);
     XtVaSetValues(tess_cluster_widget(u->cl),
                   XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, u->clusterframe,
+                  XmNtopWidget, u->elapsed,
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
                   NULL);
