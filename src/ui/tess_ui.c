@@ -105,6 +105,7 @@ typedef struct Ui {
     int        origin_x;
     int        ctrl_x;
     int        ctrl_y;
+    int        border_x, border_y;
     int        ready;      /* the pixel machinery exists; resize may touch it */
     int        attach;
     int        dragging;
@@ -1414,15 +1415,41 @@ int main(int argc, char **argv)
          * is a much smaller problem than a panel with its labels underneath
          * the fractal.
          */
-        u.ctrl_x = fx + fwid + TESS_GAP;
-        u.ctrl_y = fy;
+        /*
+         * Where the window manager puts the CLIENT inside the frame it drew.
+         *
+         * Setting a shell's position before realize is honoured as the client
+         * position here, not the frame position, so the frame lands that much
+         * further left and the two windows overlapped by exactly one border.
+         * Measuring the offset on the render window tells us what to add.
+         */
+        {
+            Window child;
+            int ax, ay;
+
+            XTranslateCoordinates(d, XtWindow(u.toplevel),
+                                  RootWindow(d, DefaultScreen(d)),
+                                  0, 0, &ax, &ay, &child);
+            u.border_x = ax - fx;
+            u.border_y = ay - fy;
+            if (u.border_x < 0) {
+                u.border_x = 0;
+            }
+            if (u.border_y < 0) {
+                u.border_y = 0;
+            }
+        }
+
+        u.ctrl_x = fx + fwid + TESS_GAP + u.border_x;
+        u.ctrl_y = fy + u.border_y;
 
         {
             char msg[160];
 
-            sprintf(msg, "display %dx%d, render %dx%d, frame at %d,%d %dx%d",
+            sprintf(msg,
+                    "display %dx%d render %dx%d frame %d,%d %dx%d border %d,%d",
                     u.screen_w, u.screen_h, u.width, u.height, fx, fy,
-                    fwid, fhgt);
+                    fwid, fhgt, u.border_x, u.border_y);
             u.pending_log[0] = '\0';
             strncpy(u.pending_log, msg, sizeof u.pending_log - 1);
         }

@@ -315,15 +315,16 @@ void tess_cluster_rescan(TessCluster *c)
          * every CPU it has: reserving one there was simply throwing away a
          * quarter of aurora.
          */
-        if (c->host[i].online <= 0) {
-            c->host[i].ranks = 0;
-        } else if (i == 0) {
-            c->host[i].ranks = c->host[i].online - 1;
-            if (c->host[i].ranks < 1) {
-                c->host[i].ranks = 1;       /* the master must exist */
-            }
-        } else {
-            c->host[i].ranks = c->host[i].online;
+        /*
+         * Every host offers one rank per online CPU. On the display host the
+         * first of those is the master, which schedules and shades rather than
+         * computing, so lucy's two CPUs give a master on cpu0 and a worker on
+         * cpu1: the reserved CPU is the one the interface is already using,
+         * not an idle one.
+         */
+        c->host[i].ranks = c->host[i].online > 0 ? c->host[i].online : 0;
+        if (i == 0 && c->host[i].ranks < 1) {
+            c->host[i].ranks = 1;           /* the master must exist */
         }
         if (!c->host[i].reachable) {
             c->host[i].enabled = 0;
