@@ -283,8 +283,22 @@ static void stats_draw(Ui *u)
     y += 6;
     XDrawLine(d, w, u->statsgc, 4, y, (int)wid - 6, y);
 
+    /*
+     * Rank 0 first, always, even though it computes nothing. It is the master
+     * on the display host and people look for it: leaving it out makes the
+     * machine running the interface seem absent from its own cluster.
+     */
+    if (u->workers > 0 && y + 30 < (int)hgt) {
+        y += 15;
+        tess_cluster_rank_label(u->cl, 0, label, (int)sizeof label);
+        strcat(label, " (master)");
+        XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
+        XDrawString(d, w, u->statsgc, 4, y, label, (int)strlen(label));
+        XDrawString(d, w, u->statsgc, barx, y, "schedules, no compute", 21);
+    }
+
     rows = 0;
-    for (r = 0; r < 64 && rows < 7 && y + 30 < (int)hgt; r++) {
+    for (r = 1; r < 64 && rows < 7 && y + 30 < (int)hgt; r++) {
         if (u->rank_tiles[r] <= 0) {
             continue;
         }
@@ -491,9 +505,11 @@ static void reshade_all(Ui *u)
  *
  * A fixed budget goes soft as you descend: past about 2^18 the boundary needs
  * more work than the opening view to stay sharp. The rule is linear in depth,
- * 128 more iterations per halving of scale on top of a 500 floor, which tracks
- * the escape-time cost closely enough and is predictable, unlike the usual
- * exponential fits. Off by default so a manual budget stays manual.
+ * 256 more iterations per halving of scale on top of a 500 floor. The first
+ * attempt used 128 and still went soft at depth, which is the honest way to
+ * pick this constant: watch where it fails and double it. Predictable, unlike
+ * the usual exponential fits, and off by default so a manual budget stays
+ * manual.
  */
 static void auto_iters(Ui *u)
 {
@@ -511,7 +527,7 @@ static void auto_iters(Ui *u)
     if (depth < 0.0) {
         depth = 0.0;
     }
-    it = (int)(500.0 + 128.0 * depth);
+    it = (int)(500.0 + 256.0 * depth);
     if (it < 64) {
         it = 64;
     }
@@ -1415,7 +1431,15 @@ int main(int argc, char **argv)
                     u.job.scale = 3.2 / (double)u.width;
                 }
             }
-            u.ctrl_x = fx + u.width + decor + TESS_GAP;
+            /*
+             * Measure again after resizing. Computing the panel's position
+             * from the size we asked for assumes the window manager granted it
+             * exactly and kept the same borders; it does not always, and the
+             * windows overlapped by the difference.
+             */
+            XSync(d, False);
+            wm_frame_geom(d, XtWindow(u.toplevel), &fx, &fy, &fwid, &fhgt);
+            u.ctrl_x = fx + fwid + TESS_GAP;
             u.ctrl_y = fy;
         }
         {
