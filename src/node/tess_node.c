@@ -492,9 +492,25 @@ int main(int argc, char **argv)
     TessJob job;
     TessInventory inv;
 
+    /* -v before the real parse, so the trace covers the parse itself. */
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-v") == 0) {
+            verbose = 1;
+        }
+    }
+
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
+
+    if (verbose) {
+        fprintf(stderr, "[rank %d] argc=%d:", rank, argc);
+        for (i = 0; i < argc; i++) {
+            fprintf(stderr, " %s", argv[i]);
+        }
+        fprintf(stderr, "\n");
+        fflush(stderr);
+    }
 
     if (tess_types_check() != 0) {
         fprintf(stderr, "rank %d: integer widths are not what the wire format "
@@ -535,8 +551,20 @@ int main(int argc, char **argv)
             verbose = 1;
         } else if (strcmp(argv[i], "-scale") == 0 && i + 1 < argc) {
             job.scale = atof(argv[++i]);
-        } else if (rank == 0) {
-            usage(argv[0]);
+        } else {
+            /*
+             * Warn, never exit. mpirun's colon form can hand a rank arguments
+             * this parser has not seen, and exiting here kills rank 0 before
+             * MPI_Finalize, leaving every worker spinning on a message that
+             * will never arrive. That is a silent cluster-wide hang caused by
+             * one unrecognised token. The 2001 tiler ignores unknown arguments
+             * entirely, which is why it survives the same treatment.
+             */
+            if (rank == 0) {
+                fprintf(stderr, "tess-node: ignoring unknown argument \"%s\"\n",
+                        argv[i]);
+                fflush(stderr);
+            }
         }
     }
 
