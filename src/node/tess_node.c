@@ -404,7 +404,12 @@ static int write_ppm(const char *path, const TessJob *job, const tess_u8 *iter)
     if (!rgb) {
         return -1;
     }
-    tess_shade(iter, (int)npix, (int)job->max_iter, 0, rgb);
+    {
+        TessPalette pal;
+
+        tess_palette_default(&pal);
+        tess_shade(iter, (int)npix, (int)job->max_iter, &pal, rgb);
+    }
 
     f = fopen(path, "wb");
     if (!f) {

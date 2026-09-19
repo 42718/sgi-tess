@@ -11,9 +11,12 @@
  *   tess-node -listen        (under mpirun, on the cluster)
  *   tess-ui -host lucy       (here, on the display)
  *
- * v1 is deliberately one window: image, status line, click to zoom. The
- * two-window layout in design/ui-design.html comes next, against this same
- * protocol.
+ * Two top-level shells on one app context, as design/ui-design.html has it:
+ * the render window, and a control window whose panes are GENERATED from the
+ * descriptor tables below rather than hand-built (DESIGN.md section 5). The
+ * `where` column in those tables is the architecture in one field: TESS_LOCAL
+ * parameters re-shade pixels already in hand and send nothing, everything else
+ * costs an epoch.
  *
  * C89 throughout. X and Motif idioms follow baseline/mandel1-motif-single.c,
  * which is known to build with MIPSpro and IRIX IM.
@@ -28,22 +31,54 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 #include <X11/Xlib.h>
+#include <X11/Shell.h>
 #include <Xm/Xm.h>
 #include <Xm/Form.h>
 #include <Xm/DrawingA.h>
 #include <Xm/Label.h>
+#include <Xm/PushB.h>
+#include <Xm/RowColumn.h>
+#include <Xm/Text.h>
+
+#include "tess_params.h"
 
 #include "tess_types.h"
 #include "tess_proto.h"
 #include "tess_wire.h"
 #include "tess_mandel.h"
 
+/*
+ * Everything the panes edit. The descriptor tables below point into this by
+ * offset, which is what lets one generic builder produce both panes.
+ */
+typedef struct UiValues {
+    double cx;
+    double cy;
+    double scale;
+    int    max_iter;
+    int    ramp;
+    int    cycles;
+    int    rotate;
+    int    interior;
+} UiValues;
+
 typedef struct Ui {
     Widget     toplevel;
+    Widget     control;        /* second shell, same app context */
     Widget     canvas;
     Widget     status;
+    Widget     log;
+    Widget     elapsed;
+    TessParamPane *view_pane;
+    TessParamPane *colour_pane;
+    UiValues   val;
+    XtAppContext app;
+    XtIntervalId tick;
+    double     epoch_t0;
+    int        tiles_expected;
     Display   *dpy;
     Visual    *visual;
     int        depth;
@@ -60,11 +95,39 @@ typedef struct Ui {
     XtInputId  input_id;
 
     TessJob    job;
-    int        palette;
+    TessPalette pal;
     int        tiles_in;
     int        workers;
     double     last_msec;
 } Ui;
+
+/*
+ * The tables. `where` is the interesting column: TESS_LOCAL parameters
+ * re-shade pixels already in hand and send nothing, which is why the colour
+ * pane has no Apply button and why a palette change is instant on a cluster
+ * that may be minutes into a render.
+ */
+static const TessParamDesc view_params[] = {
+    { "centre re",  TESS_P_DOUBLE, XtOffsetOf(UiValues, cx),       0.0, 0.0,
+      TESS_CLUSTER, { 0 } },
+    { "centre im",  TESS_P_DOUBLE, XtOffsetOf(UiValues, cy),       0.0, 0.0,
+      TESS_CLUSTER, { 0 } },
+    { "scale",      TESS_P_DOUBLE, XtOffsetOf(UiValues, scale),    1e-15, 1.0,
+      TESS_CLUSTER, { 0 } },
+    { "iterations", TESS_P_INT,    XtOffsetOf(UiValues, max_iter), 16.0, 65535.0,
+      TESS_CLUSTER, { 0 } }
+};
+
+static const TessParamDesc colour_params[] = {
+    { "ramp",     TESS_P_ENUM, XtOffsetOf(UiValues, ramp),     0.0, 1.0,
+      TESS_LOCAL, { "blue-gold", "grey", 0 } },
+    { "cycles",   TESS_P_INT,  XtOffsetOf(UiValues, cycles),   1.0, 32.0,
+      TESS_LOCAL, { 0 } },
+    { "rotate",   TESS_P_INT,  XtOffsetOf(UiValues, rotate),   0.0, 255.0,
+      TESS_LOCAL, { 0 } },
+    { "interior", TESS_P_ENUM, XtOffsetOf(UiValues, interior), 0.0, 1.0,
+      TESS_LOCAL, { "black", "white", 0 } }
+};
 
 /* ------------------------------------------------------------- plumbing */
 
@@ -72,6 +135,31 @@ static void die(const char *msg)
 {
     fprintf(stderr, "tess-ui: %s\n", msg);
     exit(1);
+}
+
+static void ui_log(Ui *u, const char *text)
+{
+    XmTextPosition last;
+
+    if (!u->log) {
+        return;
+    }
+    last = XmTextGetLastPosition(u->log);
+    XmTextInsert(u->log, last, (char *)text);
+    XmTextInsert(u->log, XmTextGetLastPosition(u->log), "\n");
+    XmTextShowPosition(u->log, XmTextGetLastPosition(u->log));
+}
+
+static void set_elapsed(Ui *u, const char *text)
+{
+    XmString s;
+
+    if (!u->elapsed) {
+        return;
+    }
+    s = XmStringCreateLocalized((char *)text);
+    XtVaSetValues(u->elapsed, XmNlabelString, s, NULL);
+    XmStringFree(s);
 }
 
 static void set_status(Ui *u, const char *text)
@@ -143,6 +231,8 @@ static void blit(Ui *u, int x, int y, int w, int h)
               (unsigned)w, (unsigned)h);
 }
 
+static void reshade_all(Ui *u);
+
 /* Shade one tile out of the iteration buffer straight into the framebuffer. */
 static void shade_tile(Ui *u, int x, int y, int w, int h)
 {
@@ -154,11 +244,38 @@ static void shade_tile(Ui *u, int x, int y, int w, int h)
         src = u->iter + ((size_t)(y + row) * (size_t)u->width + (size_t)x) *
               TESS_BYTES_PER_PX;
         dst = u->fb + (size_t)(y + row) * (size_t)u->width + (size_t)x;
-        tess_shade(src, w, (int)u->job.max_iter, u->palette, dst);
+        tess_shade(src, w, (int)u->job.max_iter, &u->pal, dst);
     }
 }
 
 /* ----------------------------------------------------------- the job */
+
+static void reshade_all(Ui *u)
+{
+    shade_tile(u, 0, 0, u->width, u->height);
+    blit(u, 0, 0, u->width, u->height);
+}
+
+/* The one place the edited values become a job. */
+static void values_to_job(Ui *u)
+{
+    u->job.cx = u->val.cx;
+    u->job.cy = u->val.cy;
+    u->job.scale = u->val.scale;
+    u->job.max_iter = (tess_u32)u->val.max_iter;
+    u->pal.ramp = u->val.ramp;
+    u->pal.cycles = u->val.cycles;
+    u->pal.rotate = u->val.rotate;
+    u->pal.interior = u->val.interior;
+}
+
+static void job_to_values(Ui *u)
+{
+    u->val.cx = u->job.cx;
+    u->val.cy = u->job.cy;
+    u->val.scale = u->job.scale;
+    u->val.max_iter = (int)u->job.max_iter;
+}
 
 static void send_render(Ui *u)
 {
@@ -179,6 +296,39 @@ static void send_render(Ui *u)
     sprintf(msg, "epoch %u  %dx%d  max %u  scale %.3e  rendering...",
             u->job.epoch, u->width, u->height, u->job.max_iter, u->job.scale);
     set_status(u, msg);
+
+    /* Tiles the master will produce, computed here rather than asked for: the
+       GUI knows the geometry, so the progress line needs no protocol support. */
+    {
+        int tw = (int)(u->job.tile ? u->job.tile : TESS_TILE);
+
+        u->tiles_expected = ((u->width + tw - 1) / tw) *
+                            ((u->height + tw - 1) / tw);
+    }
+    u->epoch_t0 = 0.0;
+}
+
+/*
+ * A parameter changed. This is the whole architecture in one branch: shading
+ * parameters re-colour what is already here, everything else costs a round
+ * trip to the cluster.
+ */
+static void param_applied(void *ctx, const TessParamDesc *d)
+{
+    Ui *u = (Ui *)ctx;
+    char msg[160];
+
+    values_to_job(u);
+    if (d->where == TESS_LOCAL) {
+        reshade_all(u);
+        sprintf(msg, "%s changed: re-shaded locally, no cluster traffic",
+                d->label);
+        ui_log(u, msg);
+    } else if (u->fd >= 0) {
+        sprintf(msg, "%s changed: new epoch", d->label);
+        ui_log(u, msg);
+        send_render(u);
+    }
 }
 
 static void handle_tile(Ui *u, const tess_u8 *body, int len)
@@ -208,6 +358,12 @@ static void handle_tile(Ui *u, const tess_u8 *body, int len)
     }
     shade_tile(u, (int)th.x, (int)th.y, (int)th.w, (int)th.h);
     blit(u, (int)th.x, (int)th.y, (int)th.w, (int)th.h);
+    if (u->tiles_in == 0) {
+        struct timeval tv;
+
+        gettimeofday(&tv, (struct timezone *)0);
+        u->epoch_t0 = (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
+    }
     u->tiles_in++;
 }
 
@@ -244,7 +400,34 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
                 tess_get_u32(buf), tiles, (double)msec / 1000.0, u->workers,
                 u->job.scale);
         set_status(u, msg);
+        ui_log(u, msg);
+        set_elapsed(u, "idle");
+        u->epoch_t0 = 0.0;
     }
+}
+
+static void tick_cb(XtPointer cd, XtIntervalId *id)
+{
+    Ui *u = (Ui *)cd;
+    char msg[160];
+    double dt;
+    struct timeval tv;
+
+    gettimeofday(&tv, (struct timezone *)0);
+    dt = (double)tv.tv_sec + (double)tv.tv_usec * 1e-6 - u->epoch_t0;
+
+    if (u->epoch_t0 > 0.0 && u->tiles_in < u->tiles_expected) {
+        double eta = 0.0;
+
+        if (u->tiles_in > 0) {
+            eta = dt * (double)(u->tiles_expected - u->tiles_in) /
+                  (double)u->tiles_in;
+        }
+        sprintf(msg, "%d/%d tiles   %.1f s elapsed   %.1f s left",
+                u->tiles_in, u->tiles_expected, dt, eta);
+        set_elapsed(u, msg);
+    }
+    u->tick = XtAppAddTimeOut(u->app, 200, tick_cb, (XtPointer)u);
 }
 
 /* ------------------------------------------------------------ callbacks */
@@ -300,6 +483,10 @@ static void zoom_at(Ui *u, int px, int py, int in)
             u->job.max_iter -= 64;
         }
     }
+    job_to_values(u);
+    if (u->view_pane) {
+        tess_params_refresh(u->view_pane);
+    }
     send_render(u);
 }
 
@@ -323,10 +510,117 @@ static void input_cb(Widget w, XtPointer cd, XtPointer cb)
     } else if (e->button == Button2) {
         /* palette only: no cluster traffic, which is the point of shipping
            iteration counts rather than colour */
-        u->palette = !u->palette;
-        shade_tile(u, 0, 0, u->width, u->height);
-        blit(u, 0, 0, u->width, u->height);
+        u->val.ramp = !u->val.ramp;
+        values_to_job(u);
+        if (u->colour_pane) {
+            tess_params_refresh(u->colour_pane);
+        }
+        reshade_all(u);
+        ui_log(u, "ramp toggled: re-shaded locally, no cluster traffic");
     }
+}
+
+static void render_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+
+    values_to_job(u);
+    if (u->fd >= 0) {
+        send_render(u);
+    }
+}
+
+static void home_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+
+    u->val.cx = -0.6;
+    u->val.cy = 0.0;
+    u->val.scale = 3.2 / (double)(u->width > 0 ? u->width : 1024);
+    u->val.max_iter = 1000;
+    values_to_job(u);
+    tess_params_refresh(u->view_pane);
+    ui_log(u, "home");
+    if (u->fd >= 0) {
+        send_render(u);
+    }
+}
+
+/* The second top-level shell: same app context, no MPI, no blocking. */
+static void build_control(Ui *u)
+{
+    Widget form, buttons, b;
+
+    u->control = XtVaAppCreateShell("control", "Tess",
+                                    topLevelShellWidgetClass,
+                                    XtDisplay(u->toplevel),
+                                    XmNtitle, "Tess control",
+                                    NULL);
+    form = XtVaCreateManagedWidget("cform", xmFormWidgetClass, u->control,
+                                   NULL);
+
+    u->view_pane = tess_params_build(form, "View",
+                                     view_params,
+                                     (int)(sizeof view_params /
+                                           sizeof view_params[0]),
+                                     (void *)&u->val, param_applied,
+                                     (void *)u);
+    XtVaSetValues(XtParent(u->view_pane->form),
+                  XmNtopAttachment, XmATTACH_FORM,
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  NULL);
+
+    u->colour_pane = tess_params_build(form, "Colour",
+                                       colour_params,
+                                       (int)(sizeof colour_params /
+                                             sizeof colour_params[0]),
+                                       (void *)&u->val, param_applied,
+                                       (void *)u);
+    XtVaSetValues(XtParent(u->colour_pane->form),
+                  XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopWidget, XtParent(u->view_pane->form),
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  NULL);
+
+    buttons = XtVaCreateManagedWidget("buttons", xmRowColumnWidgetClass, form,
+                                      XmNorientation, XmHORIZONTAL,
+                                      XmNtopAttachment, XmATTACH_WIDGET,
+                                      XmNtopWidget,
+                                      XtParent(u->colour_pane->form),
+                                      XmNleftAttachment, XmATTACH_FORM,
+                                      NULL);
+    b = XtVaCreateManagedWidget("Render", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, render_cb, (XtPointer)u);
+    b = XtVaCreateManagedWidget("Home", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
+
+    u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass, form,
+                                         XmNtopAttachment, XmATTACH_WIDGET,
+                                         XmNtopWidget, buttons,
+                                         XmNleftAttachment, XmATTACH_FORM,
+                                         NULL);
+
+    u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
+    XtVaSetValues(u->log,
+                  XmNeditable, False,
+                  XmNeditMode, XmMULTI_LINE_EDIT,
+                  XmNrows, 10,
+                  XmNcolumns, 52,
+                  NULL);
+    XtVaSetValues(XtParent(u->log),
+                  XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopWidget, u->elapsed,
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  XmNbottomAttachment, XmATTACH_FORM,
+                  NULL);
+    XtManageChild(u->log);
+
+    XtRealizeWidget(u->control);
 }
 
 /* ----------------------------------------------------------------- main */
@@ -345,13 +639,17 @@ int main(int argc, char **argv)
     u.width = 1024;
     u.height = 768;
     u.fd = -1;
-    u.palette = 0;
     u.job.epoch = 0;
     u.job.max_iter = 1000;
     u.job.tile = TESS_TILE;
     u.job.cx = -0.6;
     u.job.cy = 0.0;
     u.job.scale = 3.2 / 1024.0;
+    tess_palette_default(&u.pal);
+    u.val.ramp = u.pal.ramp;
+    u.val.cycles = u.pal.cycles;
+    u.val.rotate = u.pal.rotate;
+    u.val.interior = u.pal.interior;
 
     if (tess_types_check() != 0) {
         die("integer widths are not what the wire format assumes");
@@ -371,6 +669,7 @@ int main(int argc, char **argv)
 
     u.toplevel = XtVaAppInitialize(&app, "Tess", (XrmOptionDescList)0, 0,
                                   &argc, argv, (String *)0, NULL);
+    u.app = app;
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,
                                    NULL);
 
@@ -400,6 +699,10 @@ int main(int argc, char **argv)
     XtAddCallback(u.canvas, XmNinputCallback, input_cb, (XtPointer)&u);
 
     XtRealizeWidget(u.toplevel);
+
+    job_to_values(&u);
+    build_control(&u);
+    u.tick = XtAppAddTimeOut(app, 200, tick_cb, (XtPointer)&u);
 
     u.dpy = XtDisplay(u.toplevel);
     u.visual = DefaultVisual(u.dpy, DefaultScreen(u.dpy));

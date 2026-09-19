@@ -20,8 +20,20 @@
  */
 void tess_mandel_tile(const TessAssign *a, tess_u8 *out);
 
-/* Palette: 0 is the classic blue-gold ramp. Interior is always black. */
-void tess_shade(const tess_u8 *in, int npix, int max_iter, int palette,
-                tess_u32 *rgb_out);
+/*
+ * Colouring, entirely in the GUI. DESIGN.md section 5 gives shade() a
+ * TessPalette; this is it. None of these fields reach the cluster, which is
+ * the whole point: changing any of them re-shades tile data already in hand.
+ */
+typedef struct TessPalette {
+    int ramp;        /* 0 blue-gold, 1 grey */
+    int cycles;      /* how many times the ramp repeats across the range */
+    int rotate;      /* 0..255, shifts the ramp */
+    int interior;    /* 0 black, 1 white */
+} TessPalette;
+
+void tess_palette_default(TessPalette *p);
+void tess_shade(const tess_u8 *in, int npix, int max_iter,
+                const TessPalette *pal, tess_u32 *rgb_out);
 
 #endif /* TESS_MANDEL_H */

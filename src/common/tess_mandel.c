@@ -92,30 +92,46 @@ static tess_u32 rgb(unsigned int r, unsigned int g, unsigned int b)
     return ((r & 255u) << 16) | ((g & 255u) << 8) | (b & 255u);
 }
 
-void tess_shade(const tess_u8 *in, int npix, int max_iter, int palette,
-                tess_u32 *rgb_out)
+void tess_palette_default(TessPalette *p)
+{
+    p->ramp = 0;
+    p->cycles = 1;
+    p->rotate = 0;
+    p->interior = 0;
+}
+
+void tess_shade(const tess_u8 *in, int npix, int max_iter,
+                const TessPalette *pal, tess_u32 *rgb_out)
 {
     int k;
     unsigned int it;
     double t, f;
     unsigned int r, g, b;
+    int cycles;
+
+    cycles = pal->cycles > 0 ? pal->cycles : 1;
 
     for (k = 0; k < npix; k++) {
         it = ((unsigned int)in[k * 3] << 8) | (unsigned int)in[k * 3 + 1];
         f  = (double)in[k * 3 + 2] / 255.0;
 
         if (it >= (unsigned int)max_iter) {
-            rgb_out[k] = rgb(0, 0, 0);
+            rgb_out[k] = pal->interior ? rgb(255, 255, 255) : rgb(0, 0, 0);
             continue;
         }
 
+        /* Position along the ramp: repeated `cycles` times and rotated, both
+           of which are pure GUI arithmetic on data the cluster already sent. */
         t = ((double)it + f) / (double)max_iter;
+        t = t * (double)cycles + (double)pal->rotate / 256.0;
+        t = t - (double)(int)t;
+        if (t < 0.0) {
+            t += 1.0;
+        }
 
-        if (palette == 1) {
-            /* grey, for checking geometry without colour getting in the way */
+        if (pal->ramp == 1) {
             r = g = b = (unsigned int)(255.0 * t);
         } else {
-            /* blue through gold to white: cheap, and it shows banding honestly */
             r = (unsigned int)(255.0 * (t < 0.5 ? t * 1.2 : 0.6 + (t - 0.5) * 0.8));
             g = (unsigned int)(255.0 * (t < 0.5 ? t * 0.7 : 0.35 + (t - 0.5) * 1.3));
             b = (unsigned int)(255.0 * (t < 0.5 ? 0.35 + t * 1.0 : 0.85 - (t - 0.5) * 0.6));
