@@ -70,11 +70,18 @@ struct TessCluster {
 
 static void clog(TessCluster *c, const char *fmt, const char *a, int b)
 {
-    char msg[256];
+    char msg[512];
 
     sprintf(msg, fmt, a, b);
     if (c->logf) {
         c->logf(c->logctx, msg);
+    }
+}
+
+static void clog1(TessCluster *c, const char *text)
+{
+    if (c->logf) {
+        c->logf(c->logctx, text);
     }
 }
 
@@ -89,7 +96,13 @@ static void set_state(TessCluster *c, const char *text)
 
 /* ------------------------------------------------------------ discovery */
 
-/* One line of output from a command, trimmed. Returns 0 on success. */
+/*
+ * One line of output from a command, trimmed. Returns 0 on success.
+ *
+ * Keeps stderr, because a failure here is the interesting case and "no answer"
+ * on its own tells you nothing: arshell's own complaint is what says whether
+ * the host is down, the array is misconfigured, or the binary is missing.
+ */
 static int run_capture(const char *cmd, char *out, int len)
 {
     FILE *f;
@@ -136,17 +149,37 @@ static void probe_host(TessCluster *c, int i)
     h->online = 0;
     strcpy(h->note, "no answer");
 
-    sprintf(cmd, "arshell %s uname -m 2>/dev/null", h->name);
+    sprintf(cmd, "arshell %s uname -m 2>&1", h->name);
     if (run_capture(cmd, line, (int)sizeof line) != 0) {
+        clog1(c, "probe: no output from:");
+        clog1(c, cmd);
+        return;
+    }
+    if (strchr(line, ' ') || strlen(line) > 8) {
+        /* Not an architecture: arshell said something, and what it said is
+           worth more than "no answer". */
+        strncpy(h->note, line, sizeof h->note - 1);
+        h->note[sizeof h->note - 1] = '\0';
+        clog1(c, "probe: unexpected reply:");
+        clog1(c, line);
         return;
     }
     strncpy(h->arch, line, sizeof h->arch - 1);
     h->arch[sizeof h->arch - 1] = '\0';
 
-    sprintf(cmd, "arshell %s %s/build/%s/tess-probe 2>/dev/null",
+    sprintf(cmd, "arshell %s %s/build/%s/tess-probe 2>&1",
             h->name, c->tree, h->arch);
     if (run_capture(cmd, line, (int)sizeof line) != 0) {
         strcpy(h->note, "no tess-probe");
+        clog1(c, "probe: no output from:");
+        clog1(c, cmd);
+        return;
+    }
+    if (!strstr(line, "cpus=")) {
+        strncpy(h->note, line, sizeof h->note - 1);
+        h->note[sizeof h->note - 1] = '\0';
+        clog1(c, "probe: not a probe line:");
+        clog1(c, line);
         return;
     }
     h->cpus = field_int(line, "cpus=");
