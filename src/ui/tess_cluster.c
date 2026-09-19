@@ -309,23 +309,21 @@ void tess_cluster_rescan(TessCluster *c)
          * (DESIGN.md 3b). Everyone else offers one rank per online CPU.
          */
         /*
-         * One CPU per host stays out of the job: on the display host it runs
-         * X, the GUI and the shading pass, and everywhere else it leaves the
-         * machine usable while a long render is going. The master rank counts
-         * as one, so lucy with two CPUs defaults to master only, which is what
-         * DESIGN.md section 3b asks for, and aurora with four defaults to
-         * three workers.
+         * The reserved CPU belongs to the display host only. It runs X, the
+         * GUI, the shading pass and the master rank, so it offers online-1
+         * (DESIGN.md 3b). A compute host has nothing else to do and offers
+         * every CPU it has: reserving one there was simply throwing away a
+         * quarter of aurora.
          */
-        if (c->host[i].online > 0) {
+        if (c->host[i].online <= 0) {
+            c->host[i].ranks = 0;
+        } else if (i == 0) {
             c->host[i].ranks = c->host[i].online - 1;
-            if (i == 0 && c->host[i].ranks < 1) {
+            if (c->host[i].ranks < 1) {
                 c->host[i].ranks = 1;       /* the master must exist */
             }
-            if (c->host[i].ranks < 0) {
-                c->host[i].ranks = 0;
-            }
         } else {
-            c->host[i].ranks = 0;
+            c->host[i].ranks = c->host[i].online;
         }
         if (!c->host[i].reachable) {
             c->host[i].enabled = 0;

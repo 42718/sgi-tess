@@ -1392,19 +1392,31 @@ int main(int argc, char **argv)
             if (decor < 0) {
                 decor = 0;
             }
-            u.ctrl_x = u.screen_w - (TESS_CTRL_W + decor);
-            u.ctrl_y = fy;
 
-            want = u.ctrl_x - TESS_GAP - decor - fx;
-            if (want > 320 && want != u.width) {
-                u.width = want;
-                u.height = u.width * 3 / 4;
-                XtVaSetValues(u.toplevel,
-                              XmNwidth, u.width,
-                              XmNheight, u.height + 22,
-                              NULL);
-                u.job.scale = 3.2 / (double)u.width;
+            /*
+             * Solve for a render width that makes the pair end exactly at the
+             * right screen edge, then place the panel against the render
+             * window's resulting frame. Doing it the other way round - panel
+             * from the screen edge, render from the panel - was
+             * self-inconsistent, because resizing the render window moves the
+             * edge the panel was measured against.
+             *
+             *   fx + inner + decor + gap + panel + decor = screen
+             */
+            want = u.screen_w - fx - TESS_GAP - TESS_CTRL_W - 2 * decor;
+            if (want > 320) {
+                if (want != u.width) {
+                    u.width = want;
+                    u.height = u.width * 3 / 4;
+                    XtVaSetValues(u.toplevel,
+                                  XmNwidth, u.width,
+                                  XmNheight, u.height + 22,
+                                  NULL);
+                    u.job.scale = 3.2 / (double)u.width;
+                }
             }
+            u.ctrl_x = fx + u.width + decor + TESS_GAP;
+            u.ctrl_y = fy;
         }
         {
             char msg[160];
