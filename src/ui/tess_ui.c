@@ -47,8 +47,10 @@
 
 #include "tess_params.h"
 
-#define TESS_CTRL_W 420      /* control window width, and the gap beside it */
+#define TESS_CTRL_W 420      /* control window width */
 #define TESS_GAP    8
+#define TESS_DECOR  14       /* window manager border and frame, per window */
+#define TESS_USE    0.80     /* share of the screen width both windows take */
 
 #include "tess_types.h"
 #include "tess_proto.h"
@@ -77,6 +79,8 @@ typedef struct Ui {
     Widget     canvas;
     Widget     status;
     Widget     log;
+    Widget     cluster;
+    Widget     clusterframe;
     Widget     elapsed;
     TessParamPane *view_pane;
     TessParamPane *colour_pane;
@@ -88,6 +92,7 @@ typedef struct Ui {
 
     GC         bandgc;          /* XOR, for the rubber band */
     int        screen_w, screen_h;
+    int        origin_x;
     int        dragging;
     int        drag_x0, drag_y0;
     int        drag_x1, drag_y1;
@@ -110,7 +115,15 @@ typedef struct Ui {
     TessPalette pal;
     int        tiles_in;
     int        workers;
+    int        ranks;
     double     last_msec;
+    char       host[64];
+    int        port;
+
+    /* per-rank accounting, straight out of the tile headers */
+    int        rank_tiles[64];
+    double     rank_usec[64];
+    long       bytes_in;
 } Ui;
 
 /*
@@ -174,6 +187,52 @@ static void set_elapsed(Ui *u, const char *text)
     s = XmStringCreateLocalized((char *)text);
     XtVaSetValues(u->elapsed, XmNlabelString, s, NULL);
     XmStringFree(s);
+}
+
+/*
+ * Cluster status, entirely from data already arriving: every tile header
+ * carries the rank that computed it and how long it took, so who is pulling
+ * their weight needs no extra protocol and no second connection.
+ */
+static void cluster_update(Ui *u)
+{
+    char buf[1024];
+    char line[128];
+    int r, shown;
+
+    if (!u->cluster) {
+        return;
+    }
+    sprintf(buf, "master   %s:%d\nranks    %d total, %d worker(s)\n",
+            u->host, u->port, u->ranks, u->workers);
+    sprintf(line, "epoch    %u, %d/%d tiles, %.0f KB in\n",
+            u->job.epoch, u->tiles_in, u->tiles_expected,
+            (double)u->bytes_in / 1024.0);
+    strcat(buf, line);
+    if (u->last_msec > 0.0) {
+        sprintf(line, "last     %.2f s\n", u->last_msec / 1000.0);
+        strcat(buf, line);
+    }
+    strcat(buf, "\nrank  tiles   avg ms   share\n");
+
+    shown = 0;
+    for (r = 1; r < 64 && shown < 12; r++) {
+        if (u->rank_tiles[r] > 0) {
+            double avg = u->rank_usec[r] / (double)u->rank_tiles[r] / 1000.0;
+            double share = u->tiles_in > 0 ?
+                           100.0 * (double)u->rank_tiles[r] /
+                           (double)u->tiles_in : 0.0;
+
+            sprintf(line, "%4d  %5d  %7.1f  %4.0f%%\n", r, u->rank_tiles[r],
+                    avg, share);
+            strcat(buf, line);
+            shown++;
+        }
+    }
+    if (!shown) {
+        strcat(buf, "  (no tiles yet)\n");
+    }
+    XmTextSetString(u->cluster, buf);
 }
 
 static void set_status(Ui *u, const char *text)
@@ -340,6 +399,9 @@ static void send_render(Ui *u)
 
     u->job.epoch++;
     u->job.width = (tess_u32)u->width;
+    memset((char *)u->rank_tiles, 0, sizeof u->rank_tiles);
+    memset((char *)u->rank_usec, 0, sizeof u->rank_usec);
+    u->bytes_in = 0;
     u->job.height = (tess_u32)u->height;
     u->tiles_in = 0;
 
@@ -420,6 +482,11 @@ static void handle_tile(Ui *u, const tess_u8 *body, int len)
         u->epoch_t0 = (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
     }
     u->tiles_in++;
+    if (th.rank < 64) {
+        u->rank_tiles[th.rank]++;
+        u->rank_usec[th.rank] += (double)th.usec;
+    }
+    u->bytes_in += (long)bytes;
 }
 
 /* Xt calls this whenever the master has something to say, which is how the
@@ -442,7 +509,9 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
     if (type == TESS_MSG_TILE) {
         handle_tile(u, buf, len);
     } else if (type == TESS_MSG_WELCOME) {
+        u->ranks = (int)tess_get_u32(buf + 4);
         u->workers = (int)tess_get_u32(buf + 8);
+        cluster_update(u);
         sprintf(msg, "connected: %d worker(s)", u->workers);
         set_status(u, msg);
         send_render(u);
@@ -458,6 +527,7 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
         ui_log(u, msg);
         set_elapsed(u, "idle");
         u->epoch_t0 = 0.0;
+        cluster_update(u);
     }
 }
 
@@ -481,6 +551,7 @@ static void tick_cb(XtPointer cd, XtIntervalId *id)
         sprintf(msg, "%d/%d tiles   %.1f s elapsed   %.1f s left",
                 u->tiles_in, u->tiles_expected, dt, eta);
         set_elapsed(u, msg);
+        cluster_update(u);
     }
     u->tick = XtAppAddTimeOut(u->app, 200, tick_cb, (XtPointer)u);
 }
@@ -699,7 +770,8 @@ static void build_control(Ui *u)
                                     topLevelShellWidgetClass,
                                     XtDisplay(u->toplevel),
                                     XmNtitle, "Tess control",
-                                    XmNx, u->width + 2 * TESS_GAP,
+                                    XmNx, u->origin_x + u->width +
+                                          TESS_GAP + 2 * TESS_DECOR,
                                     XmNy, TESS_GAP,
                                     XmNwidth, TESS_CTRL_W,
                                     NULL);
@@ -751,6 +823,31 @@ static void build_control(Ui *u)
                                          XmNleftAttachment, XmATTACH_FORM,
                                          NULL);
 
+    {
+        Widget cframe;
+
+        cframe = XtVaCreateManagedWidget("cframe", xmFrameWidgetClass, form,
+                                         XmNshadowType, XmSHADOW_ETCHED_IN,
+                                         XmNtopAttachment, XmATTACH_WIDGET,
+                                         XmNtopWidget, u->elapsed,
+                                         XmNleftAttachment, XmATTACH_FORM,
+                                         XmNrightAttachment, XmATTACH_FORM,
+                                         NULL);
+        XtVaCreateManagedWidget("Cluster", xmLabelWidgetClass, cframe,
+                                XmNchildType, XmFRAME_TITLE_CHILD,
+                                NULL);
+        u->cluster = XmCreateText(cframe, "cluster", (ArgList)0, 0);
+        XtVaSetValues(u->cluster,
+                      XmNeditable, False,
+                      XmNeditMode, XmMULTI_LINE_EDIT,
+                      XmNcursorPositionVisible, False,
+                      XmNrows, 11,
+                      XmNcolumns, 40,
+                      NULL);
+        XtManageChild(u->cluster);
+        u->clusterframe = cframe;
+    }
+
     u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
     XtVaSetValues(u->log,
                   XmNeditable, False,
@@ -760,7 +857,7 @@ static void build_control(Ui *u)
                   NULL);
     XtVaSetValues(XtParent(u->log),
                   XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, u->elapsed,
+                  XmNtopWidget, u->clusterframe,
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
                   XmNbottomAttachment, XmATTACH_FORM,
@@ -783,8 +880,9 @@ static String fallbacks[] = {
     "*sgiMode: True",
     "*useSchemes: none",
     "*fontList: -*-helvetica-medium-r-normal--10-*-*-*-*-*-iso8859-1",
-    "*XmTextField.fontList: -*-screen-medium-r-normal--12-*-*-*-*-*-iso8859-1",
-    "*log.fontList: -*-screen-medium-r-normal--12-*-*-*-*-*-iso8859-1",
+    "*XmTextField.fontList: -*-helvetica-medium-r-normal--10-*-*-*-*-*-iso8859-1",
+    "*log.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
+    "*cluster.fontList: -*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1",
     "*shadowThickness: 1",
     "*highlightThickness: 1",
     "*XmRowColumn.marginHeight: 1",
@@ -863,26 +961,47 @@ int main(int argc, char **argv)
         int scr = DefaultScreen(d);
         int sw = DisplayWidth(d, scr);
         int sh = DisplayHeight(d, scr);
+        int total, avail_h;
+
+        /*
+         * Both windows together take TESS_USE of the width, flush to the right
+         * edge. The render window is 4:3, which is the shape of the machines
+         * this runs on, and the control panel sits to its right with room for
+         * the window manager's frame between them: the previous attempt
+         * overlapped because it placed the panel at render_w + gap, ignoring
+         * the border the WM adds on both windows.
+         */
+        total = (int)((double)sw * TESS_USE);
+        u.screen_w = sw;
+        u.screen_h = sh;
 
         if (!width_given) {
-            u.width = sw - TESS_CTRL_W - 3 * TESS_GAP;
-            if (u.width < 256) {
-                u.width = 256;
+            u.width = total - TESS_CTRL_W - TESS_GAP - 2 * TESS_DECOR;
+            if (u.width < 320) {
+                u.width = 320;
             }
         }
         if (!height_given) {
-            u.height = sh - 96;      /* title bars and the status line */
-            if (u.height < 256) {
-                u.height = 256;
+            u.height = u.width * 3 / 4;
+            avail_h = sh - 2 * TESS_GAP - 2 * TESS_DECOR - 40;
+            if (u.height > avail_h) {
+                u.height = avail_h;
+                if (!width_given) {
+                    u.width = u.height * 4 / 3;
+                }
             }
         }
-        u.screen_w = sw;
-        u.screen_h = sh;
+
+        u.origin_x = sw - (u.width + TESS_CTRL_W + TESS_GAP + 2 * TESS_DECOR);
+        if (u.origin_x < 0) {
+            u.origin_x = 0;
+        }
         XtVaSetValues(u.toplevel,
-                      XmNx, TESS_GAP,
+                      XmNx, u.origin_x,
                       XmNy, TESS_GAP,
                       NULL);
     }
+
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,
                                    NULL);
 
@@ -946,6 +1065,9 @@ int main(int argc, char **argv)
                              &gcv);
     }
 
+    strncpy(u.host, host, sizeof u.host - 1);
+    u.host[sizeof u.host - 1] = '\0';
+    u.port = port;
     u.fd = connect_master(host, port);
     if (u.fd < 0) {
         char msg[160];
