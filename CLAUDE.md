@@ -1,8 +1,13 @@
 # Tess — distributed render framework for IRIX
 
-**Status: design complete; `tess-probe` and the build system exist, `tess-ui` and `tess-node`
-do not.** `baseline/` holds the 2001-era originals this replaces; `tools/` holds small probes;
-`src/` holds the real tree.
+**Status: builds 1-4 closed, build 5 in progress.** `tess-probe`, `tess-node` and `tess-ui`
+all exist and render across lucy and aurora over TCP, byte-identical on both architectures;
+see `doc/BUILD-PLAN.md` for what each build closed and what remains. `baseline/` holds the
+2001-era originals this replaces; `tools/` holds small probes; `src/` holds the real tree.
+
+**There is no git on lucy or aurora.** Version control happens on the Mac against the same
+NFS tree the machines build from, so an edit is live on both the moment it is written and
+there is nothing to pull.
 
 **The repo lives on the NFS share at `/cluster/dev/sgi-tess`** (`/Users/rutger/cluster/dev/...`
 from the Mac), so every machine builds natively from one checkout. It moved there on
