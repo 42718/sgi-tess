@@ -18,6 +18,7 @@ Read these in order before doing anything:
 
 | File | What it is |
 |---|---|
+| `doc/DEPLOY.md` | prerequisites, per-architecture build, running the UI, and the failure modes we hit |
 | `doc/DESIGN.md` | **the engineering contract.** Decisions table in §0, open questions in §11. Change nothing here without saying why |
 | `doc/PLATFORM-FACTS.md` | every platform claim, each citing the install medium it came from. Facts, not opinions |
 | `doc/CHECKLIST.md` | the linear runbook. Steps 1–5 are the critical path; 6–10 are optimisations |

@@ -14,7 +14,14 @@ isn't the fractal — it's the framework underneath: a tile scheduler, a credit-
 prefetch pipeline, and a two-window Motif UI, all running across a small heterogeneous
 MIPS cluster over MPI.
 
-**Status: design complete, nothing built.** `doc/DESIGN.md` is the contract.
+**Status: it renders.** `tess-probe`, `tess-node` and `tess-ui` all exist and draw a frame
+across lucy and aurora over MPI, byte-identical on both architectures. Builds 1 to 4 of
+`doc/BUILD-PLAN.md` are closed; build 5 is in progress. `doc/DESIGN.md` remains the
+contract.
+
+**[doc/DEPLOY.md](doc/DEPLOY.md) is the deployment guide**: what you need, how to get the
+source onto machines that have no git, how to build it per architecture, and how to run the
+interface.
 
 ## The cluster
 
@@ -31,6 +38,7 @@ than caring which.
 ## Layout
 
 ```
+doc/DEPLOY.md            prerequisites, build, and how to run the interface
 doc/DESIGN.md            the engineering contract — decisions, scheduling, wire format
 doc/PLATFORM-FACTS.md    every platform claim, each citing the install medium it came from
 doc/CHECKLIST.md         linear bring-up runbook; steps 1-5 are the critical path
