@@ -93,6 +93,19 @@ static void clog1(TessCluster *c, const char *text)
     }
 }
 
+/* The colour an indicator fills with when set: the palette's ok green. */
+static Pixel select_pixel(Widget w)
+{
+    Display *d = XtDisplay(w);
+    Colormap cm = DefaultColormap(d, DefaultScreen(d));
+    XColor want, exact;
+
+    if (XAllocNamedColor(d, cm, "#5f9e4a", &want, &exact)) {
+        return (Pixel)want.pixel;
+    }
+    return BlackPixel(d, DefaultScreen(d));
+}
+
 /* A button you can find without reading it. */
 static void paint_button(Widget b, const char *spec)
 {
@@ -812,7 +825,9 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                   XmNlabelString, empty,
                                                   XmNindicatorType,
                                                   XmN_OF_MANY,
-                                                  XmNindicatorSize, 14,
+                                                  XmNindicatorSize, 16,
+                                                  XmNselectColor,
+                                                  select_pixel(row),
                                                   XmNleftAttachment,
                                                   XmATTACH_FORM,
                                                   NULL);

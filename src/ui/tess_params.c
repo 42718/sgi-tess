@@ -24,6 +24,19 @@
 
 #include "tess_params.h"
 
+/* The colour an indicator fills with when set: the palette's ok green. */
+static Pixel select_pixel(Widget w)
+{
+    Display *d = XtDisplay(w);
+    Colormap cm = DefaultColormap(d, DefaultScreen(d));
+    XColor want, exact;
+
+    if (XAllocNamedColor(d, cm, "#5f9e4a", &want, &exact)) {
+        return (Pixel)want.pixel;
+    }
+    return BlackPixel(d, DefaultScreen(d));
+}
+
 typedef struct Binding {
     TessParamPane *pane;
     int            index;
@@ -89,11 +102,20 @@ static void text_cb(Widget w, XtPointer cd, XtPointer cb)
     }
 }
 
+static void toggle_label(Widget w, int on)
+{
+    XmString s = XmStringCreateLocalized(on ? "on" : "off");
+
+    XtVaSetValues(w, XmNlabelString, s, NULL);
+    XmStringFree(s);
+}
+
 static void toggle_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     Binding *b = (Binding *)cd;
     XmToggleButtonCallbackStruct *s = (XmToggleButtonCallbackStruct *)cb;
 
+    toggle_label(w, s->set ? 1 : 0);
     write_value(b->pane, b->index, s->set ? 1.0 : 0.0);
     if (b->pane->apply) {
         b->pane->apply(b->pane->ctx, &b->pane->descs[b->index]);
@@ -190,13 +212,21 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
              * across that read as neither on nor off, which is worse than no
              * control at all: you could not tell what state it was in.
              */
-            XmString on = XmStringCreateLocalized("on");
+            /*
+             * Motif's indicator is a small square that shades slightly when
+             * set, which is easy to miss. A strong fill colour and a label
+             * that reads off or on make the state unmistakable without
+             * fighting the widget set.
+             */
+            XmString on = XmStringCreateLocalized("off");
 
             p->w[i] = XtVaCreateManagedWidget("toggle",
                                               xmToggleButtonWidgetClass, row,
                                               XmNlabelString, on,
                                               XmNindicatorType, XmN_OF_MANY,
-                                              XmNindicatorSize, 14,
+                                              XmNindicatorSize, 16,
+                                              XmNselectColor,
+                                              select_pixel(row),
                                               XmNspacing, 4,
                                               XmNleftAttachment,
                                               XmATTACH_POSITION,
@@ -288,6 +318,7 @@ void tess_params_refresh(TessParamPane *p)
         v = read_value(p, i);
         if (p->descs[i].type == TESS_P_BOOL) {
             XmToggleButtonSetState(p->w[i], v != 0.0 ? True : False, False);
+            toggle_label(p->w[i], v != 0.0);
         } else if (p->descs[i].type == TESS_P_ENUM) {
             for (j = 0; j < TESS_MAX_ENUM && p->descs[i].names[j]; j++) {
                 XmToggleButtonSetState(p->enumkids[i][j],
