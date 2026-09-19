@@ -258,7 +258,7 @@ static void set_status(Ui *u, const char *text)
 }
 
 static void ui_log_cb(void *ctx, const char *msg);
-static void attach_master(Ui *u, int port, const char *nonce);
+static int attach_master(Ui *u, int port, const char *nonce);
 
 static int connect_master(const char *host, int port)
 {
@@ -625,21 +625,20 @@ static void tick_cb(XtPointer cd, XtIntervalId *id)
  * Attach to a master the cluster panel just started: connect on loopback, greet
  * it with the nonce it was given, and hand the socket to Xt.
  */
-static void attach_master(Ui *u, int port, const char *nonce)
+static int attach_master(Ui *u, int port, const char *nonce)
 {
     tess_u8 hello[4 + TESS_NONCE_LEN];
     int n;
 
     if (u->fd >= 0) {
-        return;
+        return 0;
     }
     u->port = port;
     strncpy(u->host, "localhost", sizeof u->host - 1);
     strncpy(u->nonce, nonce, sizeof u->nonce - 1);
     u->fd = connect_master("localhost", port);
     if (u->fd < 0) {
-        set_status(u, "master started but would not accept a connection");
-        return;
+        return -1;              /* not up yet: the panel will ask again */
     }
     u->input_id = XtAppAddInput(u->app, u->fd, (XtPointer)XtInputReadMask,
                                 socket_cb, (XtPointer)u);
@@ -648,15 +647,16 @@ static void attach_master(Ui *u, int port, const char *nonce)
     n += (int)strlen(u->nonce) + 1;
     if (tess_frame_write(u->fd, TESS_MSG_HELLO, hello, n) != 0) {
         set_status(u, "could not greet the master");
-    } else {
-        set_status(u, "connected, waiting for the cluster");
-        ui_log(u, "connected to the master we launched");
+        return -1;
     }
+    set_status(u, "connected, waiting for the cluster");
+    ui_log(u, "connected to the master we launched");
+    return 0;
 }
 
-static void cluster_ready_cb(void *ctx, int port, const char *nonce)
+static int cluster_ready_cb(void *ctx, int port, const char *nonce)
 {
-    attach_master((Ui *)ctx, port, nonce);
+    return attach_master((Ui *)ctx, port, nonce);
 }
 
 static void ui_log_cb(void *ctx, const char *msg)

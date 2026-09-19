@@ -59,6 +59,7 @@ struct TessCluster {
     char        nonce[TESS_NONCE_LEN];
 
     pid_t       child;
+    int         tries;
     XtAppContext app;
     XtIntervalId poll;
 
@@ -249,25 +250,6 @@ static void make_nonce(char *out)
     out[16] = '\0';
 }
 
-/* Can we reach the master yet? Used to decide when the job is up. */
-static int master_up(int port)
-{
-    struct sockaddr_in sa;
-    int fd, ok;
-
-    fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
-        return 0;
-    }
-    memset((char *)&sa, 0, sizeof sa);
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons((unsigned short)port);
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    ok = connect(fd, (struct sockaddr *)&sa, sizeof sa) == 0;
-    close(fd);
-    return ok;
-}
-
 static void poll_cb(XtPointer cd, XtIntervalId *id)
 {
     TessCluster *c = (TessCluster *)cd;
@@ -281,13 +263,22 @@ static void poll_cb(XtPointer cd, XtIntervalId *id)
         XtSetSensitive(c->stopb, False);
         return;
     }
-    if (master_up(c->port)) {
+    /*
+     * Ask the GUI to attach. It reports whether it managed it, so there is no
+     * throwaway probe connection: the master accepts one client at a time, and
+     * a probe that connects and closes looks exactly like the GUI arriving and
+     * leaving again, which used to shut the whole job down.
+     */
+    c->tries++;
+    if (c->ready && c->ready(c->ctx, c->port, c->nonce) == 0) {
         set_state(c, "running");
-        clog(c, "master is listening on port %s%d", "", c->port);
-        if (c->ready) {
-            c->ready(c->ctx, c->port, c->nonce);
-        }
-        return;                 /* stop polling: the GUI owns the socket now */
+        clog(c, "attached to the master on port %s%d", "", c->port);
+        return;
+    }
+    if (c->tries > 100) {
+        set_state(c, "master never answered");
+        clog(c, "gave up waiting for the master%s%d", "", 0);
+        return;
     }
     c->poll = XtAppAddTimeOut(c->app, 300, poll_cb, (XtPointer)c);
 }
@@ -338,6 +329,7 @@ void tess_cluster_launch(TessCluster *c)
         return;
     }
 
+    c->tries = 0;
     c->child = fork();
     if (c->child < 0) {
         set_state(c, "fork failed");

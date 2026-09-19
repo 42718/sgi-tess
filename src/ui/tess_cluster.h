@@ -32,8 +32,12 @@ typedef struct TessHost {
 
 typedef struct TessCluster TessCluster;
 
-/* Called once the master is listening and ready to be connected to. */
-typedef void (*TessClusterReady)(void *ctx, int port, const char *nonce);
+/*
+ * Try to attach to the master. Returns 0 when connected, non-zero to be asked
+ * again shortly: the master accepts one client at a time, so the attempt to
+ * attach has to BE the connection rather than a probe alongside it.
+ */
+typedef int (*TessClusterReady)(void *ctx, int port, const char *nonce);
 
 TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                  const char *hostlist, int port,

@@ -473,7 +473,7 @@ static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
  */
 static int serve_gui(int port, int nranks, int *parked)
 {
-    int lfd, cfd, one, type, len;
+    int lfd, cfd, one, type, len, bye;
     struct sockaddr_in sa;
     tess_u8 buf[TESS_MAX_FRAME];
     TessJob job;
@@ -505,78 +505,101 @@ static int serve_gui(int port, int nranks, int *parked)
 
     /* null length: IRIX declares the third argument int *, macOS socklen_t *,
        and a null pointer satisfies both without a per-platform typedef. */
-    cfd = accept(lfd, (struct sockaddr *)0, (void *)0);
-    if (cfd < 0) {
-        perror("accept");
-        close(lfd);
-        return -1;
-    }
-    printf("tess-node: GUI connected\n");
-    fflush(stdout);
-
-    g.fd = cfd;
-    g.broken = 0;
-
+    /*
+     * Serve clients one at a time, for as long as the job lives. Accepting
+     * once was wrong: the GUI probes the port to find out whether the master
+     * is up yet, and that probe was being taken for the GUI itself, so the
+     * master saw an immediate EOF and shut the whole job down before the real
+     * connection arrived. Re-accepting also means the GUI can be restarted
+     * without relaunching the cluster.
+     */
     for (;;) {
-        if (tess_frame_read(cfd, &type, buf, &len) != 0) {
-            break;
+        cfd = accept(lfd, (struct sockaddr *)0, (void *)0);
+        if (cfd < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            perror("accept");
+            close(lfd);
+            return -1;
         }
-        if (type == TESS_MSG_HELLO) {
-            tess_u8 wb[12];
-            int n = 0;
+        printf("tess-node: client connected\n");
+        fflush(stdout);
 
-            if (nonce) {
-                char got[64];
-                int glen = len - 4;
+        g.fd = cfd;
+        g.broken = 0;
+        bye = 0;
 
-                if (glen < 0) {
-                    glen = 0;
+        for (;;) {
+            if (tess_frame_read(cfd, &type, buf, &len) != 0) {
+                break;
+            }
+            if (type == TESS_MSG_HELLO) {
+                tess_u8 wb[12];
+                int n = 0;
+
+                if (nonce) {
+                    char got[64];
+                    int glen = len - 4;
+
+                    if (glen < 0) {
+                        glen = 0;
+                    }
+                    if (glen > (int)sizeof got - 1) {
+                        glen = (int)sizeof got - 1;
+                    }
+                    memcpy(got, (char *)buf + 4, (size_t)glen);
+                    got[glen] = '\0';
+                    if (strcmp(got, nonce) != 0) {
+                        fprintf(stderr, "tess-node: client failed the nonce\n");
+                        fflush(stderr);
+                        break;
+                    }
                 }
-                if (glen > (int)sizeof got - 1) {
-                    glen = (int)sizeof got - 1;
-                }
-                memcpy(got, (char *)buf + 4, (size_t)glen);
-                got[glen] = '\0';
-                if (strcmp(got, nonce) != 0) {
-                    fprintf(stderr, "tess-node: client failed the nonce\n");
+
+                wel.version = TESS_PROTO_VER;
+                wel.ranks = (tess_u32)nranks;
+                wel.workers = (tess_u32)(nranks - 1);
+                n += tess_put_u32(wb + n, wel.version);
+                n += tess_put_u32(wb + n, wel.ranks);
+                n += tess_put_u32(wb + n, wel.workers);
+                if (tess_frame_write(cfd, TESS_MSG_WELCOME, wb, n) != 0) {
                     break;
                 }
-            }
+            } else if (type == TESS_MSG_RENDER) {
+                tess_u8 db[12];
+                int n = 0;
 
-            wel.version = TESS_PROTO_VER;
-            wel.ranks = (tess_u32)nranks;
-            wel.workers = (tess_u32)(nranks - 1);
-            n += tess_put_u32(wb + n, wel.version);
-            n += tess_put_u32(wb + n, wel.ranks);
-            n += tess_put_u32(wb + n, wel.workers);
-            if (tess_frame_write(cfd, TESS_MSG_WELCOME, wb, n) != 0) {
+                tess_get_job(buf, &job);
+                if (job.tile == 0 || job.tile > TESS_MAX_TILE) {
+                    job.tile = TESS_TILE;
+                }
+                t0 = now_sec();
+                tiles = run_epoch(&job, nranks, parked, gui_sink, (void *)&g);
+                if (g.broken) {
+                    break;
+                }
+                n += tess_put_u32(db + n, job.epoch);
+                n += tess_put_u32(db + n, (tess_u32)tiles);
+                n += tess_put_u32(db + n,
+                                  (tess_u32)((now_sec() - t0) * 1000.0));
+                if (tess_frame_write(cfd, TESS_MSG_DONE, db, n) != 0) {
+                    break;
+                }
+            } else if (type == TESS_MSG_BYE) {
+                bye = 1;
                 break;
             }
-        } else if (type == TESS_MSG_RENDER) {
-            tess_u8 db[12];
-            int n = 0;
+        }
 
-            tess_get_job(buf, &job);
-            if (job.tile == 0 || job.tile > TESS_MAX_TILE) {
-                job.tile = TESS_TILE;
-            }
-            t0 = now_sec();
-            tiles = run_epoch(&job, nranks, parked, gui_sink, (void *)&g);
-            if (g.broken) {
-                break;
-            }
-            n += tess_put_u32(db + n, job.epoch);
-            n += tess_put_u32(db + n, (tess_u32)tiles);
-            n += tess_put_u32(db + n, (tess_u32)((now_sec() - t0) * 1000.0));
-            if (tess_frame_write(cfd, TESS_MSG_DONE, db, n) != 0) {
-                break;
-            }
-        } else if (type == TESS_MSG_BYE) {
+        close(cfd);
+        printf("tess-node: client gone%s\n", bye ? ", exiting" : ", waiting");
+        fflush(stdout);
+        if (bye) {
             break;
         }
     }
 
-    close(cfd);
     close(lfd);
     return 0;
 }
