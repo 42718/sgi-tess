@@ -480,13 +480,14 @@ static void usage(const char *me)
 {
     fprintf(stderr, "usage: %s [-listen [port]] [-o file.ppm]\n", me);
     fprintf(stderr, "          [-w px] [-h px] [-max n] [-tile n]\n");
-    fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-v]\n");
-    exit(2);
+    fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-v] [-help]\n");
+    fflush(stderr);
 }
 
 int main(int argc, char **argv)
 {
     int rank, nranks, i;
+    int want_help = 0;
     int listen_port = 0;
     const char *ppm = (const char *)0;
     TessJob job;
@@ -549,6 +550,9 @@ int main(int argc, char **argv)
             job.cy = atof(argv[++i]);
         } else if (strcmp(argv[i], "-v") == 0) {
             verbose = 1;
+        } else if (strcmp(argv[i], "-help") == 0 ||
+                   strcmp(argv[i], "--help") == 0) {
+            want_help = 1;
         } else if (strcmp(argv[i], "-scale") == 0 && i + 1 < argc) {
             job.scale = atof(argv[++i]);
         } else {
@@ -566,6 +570,15 @@ int main(int argc, char **argv)
                 fflush(stderr);
             }
         }
+    }
+
+    /* Every rank leaves together: a rank that exits alone strands the rest. */
+    if (want_help) {
+        if (rank == 0) {
+            usage(argv[0]);
+        }
+        MPI_Finalize();
+        return 0;
     }
 
     if (nranks < 2) {
