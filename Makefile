@@ -47,7 +47,11 @@ ifeq ($(findstring IP,$(ARCH)),IP)
 CC        = cc
 ABI       = -64 -mips4
 CFLAGS    = $(ABI) -O2 -I$(COMMON)
-NODE_CFLAGS = $(ABI) -O3 -OPT:roundoff=0:IEEE_arithmetic=1 -I$(COMMON)
+# MPI_SGI_stat_get lives in mpi_ext.h. Probe for it rather than assume: where
+# it is missing, the transport counters report "unknown" instead of guessing.
+HAVE_MPI_EXT := $(shell test -f /usr/include/mpi_ext.h && echo 1 || echo 0)
+NODE_CFLAGS = $(ABI) -O3 -OPT:roundoff=0:IEEE_arithmetic=1 -I$(COMMON) \
+              -DTESS_HAVE_MPI_EXT=$(HAVE_MPI_EXT)
 # -lpthread goes back when threads do: DESIGN.md section 8 puts it after
 # -lmpi, but v1 has no threads and ld64 warns about an unused library,
 # which hides the warnings worth reading.
@@ -85,6 +89,7 @@ info:
 	@echo "arch      $(ARCH) ($(SYS))"
 	@echo "build dir $(BUILD)"
 	@echo "cc        $(CC) $(CFLAGS)"
+	@echo "mpi_ext   $(if $(filter 1,$(HAVE_MPI_EXT)),present,absent: transport counters disabled)"
 	@echo "node      $(if $(NODE_SRCS),$(words $(NODE_SRCS)) source(s),no sources yet)"
 	@echo "ui        $(if $(UI_SRCS),$(words $(UI_SRCS)) source(s),no sources yet)"
 

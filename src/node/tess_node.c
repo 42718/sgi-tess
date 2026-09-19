@@ -29,6 +29,9 @@
 #include <sys/select.h>
 
 #include <mpi.h>
+#if TESS_HAVE_MPI_EXT
+#include <mpi_ext.h>
+#endif
 
 #include "tess_types.h"
 #include "tess_proto.h"
@@ -498,6 +501,53 @@ static int write_ppm(const char *path, const TessJob *job, const tess_u8 *iter)
     return 0;
 }
 
+/*
+ * Per-transport byte counters from MPT.
+ *
+ * DESIGN.md section 7 names MPI_SGI_stat_get() and its BYTES_PT2PT_* counters
+ * as the way to learn which interconnect is carrying traffic. It lives in
+ * mpi_ext.h, which the Makefile probes for: where it is absent this reports
+ * "unknown" rather than guessing, which is the honest answer and still more
+ * use than a number nobody measured.
+ *
+ * Not thread-safe, so it is called here and only here, on the master's single
+ * MPI thread.
+ */
+static void read_transport(TessTransport *t)
+{
+    memset((char *)t, 0, sizeof *t);
+#if TESS_HAVE_MPI_EXT
+    {
+        long long v = 0;
+
+        if (MPI_SGI_stat_get("BYTES_PT2PT_TCP", &v) == MPI_SUCCESS) {
+            t->kb_tcp = (tess_u32)(v / 1024);
+            t->known = 1;
+        }
+        v = 0;
+        if (MPI_SGI_stat_get("BYTES_PT2PT_GM", &v) == MPI_SUCCESS) {
+            t->kb_gm = (tess_u32)(v / 1024);
+            t->known = 1;
+        }
+        v = 0;
+        if (MPI_SGI_stat_get("BYTES_PT2PT_GSN", &v) == MPI_SUCCESS) {
+            t->kb_gsn = (tess_u32)(v / 1024);
+            t->known = 1;
+        }
+        v = 0;
+        if (MPI_SGI_stat_get("BYTES_PT2PT_SHMEM", &v) == MPI_SUCCESS) {
+            t->kb_shmem = (tess_u32)(v / 1024);
+            t->known = 1;
+        }
+        v = 0;
+        if (MPI_SGI_stat_get("BYTES_PT2PT_XPMEM", &v) == MPI_SUCCESS) {
+            t->kb_xpmem = (tess_u32)(v / 1024);
+            t->known = 1;
+        }
+    }
+#endif
+}
+
 /* ------------------------------------------------------------ GUI sink */
 
 typedef struct GuiCtx {
@@ -723,6 +773,22 @@ replay:
                                   (tess_u32)((now_sec() - t0) * 1000.0));
                 if (tess_frame_write(cfd, TESS_MSG_DONE, db, n) != 0) {
                     break;
+                }
+                {
+                    TessTransport tr;
+                    tess_u8 tb[24];
+                    int tn = 0;
+
+                    read_transport(&tr);
+                    tn += tess_put_u32(tb + tn, tr.kb_tcp);
+                    tn += tess_put_u32(tb + tn, tr.kb_gm);
+                    tn += tess_put_u32(tb + tn, tr.kb_gsn);
+                    tn += tess_put_u32(tb + tn, tr.kb_shmem);
+                    tn += tess_put_u32(tb + tn, tr.kb_xpmem);
+                    tn += tess_put_u32(tb + tn, tr.known);
+                    if (tess_frame_write(cfd, TESS_MSG_STATS, tb, tn) != 0) {
+                        break;
+                    }
                 }
                 /* A frame read while cancelling is replayed, so a RENDER that
                    interrupted this epoch starts the next one immediately. */

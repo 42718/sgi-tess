@@ -28,6 +28,7 @@ typedef struct TessHost {
     int  ranks;                    /* what we will launch; 0 is legal */
     int  enabled;                  /* unticked: contributes nothing */
     int  reachable;
+    double load;                   /* 1-minute average, -1 unknown */
     char note[64];
 } TessHost;
 
@@ -58,6 +59,7 @@ int tess_cluster_rank_label(TessCluster *c, int rank, char *buf, int len);
 const char *tess_cluster_rank_colour(TessCluster *c, int rank);
 
 void tess_cluster_rescan(TessCluster *c);
+void tess_cluster_poll(TessCluster *c);      /* load averages only */
 void tess_cluster_launch(TessCluster *c);
 void tess_cluster_stop(TessCluster *c);
 int  tess_cluster_running(TessCluster *c);

@@ -124,6 +124,25 @@ static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
     return 0;
 }
 
+/*
+ * One-minute load average.
+ *
+ * PLATFORM-FACTS.md: sysget(SGT_KSYM, "avenrun") divided by 1024.0, which is
+ * what uptime does and needs no privilege. Reported as -1 when the call is not
+ * available rather than as a plausible zero.
+ */
+static double probe_load(void)
+{
+    long avenrun[3];
+
+    memset((char *)avenrun, 0, sizeof avenrun);
+    if (sysget(SGT_KSYM, (char *)avenrun, sizeof avenrun, SGT_READ,
+               (void *)"avenrun") == -1) {
+        return -1.0;
+    }
+    return (double)avenrun[0] / 1024.0;
+}
+
 /* A HIPPI interface by either driver's name: SGI's hip*, Essential's ess*. */
 static int probe_hippi(void)
 {
@@ -203,12 +222,14 @@ void tess_inventory(TessInventory *inv)
 
         (void)probe_memory(&inv->memkb, &inv->freekb, inv->memwhy,
                            TESS_WHYLEN);
+        inv->load1 = probe_load();
 
         inv->gm    = (access(GM_LIB_PATH, F_OK) == 0) ? 1 : 0;
         inv->hippi = probe_hippi();
     }
 #else
     inv->nodes = 1;
+    inv->load1 = -1.0;
 #endif
 }
 
@@ -219,9 +240,10 @@ void tess_inventory_line(const TessInventory *inv, char *buf, int len)
        without editing. Keep the field order stable; add at the end. */
     sprintf(buf,
             "# tess-probe %d host=%s cpus=%d online=%d mhz=%d nodes=%d"
-            " memkb=%ld freekb=%ld irix=%s mpt=%s abi=%d gm=%d hippi=%d",
+            " memkb=%ld freekb=%ld load=%.2f irix=%s mpt=%s abi=%d gm=%d"
+            " hippi=%d",
             TESS_INV_FORMAT, inv->host, inv->cpus, inv->online, inv->mhz,
-            inv->nodes, inv->memkb, inv->freekb, inv->irix, inv->mpt,
-            inv->abi, inv->gm, inv->hippi);
+            inv->nodes, inv->memkb, inv->freekb, inv->load1, inv->irix,
+            inv->mpt, inv->abi, inv->gm, inv->hippi);
     buf[len - 1] = '\0';
 }

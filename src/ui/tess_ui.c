@@ -92,6 +92,7 @@ typedef struct Ui {
     UiValues   val;
     XtAppContext app;
     XtIntervalId tick;
+    int        ticks;
     double     epoch_t0;
     int        tiles_expected;
 
@@ -139,6 +140,8 @@ typedef struct Ui {
     char       host[64];
     int        port;
     char       pending_log[160];
+    char       savedir[256];
+    tess_u32  *shade_rgb;
     char       nonce[TESS_NONCE_LEN];
     char       tree[512];
     char       hostlist[256];
@@ -147,6 +150,7 @@ typedef struct Ui {
     int        rank_tiles[64];
     double     rank_usec[64];
     long       bytes_in;
+    TessTransport tr;
 } Ui;
 
 /*
@@ -393,6 +397,35 @@ static void stats_draw(Ui *u)
     if (!rows) {
         XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
         XDrawString(d, w, u->statsgc, 4, y + 18, "idle - no tiles yet", 19);
+    }
+
+    /*
+     * Which interconnect actually carried it, measured rather than assumed.
+     * This line exists because of the GM week: MPT falls back to TCP in
+     * silence, and a job that quietly ran over ethernet looks exactly like one
+     * that used Myrinet.
+     */
+    {
+        char t[96];
+
+        y += 17;
+        if (y + 12 < (int)hgt) {
+            XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
+            if (!u->tr.known) {
+                strcpy(t, "transport: MPT will not say");
+            } else if (u->tr.kb_gm > u->tr.kb_tcp) {
+                sprintf(t, "transport: GM  %lu KB", (unsigned long)u->tr.kb_gm);
+            } else if (u->tr.kb_tcp > 0) {
+                sprintf(t, "transport: TCP  %lu KB",
+                        (unsigned long)u->tr.kb_tcp);
+            } else if (u->tr.kb_shmem > 0 || u->tr.kb_xpmem > 0) {
+                sprintf(t, "transport: on-host  %lu KB",
+                        (unsigned long)(u->tr.kb_shmem + u->tr.kb_xpmem));
+            } else {
+                strcpy(t, "transport: nothing measured yet");
+            }
+            XDrawString(d, w, u->statsgc, 4, y, t, (int)strlen(t));
+        }
     }
 
     /* A coloured state line: green while the frame is arriving, grey when
@@ -821,6 +854,14 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
         sprintf(msg, "connected: %d worker(s)", u->workers);
         set_status(u, msg);
         send_render(u);
+    } else if (type == TESS_MSG_STATS) {
+        u->tr.kb_tcp = tess_get_u32(buf);
+        u->tr.kb_gm = tess_get_u32(buf + 4);
+        u->tr.kb_gsn = tess_get_u32(buf + 8);
+        u->tr.kb_shmem = tess_get_u32(buf + 12);
+        u->tr.kb_xpmem = tess_get_u32(buf + 16);
+        u->tr.known = tess_get_u32(buf + 20);
+        cluster_update(u);
     } else if (type == TESS_MSG_DONE) {
         tess_u32 tiles = tess_get_u32(buf + 4);
         tess_u32 msec = tess_get_u32(buf + 8);
@@ -858,6 +899,9 @@ static void tick_cb(XtPointer cd, XtIntervalId *id)
                 u->tiles_in, u->tiles_expected, dt, eta);
         set_elapsed(u, msg);
         cluster_update(u);
+    }
+    if (++u->ticks % 30 == 0 && u->cl) {
+        tess_cluster_poll(u->cl);
     }
     u->tick = XtAppAddTimeOut(u->app, 200, tick_cb, (XtPointer)u);
 }
@@ -1095,6 +1139,8 @@ static void mouse_eh(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
     }
 }
 
+static void save_cb(Widget w, XtPointer cd, XtPointer cb);
+
 static void paint_ui_button(Widget b, const char *spec)
 {
     Display *d = XtDisplay(b);
@@ -1105,6 +1151,80 @@ static void paint_ui_button(Widget b, const char *spec)
         XtVaSetValues(b, XmNbackground, want.pixel, NULL);
     }
     XtVaSetValues(b, XmNmarginWidth, 10, XmNmarginHeight, 4, NULL);
+}
+
+/*
+ * Save the frame as it is shaded now, PPM P6 and SGI .rgb.
+ *
+ * No library for the PPM and no endian question; the .rgb goes through
+ * libimage so imgview opens it directly. Both write what is on screen, colour
+ * by owner included, because that is what someone asking for a picture wants.
+ */
+static int write_ppm_file(Ui *u, const char *path)
+{
+    FILE *f;
+    int x, y;
+    tess_u32 v;
+
+    f = fopen(path, "wb");
+    if (!f) {
+        return -1;
+    }
+    fprintf(f, "P6\n%d %d\n255\n", u->width, u->height);
+    for (y = 0; y < u->height; y++) {
+        for (x = 0; x < u->width; x++) {
+            v = u->shade_rgb[(size_t)y * u->width + x];
+            fputc((int)((v >> 16) & 0xff), f);
+            fputc((int)((v >> 8) & 0xff), f);
+            fputc((int)(v & 0xff), f);
+        }
+    }
+    fclose(f);
+    return 0;
+}
+
+static void save_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+    char path[512];
+    char msg[600];
+    size_t npix;
+    int y;
+
+    npix = (size_t)u->width * u->height;
+    u->shade_rgb = (tess_u32 *)malloc(npix * sizeof(tess_u32));
+    if (!u->shade_rgb) {
+        ui_log(u, "save: out of memory");
+        return;
+    }
+
+    /* Re-shade into an RGB buffer: the framebuffer holds pixels in the
+       visual's own channel order, which is not what a file wants. */
+    for (y = 0; y < u->height; y++) {
+        tess_u8 *src = u->iter + (size_t)y * u->width * TESS_BYTES_PER_PX;
+        tess_u32 *dst = u->shade_rgb + (size_t)y * u->width;
+        int i;
+
+        tess_shade(src, u->width, (int)u->job.max_iter, &u->pal, dst);
+        if (u->val.by_owner) {
+            tess_u8 *own = u->owner + (size_t)y * u->width;
+
+            for (i = 0; i < u->width; i++) {
+                dst[i] = tint(u, dst[i], own[i]);
+            }
+        }
+    }
+
+    sprintf(path, "%s/tess-epoch%u.ppm", u->savedir, u->job.epoch);
+    if (write_ppm_file(u, path) == 0) {
+        sprintf(msg, "saved %s", path);
+    } else {
+        sprintf(msg, "could not write %s", path);
+    }
+    ui_log(u, msg);
+
+    free((void *)u->shade_rgb);
+    u->shade_rgb = (tess_u32 *)0;
 }
 
 static void render_cb(Widget w, XtPointer cd, XtPointer cb)
@@ -1248,6 +1368,10 @@ static void build_control(Ui *u)
                                 NULL);
     XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
     paint_ui_button(b, "#c3cad0");
+    b = XtVaCreateManagedWidget("Save", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, save_cb, (XtPointer)u);
+    paint_ui_button(b, "#a8b4bc");
 
     {
         Widget cframe;
@@ -1373,6 +1497,7 @@ int main(int argc, char **argv)
     u.job.scale = 3.2 / 1024.0;
     tess_palette_default(&u.pal);
     strcpy(u.tree, "/cluster/dev/sgi-tess");
+    strcpy(u.savedir, ".");
     strcpy(u.hostlist, "lucy,aurora");
     u.port = TESS_DEFAULT_PORT;
     u.val.ramp = u.pal.ramp;
@@ -1390,6 +1515,8 @@ int main(int argc, char **argv)
             host = argv[++i];
         } else if (strcmp(argv[i], "-port") == 0 && i + 1 < argc) {
             port = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-savedir") == 0 && i + 1 < argc) {
+            strncpy(u.savedir, argv[++i], sizeof u.savedir - 1);
         } else if (strcmp(argv[i], "-tree") == 0 && i + 1 < argc) {
             strncpy(u.tree, argv[++i], sizeof u.tree - 1);
         } else if (strcmp(argv[i], "-hosts") == 0 && i + 1 < argc) {

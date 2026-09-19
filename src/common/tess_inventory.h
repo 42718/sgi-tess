@@ -31,6 +31,7 @@ typedef struct TessInventory {
     int             gm;                 /* libgm present where MPT dlopens it */
     int             hippi;              /* a hip* or ess* interface exists */
     char            memwhy[TESS_WHYLEN];/* which call answered, or how each failed */
+    double          load1;              /* 1-minute load average, -1 unknown */
 } TessInventory;
 
 /* Fills inv. Never fails: unknown fields are 0 or "?". */

@@ -34,6 +34,7 @@
 #define TESS_MSG_TILE     17             /* TessTileWire + payload */
 #define TESS_MSG_DONE     18             /* TessDoneWire: epoch complete */
 #define TESS_MSG_LOG      19             /* NUL-terminated text */
+#define TESS_MSG_STATS    20             /* TessTransport: who carried it */
 
 /* The job. Doubles cross the wire as IEEE-754 bit patterns, big-endian, which
    both machine types use natively; no format conversion, only byte order. */
@@ -64,6 +65,21 @@ typedef struct TessDone {
     tess_u32 tiles;
     tess_u32 msec;        /* wall time for the epoch, at the master */
 } TessDone;
+
+/*
+ * Which interconnect actually carried the traffic, in kilobytes, measured
+ * rather than assumed. The GM work taught this the hard way: MPT falls back to
+ * TCP silently, and a job that quietly ran over ethernet looks exactly like one
+ * that used Myrinet.
+ */
+typedef struct TessTransport {
+    tess_u32 kb_tcp;
+    tess_u32 kb_gm;
+    tess_u32 kb_gsn;
+    tess_u32 kb_shmem;
+    tess_u32 kb_xpmem;
+    tess_u32 known;        /* 0: MPT would not tell us */
+} TessTransport;
 
 typedef struct TessWelcome {
     tess_u32 version;

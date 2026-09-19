@@ -274,8 +274,12 @@ static void probe_host(TessCluster *c, int i)
     }
     h->cpus = field_int(line, "cpus=");
     h->online = field_int(line, "online=");
+    {
+        const char *lp = strstr(line, "load=");
+
+        h->load = lp ? atof(lp + 5) : -1.0;
+    }
     h->reachable = 1;
-    sprintf(h->note, "%d of %d CPUs", h->online, h->cpus);
 }
 
 static void refresh_rows(TessCluster *c)
@@ -297,7 +301,11 @@ static void refresh_rows(TessCluster *c)
             if (compute < 0 || !c->host[i].enabled) {
                 compute = 0;
             }
-            if (c->host[i].reachable) {
+            if (c->host[i].reachable && c->host[i].load >= 0.0) {
+                sprintf(buf, "%-7s %-5s %d/%d cpu  load %.1f",
+                        c->host[i].name, c->host[i].arch, compute,
+                        c->host[i].online, c->host[i].load);
+            } else if (c->host[i].reachable) {
                 sprintf(buf, "%-7s %-5s %d of %d CPUs", c->host[i].name,
                         c->host[i].arch, compute, c->host[i].online);
             } else {
@@ -313,6 +321,31 @@ static void refresh_rows(TessCluster *c)
         sprintf(buf, "%d", c->host[i].ranks);
         XmTextFieldSetString(c->rankf[i], buf);
     }
+}
+
+/*
+ * Re-read the load averages without disturbing the rank configuration.
+ *
+ * DESIGN.md wants Performance Co-Pilot for this, and it may well be the right
+ * long-term answer. But HARDWARE-CHECKS.md records that neither pmcd's
+ * reachability nor the existence of the hinv.* metrics has been verified on
+ * these machines, while tess-probe over arshell is proven and already running.
+ * So the panel uses the proven path now, and PCP can replace it when someone
+ * confirms what it actually offers here.
+ */
+void tess_cluster_poll(TessCluster *c)
+{
+    int i, saved;
+
+    if (c->child > 0) {
+        return;                 /* a running job needs the CPUs, not this */
+    }
+    for (i = 0; i < c->nhosts; i++) {
+        saved = c->host[i].ranks;
+        probe_host(c, i);
+        c->host[i].ranks = saved;
+    }
+    refresh_rows(c);
 }
 
 void tess_cluster_rescan(TessCluster *c)
