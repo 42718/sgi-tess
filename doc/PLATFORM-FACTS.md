@@ -246,9 +246,9 @@ hinv -c processor ; hinv -m                        # CPU model/count, memory
 |---|---|
 | CPU count | `sysconf(_SC_NPROC_CONF / _SC_NPROC_ONLN)` or `sysmp(MP_NPROCS / MP_NAPROCS)` |
 | CPU model, MHz, cache | `getinvent(3)` — in libc, no `-linvent`. For `INV_PROCESSOR`/`INV_CPUBOARD`, `inv_controller` is the clock in MHz |
-| Memory total/free | `sysget(SGT_RMINFO)` × `getpagesize()` — prefer this over `sysmp(MP_SAGET, MPSA_RMINFO)`; never `MP_KERNADDR`. **But see the correction below: the obvious `sysget` call returns EFAULT on lucy and `MP_SAGET` is what answers today.** |
+| Memory total/free | `sysget(SGT_RMINFO)` × `getpagesize()` — prefer this over `sysmp(MP_SAGET, MPSA_RMINFO)`; never `MP_KERNADDR`. Pass a real cookie as the fifth argument, see below |
 | Swap | `swapctl(SC_GETFREESWAP)` |
-| Load average | `sysget(SGT_KSYM, "avenrun")` ÷ 1024.0 — unprivileged, this is what `uptime` does |
+| Load average | `sysget(SGT_KSYM, …)` ÷ 1024.0 — unprivileged, this is what `uptime` does. The symbol name goes in the *cookie*, not the buffer, see below |
 | Per-CPU %busy | two samples of `struct sysinfo` `cpu[]` ticks; per-CPU form `sysmp(MP_SAGET1, MPSA_SINFO, …, cpuid)` |
 | Process RSS/VSZ | `ioctl(PIOCPSINFO)` on `/proc/pinfo/<pid>` — `getrusage` `ru_maxrss` is useless here; `syssgi(SGI_PROCSZ)` was removed in 6.5 |
 | Link speed, MTU, if counters | `ioctl(SIOCGIFDATA)` → `struct if_data` (`ifi_baudrate`, `ifi_mtu`, `ifi_type`) — what `ifconfig` uses |
@@ -259,23 +259,43 @@ hinv -c processor ; hinv -m                        # CPU model/count, memory
 `sysget(2)` is the supported, unprivileged, node-aware replacement for the `sysmp`
 `MP_SAGET` family and should be the default choice on 6.5.
 
-**Measured correction (18 September 2026, lucy, IRIX 6.5.30).** Called as
+**Correction (19 September 2026, from `/usr/include/sys/sysget.h` on lucy).** Every
+`sysget` call in this project returned −1 with `errno` 14, EFAULT, for memory and for the
+load average alike. The header says why. The prototype is
 
 ```c
-sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ, (void *)0);
+extern int sysget(int, char *, int, int, sgt_cookie_t *);
 ```
 
-it returns −1 with `errno` 14, EFAULT, and leaves `rmi` zeroed. The older
-`sysmp(MP_SAGET, MPSA_RMINFO, &rmi, sizeof rmi)` on the same machine returns the right
-answer: 2560 MB physical, 2352 MB free, matching `hinv -c memory`. So the preference above
-is not wrong about which call to want, but the invocation in this table is incomplete —
-EFAULT means the kernel could not read an argument, most likely the fifth, which some
-`SGT_*` selectors use to name a node or CPU. `src/common/tess_inventory.c` tries `sysget`
-first and falls back, and its `-v` output names whichever answered.
+The fifth argument is a **structure the kernel dereferences**, not a spare pointer and not
+a string. Passing `(void *)0` for memory, or `(void *)"avenrun"` for the load average, is
+an unreadable address in both cases, which is exactly what EFAULT reports. The header
+supplies the macros to fill it in:
 
-This matters for more than tidiness: `sysget` is the *unprivileged* path. The probe ran as
-root. If `MP_SAGET` turns out to need privilege, memory reads zero as soon as anything runs
-as an ordinary user, so the correct `sysget` call is still worth having.
+```c
+sgt_cookie_t ck;
+
+SGT_COOKIE_INIT(&ck);                    /* sc_status=SC_BEGIN, all cells */
+sysget(SGT_RMINFO, (char *)&rmi, sizeof rmi, SGT_READ | SGT_SUM, &ck);
+
+SGT_COOKIE_INIT(&ck);
+SGT_COOKIE_SET_KSYM(&ck, KSYM_AVENRUN);  /* name goes in the cookie */
+sysget(SGT_KSYM, (char *)avenrun, sizeof avenrun, SGT_READ, &ck);
+```
+
+`SGT_COOKIE_INIT` sets the cookie to mean every cell; `SGT_SUM` asks the kernel to add
+those cells together, which is what a whole-machine total means on a NUMA box like aurora.
+`KSYM_AVENRUN` is the header's own spelling of `"avenrun"`.
+
+With this, `sysget` answers for memory, for the load average and for `SGT_SINFO` CPU ticks,
+all three unprivileged. `src/common/tess_inventory.c` uses it and keeps
+`sysmp(MP_SAGET, …)` only as a fallback; `-v` names whichever answered. That the
+unprivileged path works again matters here: the probe happens to run as root today, and
+`MP_SAGET` would have read zero the moment anything ran as an ordinary user.
+
+The earlier note in this file blamed the EFAULT on a node or CPU selector and recorded
+`MP_SAGET` as "what answers today". That was a guess dressed as a finding, and the header
+that settled it was two commands away the whole time. Read the header.
 
 ## arshell needs root here, so tess-ui does too (19 September 2026, measured)
 

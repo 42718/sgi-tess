@@ -80,10 +80,11 @@ static int probe_mhz(void)
 /*
  * Physical and free memory, in pages, from whichever call answers.
  *
- * PLATFORM-FACTS.md prefers sysget(SGT_RMINFO) and says never MP_KERNADDR. On
- * lucy the sysget form returned zeros, so the older sysmp(MP_SAGET, MPSA_RMINFO)
- * is tried next; note it may need privilege where sysget does not. why[] records
- * which path answered, so -v can say rather than imply.
+ * PLATFORM-FACTS.md prefers sysget(SGT_RMINFO) and says never MP_KERNADDR.
+ * sysget is also the unprivileged path, which matters because the probe runs
+ * as whoever arshell lands as. sysmp(MP_SAGET, MPSA_RMINFO) stays behind it as
+ * a fallback, and why[] records which one answered so -v can say rather than
+ * imply.
  */
 static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
 {
@@ -135,13 +136,6 @@ static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
     return 0;
 }
 
-/*
- * One-minute load average.
- *
- * PLATFORM-FACTS.md: sysget(SGT_KSYM, "avenrun") divided by 1024.0, which is
- * what uptime does and needs no privilege. Reported as -1 when the call is not
- * available rather than as a plausible zero.
- */
 /*
  * How busy this machine's CPUs have been since the last call, as a percentage.
  *
@@ -210,6 +204,13 @@ double tess_cpu_busy(void)
 #endif
 }
 
+/*
+ * One-minute load average.
+ *
+ * PLATFORM-FACTS.md: sysget(SGT_KSYM, "avenrun") divided by 1024.0, which is
+ * what uptime does and needs no privilege. Reported as -1 when the call is not
+ * available rather than as a plausible zero.
+ */
 double tess_load1(void)
 {
 #ifdef __sgi
