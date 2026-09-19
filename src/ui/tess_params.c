@@ -187,6 +187,9 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
          */
         row = XtVaCreateManagedWidget("row", xmFormWidgetClass, rc,
                                       XmNfractionBase, 100,
+                                      XmNshadowThickness, 0,
+                                      XmNmarginHeight, 0,
+                                      XmNmarginWidth, 0,
                                       NULL);
         /* Left-aligned in a fixed column: right-aligned labels left a wide
            empty gutter down the left of the panel and read as misaligned. */
@@ -269,7 +272,6 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
                                           XmNmarginWidth, 0,
                                           XmNleftAttachment, XmATTACH_POSITION,
                                           XmNleftPosition, 45,
-                                          XmNrightAttachment, XmATTACH_FORM,
                                           XmNtopAttachment, XmATTACH_FORM,
                                           XmNbottomAttachment, XmATTACH_FORM,
                                           NULL);

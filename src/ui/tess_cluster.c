@@ -44,19 +44,20 @@
 #include "tess_cluster.h"
 
 /*
- * One column grid, used by the heading and by every row.
+ * One column grid, in pixels, used by the heading and by every row.
  *
- * The heading used to be a single left-attached string relying on space
- * padding to land over the right columns, while the rows began after a toggle
- * and a swatch. Nothing made those agree, and they did not. Now each column is
- * its own widget at its own position in both, so they line up by construction
- * and stay lined up whatever the font does.
+ * Pixels rather than the form's percentages. The control panel is about 272
+ * wide, so one unit of fractionBase 100 is under three pixels: COL_HOST at 12
+ * meant 32 px, and the toggle plus the swatch already occupy 36, which is why
+ * the swatch was drawn over the hostname. The cells here hold short fixed
+ * strings, so their widths are known and offsets say exactly what is meant.
  */
-#define COL_HOST  12
-#define COL_TYPE  38
-#define COL_CPU   54
-#define COL_LOAD  66
-#define COL_RANKS 78
+#define COL_SWATCH  24
+#define COL_HOST    44
+#define COL_TYPE   100
+#define COL_CPU    140
+#define COL_LOAD   174
+#define COL_RANKS  210
 
 struct TessCluster {
     Widget      frame;
@@ -329,26 +330,27 @@ static void set_label(Widget w, const char *text)
     XmStringFree(s);
 }
 
-static Widget head_label(Widget parent, const char *text, int pos)
+/*
+ * A label at one column's x, with nothing drawn around it.
+ *
+ * No shadow, no margins: a label with either inside a form contributes an
+ * etched edge of its own, and a row of them reads as stray rules between the
+ * columns rather than as headings over them.
+ */
+static Widget grid_label(Widget parent, const char *name, int x)
 {
-    return XtVaCreateManagedWidget(text, xmLabelWidgetClass, parent,
+    return XtVaCreateManagedWidget(name, xmLabelWidgetClass, parent,
                                    XmNalignment, XmALIGNMENT_BEGINNING,
-                                   XmNleftAttachment,
-                                   pos > 0 ? XmATTACH_POSITION : XmATTACH_FORM,
-                                   XmNleftPosition, pos,
-                                   NULL);
-}
-
-/* One cell. Same attachment as its heading, so the two cannot drift. */
-static Widget cell_label(Widget parent, int pos, int right)
-{
-    return XtVaCreateManagedWidget("cell", xmLabelWidgetClass, parent,
-                                   XmNalignment, XmALIGNMENT_BEGINNING,
-                                   XmNleftAttachment, XmATTACH_POSITION,
-                                   XmNleftPosition, pos,
-                                   XmNrightAttachment, XmATTACH_POSITION,
-                                   XmNrightPosition, right,
-                                   XmNrecomputeSize, False,
+                                   XmNleftAttachment, XmATTACH_FORM,
+                                   XmNleftOffset, x,
+                                   XmNtopAttachment, XmATTACH_FORM,
+                                   XmNbottomAttachment, XmATTACH_FORM,
+                                   XmNshadowThickness, 0,
+                                   XmNhighlightThickness, 0,
+                                   XmNmarginWidth, 0,
+                                   XmNmarginHeight, 0,
+                                   XmNmarginLeft, 0,
+                                   XmNmarginRight, 0,
                                    NULL);
 }
 
@@ -370,7 +372,14 @@ static void refresh_rows(TessCluster *c)
             if (compute < 0 || !c->host[i].enabled) {
                 compute = 0;
             }
-            set_label(c->info[i], c->host[i].name);
+            {
+                /* Eight characters is what fits before the type column. */
+                char nm[9];
+
+                strncpy(nm, c->host[i].name, sizeof nm - 1);
+                nm[sizeof nm - 1] = '\0';
+                set_label(c->info[i], nm);
+            }
 
             if (c->host[i].reachable) {
                 XtUnmanageChild(c->cnote[i]);
@@ -963,19 +972,23 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
 
     {
         Widget hdr = XtVaCreateManagedWidget("hdr", xmFormWidgetClass, rc,
-                                             XmNfractionBase, 100, NULL);
+                                             XmNshadowThickness, 0,
+                                             XmNmarginHeight, 0,
+                                             XmNmarginWidth, 0, NULL);
 
-        head_label(hdr, "use", 0);
-        head_label(hdr, "host", COL_HOST);
-        head_label(hdr, "type", COL_TYPE);
-        head_label(hdr, "cpu", COL_CPU);
-        head_label(hdr, "load", COL_LOAD);
-        head_label(hdr, "ranks", COL_RANKS);
+        grid_label(hdr, "use", 0);
+        grid_label(hdr, "host", COL_HOST);
+        grid_label(hdr, "type", COL_TYPE);
+        grid_label(hdr, "cpu", COL_CPU);
+        grid_label(hdr, "load", COL_LOAD);
+        grid_label(hdr, "ranks", COL_RANKS);
     }
 
     for (i = 0; i < c->nhosts; i++) {
         row = XtVaCreateManagedWidget("clrow", xmFormWidgetClass, rc,
-                                      XmNfractionBase, 100, NULL);
+                                      XmNshadowThickness, 0,
+                                      XmNmarginHeight, 0,
+                                      XmNmarginWidth, 0, NULL);
         {
             XmString empty = XmStringCreateLocalized("");
 
@@ -1014,25 +1027,25 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                    XmNrecomputeSize, False,
                                                    XmNborderWidth, 1,
                                                    XmNleftAttachment,
-                                                   XmATTACH_WIDGET,
-                                                   XmNleftWidget, c->onbox[i],
+                                                   XmATTACH_FORM,
+                                                   XmNleftOffset, COL_SWATCH,
                                                    NULL);
             XmStringFree(blank);
         }
-        c->info[i]  = cell_label(row, COL_HOST, COL_TYPE);
-        c->ctype[i] = cell_label(row, COL_TYPE, COL_CPU);
-        c->ccpu[i]  = cell_label(row, COL_CPU, COL_LOAD);
-        c->cload[i] = cell_label(row, COL_LOAD, COL_RANKS);
-        /* Unreachable: one message across the three number columns, which is
-           worth more than three empty cells. Managed instead of them. */
-        c->cnote[i] = cell_label(row, COL_TYPE, COL_RANKS);
+        c->info[i]  = grid_label(row, "cell", COL_HOST);
+        c->ctype[i] = grid_label(row, "cell", COL_TYPE);
+        c->ccpu[i]  = grid_label(row, "cell", COL_CPU);
+        c->cload[i] = grid_label(row, "cell", COL_LOAD);
+        /* Unreachable: one message where the numbers would be, which is worth
+           more than three empty cells. Managed instead of them. */
+        c->cnote[i] = grid_label(row, "cell", COL_TYPE);
         XtUnmanageChild(c->cnote[i]);
         c->rankf[i] = XtVaCreateManagedWidget("rf", xmTextFieldWidgetClass,
                                               row,
                                               XmNcolumns, 3,
                                               XmNleftAttachment,
-                                              XmATTACH_POSITION,
-                                              XmNleftPosition, COL_RANKS,
+                                              XmATTACH_FORM,
+                                              XmNleftOffset, COL_RANKS,
                                               NULL);
         XtAddCallback(c->rankf[i], XmNactivateCallback, rank_cb,
                       (XtPointer)c);

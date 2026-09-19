@@ -1497,6 +1497,17 @@ static void wm_frame_geom(Display *d, Window w, int *fx, int *fy,
     *fhgt = (int)fh + 2 * (int)bw;
 }
 
+/*
+ * Vertical gap between stacked sections.
+ *
+ * Without it an XmFrame's bottom etched border lands directly on the next
+ * frame's top border, and two rules a pixel apart read as one thick bar
+ * rather than as the edges of two boxes. It showed up between View and
+ * Colour, between Status and Cluster, and below Cluster: everywhere two
+ * frames were attached XmATTACH_WIDGET with no offset.
+ */
+#define TESS_SECTION_GAP 6
+
 /* The second top-level shell: same app context, no MPI, no blocking. */
 static void build_control(Ui *u)
 {
@@ -1533,6 +1544,7 @@ static void build_control(Ui *u)
                                        (void *)u);
     XtVaSetValues(XtParent(u->colour_pane->form),
                   XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopOffset, TESS_SECTION_GAP,
                   XmNtopWidget, XtParent(u->view_pane->form),
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
@@ -1544,6 +1556,7 @@ static void build_control(Ui *u)
                                       XmNnumColumns, 1,
                                       XmNspacing, 4,
                                       XmNtopAttachment, XmATTACH_WIDGET,
+                                      XmNtopOffset, TESS_SECTION_GAP,
                                       XmNtopWidget,
                                       XtParent(u->colour_pane->form),
                                       XmNleftAttachment, XmATTACH_FORM,
@@ -1571,6 +1584,7 @@ static void build_control(Ui *u)
         cframe = XtVaCreateManagedWidget("cframe", xmFrameWidgetClass, form,
                                          XmNshadowType, XmSHADOW_ETCHED_IN,
                                          XmNtopAttachment, XmATTACH_WIDGET,
+                                         XmNtopOffset, TESS_SECTION_GAP,
                                          XmNtopWidget, buttons,
                                          XmNleftAttachment, XmATTACH_FORM,
                                          XmNrightAttachment, XmATTACH_FORM,
@@ -1598,6 +1612,7 @@ static void build_control(Ui *u)
     u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass, form,
                                          XmNalignment, XmALIGNMENT_BEGINNING,
                                          XmNtopAttachment, XmATTACH_WIDGET,
+                                         XmNtopOffset, TESS_SECTION_GAP,
                                          XmNtopWidget, u->clusterframe,
                                          XmNleftAttachment, XmATTACH_FORM,
                                          XmNrightAttachment, XmATTACH_FORM,
@@ -1608,6 +1623,7 @@ static void build_control(Ui *u)
                                 ui_log_cb, (void *)u);
     XtVaSetValues(tess_cluster_widget(u->cl),
                   XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopOffset, TESS_SECTION_GAP,
                   XmNtopWidget, u->elapsed,
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
@@ -1622,6 +1638,7 @@ static void build_control(Ui *u)
                   NULL);
     XtVaSetValues(XtParent(u->log),
                   XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopOffset, TESS_SECTION_GAP,
                   XmNtopWidget, tess_cluster_widget(u->cl),
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
