@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 
 #include <mpi.h>
 
@@ -35,6 +36,44 @@
 #include "tess_inventory.h"
 
 static int verbose = 0;
+static int idle_us = 2000;      /* -idle-us: sleep between polls when idle */
+
+/*
+ * Wait for rank 0 to say something, cheaply.
+ *
+ * MPT spin-waits inside a blocking MPI_Probe and MPI_NAP=2 does not change
+ * that: measured on aurora, four parked workers burned thirty seconds of CPU
+ * in thirty seconds of wall time while the GUI sat idle between frames. So the
+ * worker polls instead. It spins briefly first, because during a frame the
+ * next tile arrives in microseconds and sleeping there would cost throughput,
+ * then falls back to a short sleep, which is what makes an idle cluster idle.
+ *
+ * select() with no descriptors is the sleep: usleep's declaration varies with
+ * feature-test macros on IRIX, and this needs no header archaeology.
+ */
+#define TESS_SPINS 500
+
+static void wait_for_master(MPI_Status *st)
+{
+    struct timeval tv;
+    int flag, spins;
+
+    spins = 0;
+    for (;;) {
+        flag = 0;
+        MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &flag, st);
+        if (flag) {
+            return;
+        }
+        if (spins < TESS_SPINS) {
+            spins++;
+            continue;
+        }
+        tv.tv_sec = 0;
+        tv.tv_usec = idle_us;
+        select(0, (fd_set *)0, (fd_set *)0, (fd_set *)0, &tv);
+    }
+}
 
 #define VLOG if (verbose) vlog
 
@@ -135,7 +174,7 @@ static void worker_loop(int rank)
         req = rank;
         MPI_Send(&req, 1, MPI_INT, 0, TESS_TAG_REQ, MPI_COMM_WORLD);
         VLOG(rank, "asked for work (%d,%d)", 0, 0);
-        MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+        wait_for_master(&st);
         if (st.MPI_TAG == TESS_TAG_STOP) {
             MPI_Recv(&req, 1, MPI_INT, 0, TESS_TAG_STOP, MPI_COMM_WORLD, &st);
             break;
@@ -518,7 +557,8 @@ static void usage(const char *me)
 {
     fprintf(stderr, "usage: %s [-listen [port]] [-o file.ppm]\n", me);
     fprintf(stderr, "          [-w px] [-h px] [-max n] [-tile n]\n");
-    fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-v] [-help]\n");
+    fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-idle-us n]\n");
+    fprintf(stderr, "          [-v] [-help]\n");
     fflush(stderr);
 }
 
@@ -587,6 +627,8 @@ int main(int argc, char **argv)
             job.cx = atof(argv[++i]);
         } else if (strcmp(argv[i], "-cy") == 0 && i + 1 < argc) {
             job.cy = atof(argv[++i]);
+        } else if (strcmp(argv[i], "-idle-us") == 0 && i + 1 < argc) {
+            idle_us = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-v") == 0) {
             verbose = 1;
         } else if (strcmp(argv[i], "-help") == 0 ||
