@@ -291,7 +291,7 @@ static void probe_host(TessCluster *c, int i)
     h->cpus = field_int(line, "cpus=");
     h->online = field_int(line, "online=");
     {
-        const char *lp = strstr(line, "load=");
+        const char *lp = strstr(line, "busy=");
 
         h->load = lp ? atof(lp + 5) : -1.0;
     }
@@ -318,7 +318,7 @@ static void refresh_rows(TessCluster *c)
                 compute = 0;
             }
             if (c->host[i].reachable && c->host[i].load >= 0.0) {
-                sprintf(buf, "%-8.8s %-5.5s %d/%-2d  %4.1f",
+                sprintf(buf, "%-8.8s %-5.5s %d/%-2d %3.0f%%",
                         c->host[i].name, c->host[i].arch, compute,
                         c->host[i].online, c->host[i].load);
             } else if (c->host[i].reachable) {

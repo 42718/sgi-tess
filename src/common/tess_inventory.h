@@ -32,10 +32,14 @@ typedef struct TessInventory {
     int             hippi;              /* a hip* or ess* interface exists */
     char            memwhy[TESS_WHYLEN];/* which call answered, or how each failed */
     double          load1;              /* 1-minute load average, -1 unknown */
+    double          busy;               /* percent of CPU time used, -1 unknown */
 } TessInventory;
 
 /* Just the one-minute load average, cheap enough to call often. -1 unknown. */
 double tess_load1(void);
+
+/* CPU busy percentage since the previous call. -1 on the first call. */
+double tess_cpu_busy(void);
 
 /* Fills inv. Never fails: unknown fields are 0 or "?". */
 void tess_inventory(TessInventory *inv);

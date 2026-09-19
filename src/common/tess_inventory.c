@@ -38,6 +38,7 @@
 #include <sys/sysget.h>
 #include <sys/sysinfo.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
 #endif
@@ -131,6 +132,62 @@ static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
  * what uptime does and needs no privilege. Reported as -1 when the call is not
  * available rather than as a plausible zero.
  */
+/*
+ * How busy this machine's CPUs have been since the last call, as a percentage.
+ *
+ * PLATFORM-FACTS.md: "two samples of struct sysinfo cpu[] ticks". Keeping the
+ * previous sample in a static means a caller polling once a second gets the
+ * average over that second with no sleep and no second syscall, which is what
+ * the worker needs: it is called between tiles, not between frames.
+ *
+ * Returns -1 until there is a baseline to difference against, which is the
+ * first call, and after any failure.
+ */
+double tess_cpu_busy(void)
+{
+#ifdef __sgi
+    static int have_prev = 0;
+    static long prev[CPU_STATES];
+    struct sysinfo si;
+    long now[CPU_STATES];
+    long dtot = 0, didle = 0;
+    int i;
+
+    memset((char *)&si, 0, sizeof si);
+    if (sysmp(MP_SAGET, MPSA_SINFO, (char *)&si, sizeof si) == -1) {
+        return -1.0;
+    }
+    for (i = 0; i < CPU_STATES; i++) {
+        now[i] = (long)si.cpu[i];
+    }
+    if (!have_prev) {
+        for (i = 0; i < CPU_STATES; i++) {
+            prev[i] = now[i];
+        }
+        have_prev = 1;
+        return -1.0;
+    }
+    for (i = 0; i < CPU_STATES; i++) {
+        long d = now[i] - prev[i];
+
+        if (d < 0) {
+            d = 0;
+        }
+        dtot += d;
+        if (i == CPU_IDLE) {
+            didle += d;
+        }
+        prev[i] = now[i];
+    }
+    if (dtot <= 0) {
+        return -1.0;
+    }
+    return 100.0 * (double)(dtot - didle) / (double)dtot;
+#else
+    return -1.0;
+#endif
+}
+
 double tess_load1(void)
 {
 #ifdef __sgi
@@ -241,6 +298,17 @@ void tess_inventory(TessInventory *inv)
         (void)probe_memory(&inv->memkb, &inv->freekb, inv->memwhy,
                            TESS_WHYLEN);
         inv->load1 = probe_load();
+        /* Two samples a fifth of a second apart: a one-shot probe has no
+           previous call to difference against. */
+        (void)tess_cpu_busy();
+        {
+            struct timeval tv;
+
+            tv.tv_sec = 0;
+            tv.tv_usec = 200000;
+            select(0, (fd_set *)0, (fd_set *)0, (fd_set *)0, &tv);
+        }
+        inv->busy = tess_cpu_busy();
 
         inv->gm    = (access(GM_LIB_PATH, F_OK) == 0) ? 1 : 0;
         inv->hippi = probe_hippi();
@@ -248,6 +316,7 @@ void tess_inventory(TessInventory *inv)
 #else
     inv->nodes = 1;
     inv->load1 = -1.0;
+    inv->busy = -1.0;
 #endif
 }
 
@@ -258,10 +327,10 @@ void tess_inventory_line(const TessInventory *inv, char *buf, int len)
        without editing. Keep the field order stable; add at the end. */
     sprintf(buf,
             "# tess-probe %d host=%s cpus=%d online=%d mhz=%d nodes=%d"
-            " memkb=%ld freekb=%ld load=%.2f irix=%s mpt=%s abi=%d gm=%d"
-            " hippi=%d",
+            " memkb=%ld freekb=%ld load=%.2f busy=%.1f irix=%s mpt=%s"
+            " abi=%d gm=%d hippi=%d",
             TESS_INV_FORMAT, inv->host, inv->cpus, inv->online, inv->mhz,
-            inv->nodes, inv->memkb, inv->freekb, inv->load1, inv->irix,
-            inv->mpt, inv->abi, inv->gm, inv->hippi);
+            inv->nodes, inv->memkb, inv->freekb, inv->load1, inv->busy,
+            inv->irix, inv->mpt, inv->abi, inv->gm, inv->hippi);
     buf[len - 1] = '\0';
 }

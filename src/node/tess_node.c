@@ -246,7 +246,7 @@ static void worker_loop(int rank)
             double nowt = now_sec();
 
             if (nowt - last_sample > 1.0) {
-                last_load = tess_load1();
+                last_load = tess_cpu_busy();
                 last_sample = nowt;
             }
             rh.load = last_load >= 0.0 ?
