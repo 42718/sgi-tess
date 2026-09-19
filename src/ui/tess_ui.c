@@ -1166,6 +1166,8 @@ static void mouse_eh(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
 
 static void save_cb(Widget w, XtPointer cd, XtPointer cb);
 static void tile_cb(Widget w, XtPointer cd, XtPointer cb);
+static void wm_frame_geom(Display *d, Window w, int *fx, int *fy,
+                          int *fwid, int *fhgt);
 
 static void paint_ui_button(Widget b, const char *spec)
 {
