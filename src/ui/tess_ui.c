@@ -91,6 +91,10 @@ typedef struct Ui {
     double     epoch_t0;
     int        tiles_expected;
 
+    /* the visual's own channel layout, not an assumed 0xRRGGBB */
+    int        rshift, gshift, bshift;
+    int        rbits, gbits, bbits;
+
     GC         bandgc;          /* XOR, for the rubber band */
     int        screen_w, screen_h;
     int        origin_x;
@@ -274,6 +278,45 @@ static int connect_master(const char *host, int port)
 
 /* --------------------------------------------------------------- pixels */
 
+static void mask_decode(unsigned long mask, int *shift, int *bits)
+{
+    int sh = 0, n = 0;
+
+    if (!mask) {
+        *shift = 0;
+        *bits = 8;
+        return;
+    }
+    while (!(mask & 1UL)) {
+        mask >>= 1;
+        sh++;
+    }
+    while (mask & 1UL) {
+        mask >>= 1;
+        n++;
+    }
+    *shift = sh;
+    *bits = n;
+}
+
+/*
+ * tess_shade() produces 0xRRGGBB, which is a convention, not a pixel. The
+ * server has its own masks, and on this V12 they are evidently not the ones I
+ * assumed: the set came out on a red field instead of blue through gold, while
+ * greyscale looked right, which is exactly what a channel swap looks like when
+ * r, g and b are equal.
+ */
+static tess_u32 to_visual(Ui *u, tess_u32 rgb)
+{
+    unsigned int r = (rgb >> 16) & 0xffu;
+    unsigned int g = (rgb >> 8) & 0xffu;
+    unsigned int b = rgb & 0xffu;
+
+    return (tess_u32)(((r >> (8 - u->rbits)) << u->rshift) |
+                      ((g >> (8 - u->gbits)) << u->gshift) |
+                      ((b >> (8 - u->bbits)) << u->bshift));
+}
+
 static void recreate_ximage(Ui *u)
 {
     if (u->ximg) {
@@ -312,15 +355,25 @@ static void reshade_all(Ui *u);
 /* Shade one tile out of the iteration buffer straight into the framebuffer. */
 static void shade_tile(Ui *u, int x, int y, int w, int h)
 {
-    int row;
+    static tess_u32 scratch[TESS_MAX_TILE * 4];
+    int row, i, n;
     tess_u8 *src;
     tess_u32 *dst;
 
-    for (row = 0; row < h; row++) {
-        src = u->iter + ((size_t)(y + row) * (size_t)u->width + (size_t)x) *
-              TESS_BYTES_PER_PX;
-        dst = u->fb + (size_t)(y + row) * (size_t)u->width + (size_t)x;
-        tess_shade(src, w, (int)u->job.max_iter, &u->pal, dst);
+    while (w > 0) {
+        n = w > (int)(sizeof scratch / sizeof scratch[0]) ?
+            (int)(sizeof scratch / sizeof scratch[0]) : w;
+        for (row = 0; row < h; row++) {
+            src = u->iter + ((size_t)(y + row) * (size_t)u->width +
+                             (size_t)x) * TESS_BYTES_PER_PX;
+            dst = u->fb + (size_t)(y + row) * (size_t)u->width + (size_t)x;
+            tess_shade(src, n, (int)u->job.max_iter, &u->pal, scratch);
+            for (i = 0; i < n; i++) {
+                dst[i] = to_visual(u, scratch[i]);
+            }
+        }
+        x += n;
+        w -= n;
     }
 }
 
@@ -1122,6 +1175,9 @@ int main(int argc, char **argv)
     u.dpy = XtDisplay(u.toplevel);
     u.visual = DefaultVisual(u.dpy, DefaultScreen(u.dpy));
     u.depth = DefaultDepth(u.dpy, DefaultScreen(u.dpy));
+    mask_decode(u.visual->red_mask, &u.rshift, &u.rbits);
+    mask_decode(u.visual->green_mask, &u.gshift, &u.gbits);
+    mask_decode(u.visual->blue_mask, &u.bshift, &u.bbits);
 
     u.fb = (tess_u32 *)calloc((size_t)u.width * u.height, sizeof(tess_u32));
     u.iter = (tess_u8 *)calloc((size_t)u.width * u.height * TESS_BYTES_PER_PX,

@@ -18,6 +18,7 @@
 #include <Xm/Frame.h>
 #include <Xm/Label.h>
 #include <Xm/RowColumn.h>
+#include <Xm/Scale.h>
 #include <Xm/TextF.h>
 #include <Xm/ToggleB.h>
 
@@ -99,6 +100,17 @@ static void toggle_cb(Widget w, XtPointer cd, XtPointer cb)
     }
 }
 
+static void scale_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Binding *b = (Binding *)cd;
+    XmScaleCallbackStruct *sc = (XmScaleCallbackStruct *)cb;
+
+    write_value(b->pane, b->index, (double)sc->value);
+    if (b->pane->apply) {
+        b->pane->apply(b->pane->ctx, &b->pane->descs[b->index]);
+    }
+}
+
 static void radio_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     Binding *b = (Binding *)cd;
@@ -145,19 +157,45 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
     p->form = rc;
 
     for (i = 0; i < p->n; i++) {
-        row = XtVaCreateManagedWidget("row", xmRowColumnWidgetClass, rc,
-                                      XmNorientation, XmHORIZONTAL,
+        Widget lab;
+
+        /*
+         * One form per row, all sharing a fraction base, so the labels line up
+         * in a right-aligned column and the fields start at the same x. A
+         * RowColumn of label/widget pairs cannot do that: each row sizes
+         * itself, which is what made the panel look hand-assembled.
+         */
+        row = XtVaCreateManagedWidget("row", xmFormWidgetClass, rc,
+                                      XmNfractionBase, 100,
                                       NULL);
-        XtVaCreateManagedWidget(descs[i].label, xmLabelWidgetClass, row,
-                                NULL);
+        lab = XtVaCreateManagedWidget(descs[i].label, xmLabelWidgetClass, row,
+                                      XmNalignment, XmALIGNMENT_END,
+                                      XmNleftAttachment, XmATTACH_FORM,
+                                      XmNrightAttachment, XmATTACH_POSITION,
+                                      XmNrightPosition, 38,
+                                      XmNtopAttachment, XmATTACH_FORM,
+                                      XmNbottomAttachment, XmATTACH_FORM,
+                                      NULL);
+        (void)lab;
 
         b = (Binding *)calloc(1, sizeof(Binding));
         b->pane = p;
         b->index = i;
 
         if (descs[i].type == TESS_P_BOOL) {
-            p->w[i] = XtVaCreateManagedWidget("t", xmToggleButtonWidgetClass,
-                                              row, NULL);
+            XmString empty = XmStringCreateLocalized("");
+
+            p->w[i] = XtVaCreateManagedWidget("toggle",
+                                              xmToggleButtonWidgetClass, row,
+                                              XmNlabelString, empty,
+                                              XmNleftAttachment,
+                                              XmATTACH_POSITION,
+                                              XmNleftPosition, 41,
+                                              XmNtopAttachment, XmATTACH_FORM,
+                                              XmNbottomAttachment,
+                                              XmATTACH_FORM,
+                                              NULL);
+            XmStringFree(empty);
             XtAddCallback(p->w[i], XmNvalueChangedCallback, toggle_cb,
                           (XtPointer)b);
         } else if (descs[i].type == TESS_P_ENUM) {
@@ -167,6 +205,13 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
                                           XmNorientation, XmHORIZONTAL,
                                           XmNradioBehavior, True,
                                           XmNpacking, XmPACK_TIGHT,
+                                          XmNmarginHeight, 0,
+                                          XmNmarginWidth, 0,
+                                          XmNleftAttachment, XmATTACH_POSITION,
+                                          XmNleftPosition, 40,
+                                          XmNrightAttachment, XmATTACH_FORM,
+                                          XmNtopAttachment, XmATTACH_FORM,
+                                          XmNbottomAttachment, XmATTACH_FORM,
                                           NULL);
             p->w[i] = box;
             for (j = 0; j < TESS_MAX_ENUM && descs[i].names[j]; j++) {
@@ -182,9 +227,37 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
                 XtAddCallback(p->enumkids[i][j], XmNvalueChangedCallback,
                               radio_cb, (XtPointer)rb);
             }
+        } else if (descs[i].type == TESS_P_INT && descs[i].lo < descs[i].hi &&
+                   (descs[i].hi - descs[i].lo) <= 512.0) {
+            /* A bounded integer is a thing to drag, not to type: cycles and
+               rotate are both instant, so the slider shows its effect live. */
+            p->w[i] = XtVaCreateManagedWidget("slider", xmScaleWidgetClass,
+                                              row,
+                                              XmNorientation, XmHORIZONTAL,
+                                              XmNminimum, (int)descs[i].lo,
+                                              XmNmaximum, (int)descs[i].hi,
+                                              XmNshowValue, True,
+                                              XmNleftAttachment,
+                                              XmATTACH_POSITION,
+                                              XmNleftPosition, 40,
+                                              XmNrightAttachment,
+                                              XmATTACH_FORM,
+                                              XmNtopAttachment, XmATTACH_FORM,
+                                              XmNbottomAttachment,
+                                              XmATTACH_FORM,
+                                              NULL);
+            XtAddCallback(p->w[i], XmNvalueChangedCallback, scale_cb,
+                          (XtPointer)b);
+            XtAddCallback(p->w[i], XmNdragCallback, scale_cb, (XtPointer)b);
         } else {
             p->w[i] = XtVaCreateManagedWidget("f", xmTextFieldWidgetClass, row,
-                                              XmNcolumns, 16,
+                                              XmNcolumns, 18,
+                                              XmNleftAttachment,
+                                              XmATTACH_POSITION,
+                                              XmNleftPosition, 40,
+                                              XmNtopAttachment, XmATTACH_FORM,
+                                              XmNbottomAttachment,
+                                              XmATTACH_FORM,
                                               NULL);
             XtAddCallback(p->w[i], XmNactivateCallback, text_cb,
                           (XtPointer)b);
@@ -210,6 +283,8 @@ void tess_params_refresh(TessParamPane *p)
                 XmToggleButtonSetState(p->enumkids[i][j],
                                        (j == (int)v) ? True : False, False);
             }
+        } else if (XmIsScale(p->w[i])) {
+            XmScaleSetValue(p->w[i], (int)v);
         } else {
             if (p->descs[i].type == TESS_P_DOUBLE) {
                 sprintf(buf, "%.12g", v);
