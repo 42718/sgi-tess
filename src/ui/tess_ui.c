@@ -39,6 +39,7 @@
 /* after Xm.h, which pulls in Intrinsic.h: Shell.h needs externalref */
 #include <X11/Shell.h>
 #include <Xm/Form.h>
+#include <Xm/Frame.h>
 #include <Xm/DrawingA.h>
 #include <Xm/Label.h>
 #include <Xm/PushB.h>
