@@ -284,9 +284,27 @@ static void refresh_rows(TessCluster *c)
     int i;
 
     for (i = 0; i < c->nhosts; i++) {
-        sprintf(buf, "%-8s %-5s %s", c->host[i].name,
-                c->host[i].arch[0] ? c->host[i].arch : "-",
-                c->host[i].note);
+        /*
+         * Say how many CPUs will actually compute, not how many exist. On the
+         * display host the first rank is the master and computes nothing, so
+         * two ranks there means one computing CPU. Updates as the rank field
+         * is edited, which is the number the person is actually choosing.
+         */
+        {
+            int compute = c->host[i].ranks - (i == 0 ? 1 : 0);
+
+            if (compute < 0) {
+                compute = 0;
+            }
+            if (c->host[i].reachable) {
+                sprintf(buf, "%-7s %-5s %d of %d CPUs", c->host[i].name,
+                        c->host[i].arch, compute, c->host[i].online);
+            } else {
+                sprintf(buf, "%-7s %-5s %s", c->host[i].name,
+                        c->host[i].arch[0] ? c->host[i].arch : "-",
+                        c->host[i].note);
+            }
+        }
         s = XmStringCreateLocalized(buf);
         XtVaSetValues(c->info[i], XmNlabelString, s, NULL);
         XmStringFree(s);
@@ -601,6 +619,7 @@ static void rank_cb(Widget w, XtPointer cd, XtPointer cb)
                 }
                 XtFree(text);
             }
+            refresh_rows(c);
             return;
         }
     }

@@ -55,6 +55,34 @@ static const char *nonce = (const char *)0;      /* -idle-us: sleep between poll
  */
 #define TESS_SPINS 500
 
+/*
+ * The master waits the same way, for the same reason: MPT spins inside a
+ * blocking probe, and the master shares the display host's CPU with X, the
+ * GUI and now a worker. Spinning there costs the interface its responsiveness
+ * during exactly the render you are watching.
+ */
+static void wait_for_any(MPI_Status *st)
+{
+    struct timeval tv;
+    int flag, spins;
+
+    spins = 0;
+    for (;;) {
+        flag = 0;
+        MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &flag, st);
+        if (flag) {
+            return;
+        }
+        if (spins < TESS_SPINS) {
+            spins++;
+            continue;
+        }
+        tv.tv_sec = 0;
+        tv.tv_usec = idle_us;
+        select(0, (fd_set *)0, (fd_set *)0, (fd_set *)0, &tv);
+    }
+}
+
 static void wait_for_master(MPI_Status *st)
 {
     struct timeval tv;
@@ -278,7 +306,7 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
      * results are still collected. Stops go out once nothing is outstanding.
      */
     while (done < ntiles) {
-        MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+        wait_for_any(&st);
         src = st.MPI_SOURCE;
 
         if (st.MPI_TAG == TESS_TAG_REQ) {
@@ -352,7 +380,7 @@ static void stop_workers(int nranks, int *parked)
         }
     }
     while (stopped < nranks - 1) {
-        MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+        wait_for_any(&st);
         src = st.MPI_SOURCE;
         if (st.MPI_TAG == TESS_TAG_REQ) {
             MPI_Recv(&req, 1, MPI_INT, src, TESS_TAG_REQ, MPI_COMM_WORLD, &st);
