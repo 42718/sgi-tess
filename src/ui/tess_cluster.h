@@ -26,6 +26,7 @@ typedef struct TessHost {
     int  cpus;                     /* configured */
     int  online;                   /* available now: aurora's shape */
     int  ranks;                    /* what we will launch; 0 is legal */
+    int  enabled;                  /* unticked: contributes nothing */
     int  reachable;
     char note[64];
 } TessHost;

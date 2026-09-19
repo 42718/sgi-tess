@@ -47,6 +47,7 @@ struct TessCluster {
     Widget      rows[TESS_MAX_HOSTS];
     Widget      info[TESS_MAX_HOSTS];
     Widget      rankf[TESS_MAX_HOSTS];
+    Widget      onbox[TESS_MAX_HOSTS];
     Widget      state;
     Widget      launchb;
     Widget      stopb;
@@ -86,6 +87,22 @@ static void clog1(TessCluster *c, const char *text)
     if (c->logf) {
         c->logf(c->logctx, text);
     }
+}
+
+/* A button you can find without reading it. */
+static void paint_button(Widget b, const char *spec)
+{
+    Display *d = XtDisplay(b);
+    Colormap cm = DefaultColormap(d, DefaultScreen(d));
+    XColor want, exact;
+
+    if (XAllocNamedColor(d, cm, (char *)spec, &want, &exact)) {
+        XtVaSetValues(b, XmNbackground, want.pixel, NULL);
+    }
+    XtVaSetValues(b,
+                  XmNmarginWidth, 10,
+                  XmNmarginHeight, 4,
+                  NULL);
 }
 
 static void set_state(TessCluster *c, const char *text)
@@ -290,10 +307,27 @@ void tess_cluster_rescan(TessCluster *c)
          * shading pass, so it contributes one rank and no compute by default
          * (DESIGN.md 3b). Everyone else offers one rank per online CPU.
          */
-        if (i == 0) {
-            c->host[i].ranks = 1;
+        /*
+         * One CPU per host stays out of the job: on the display host it runs
+         * X, the GUI and the shading pass, and everywhere else it leaves the
+         * machine usable while a long render is going. The master rank counts
+         * as one, so lucy with two CPUs defaults to master only, which is what
+         * DESIGN.md section 3b asks for, and aurora with four defaults to
+         * three workers.
+         */
+        if (c->host[i].online > 0) {
+            c->host[i].ranks = c->host[i].online - 1;
+            if (i == 0 && c->host[i].ranks < 1) {
+                c->host[i].ranks = 1;       /* the master must exist */
+            }
+            if (c->host[i].ranks < 0) {
+                c->host[i].ranks = 0;
+            }
         } else {
-            c->host[i].ranks = c->host[i].online;
+            c->host[i].ranks = 0;
+        }
+        if (!c->host[i].reachable) {
+            c->host[i].enabled = 0;
         }
         clog(c, "%s: %d rank(s)", c->host[i].name, c->host[i].ranks);
     }
@@ -375,7 +409,8 @@ void tess_cluster_launch(TessCluster *c)
 
     groups = 0;
     for (i = 0; i < c->nhosts && argc < 50; i++) {
-        if (!c->host[i].reachable || c->host[i].ranks <= 0) {
+        if (!c->host[i].enabled || !c->host[i].reachable ||
+            c->host[i].ranks <= 0) {
             continue;
         }
         if (groups > 0) {
@@ -520,6 +555,24 @@ static void stop_cb(Widget w, XtPointer cd, XtPointer cb)
     tess_cluster_stop((TessCluster *)cd);
 }
 
+static void enable_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    TessCluster *c = (TessCluster *)cd;
+    XmToggleButtonCallbackStruct *s = (XmToggleButtonCallbackStruct *)cb;
+    int i;
+
+    for (i = 0; i < c->nhosts; i++) {
+        if (c->onbox[i] == w) {
+            c->host[i].enabled = s->set ? 1 : 0;
+            clog(c, "%s: %s", c->host[i].name,
+                 0);
+            clog1(c, c->host[i].enabled ? "  enabled" :
+                     "  disabled");
+            return;
+        }
+    }
+}
+
 static void rank_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     TessCluster *c = (TessCluster *)cd;
@@ -592,13 +645,30 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
     for (i = 0; i < c->nhosts; i++) {
         row = XtVaCreateManagedWidget("clrow", xmFormWidgetClass, rc,
                                       XmNfractionBase, 100, NULL);
+        {
+            XmString empty = XmStringCreateLocalized("");
+
+            c->onbox[i] = XtVaCreateManagedWidget("on",
+                                                  xmToggleButtonWidgetClass,
+                                                  row,
+                                                  XmNlabelString, empty,
+                                                  XmNleftAttachment,
+                                                  XmATTACH_FORM,
+                                                  NULL);
+            XmStringFree(empty);
+            XmToggleButtonSetState(c->onbox[i], True, False);
+            c->host[i].enabled = 1;
+            XtAddCallback(c->onbox[i], XmNvalueChangedCallback, enable_cb,
+                          (XtPointer)c);
+        }
         c->info[i] = XtVaCreateManagedWidget("info", xmLabelWidgetClass, row,
                                              XmNalignment,
                                              XmALIGNMENT_BEGINNING,
-                                             XmNleftAttachment, XmATTACH_FORM,
+                                             XmNleftAttachment, XmATTACH_WIDGET,
+                                             XmNleftWidget, c->onbox[i],
                                              XmNrightAttachment,
                                              XmATTACH_POSITION,
-                                             XmNrightPosition, 74,
+                                             XmNrightPosition, 78,
                                              NULL);
         c->rankf[i] = XtVaCreateManagedWidget("rf", xmTextFieldWidgetClass,
                                               row,
@@ -613,16 +683,23 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
     }
 
     buttons = XtVaCreateManagedWidget("clbuttons", xmRowColumnWidgetClass, rc,
-                                      XmNorientation, XmHORIZONTAL, NULL);
+                                      XmNorientation, XmHORIZONTAL,
+                                      XmNpacking, XmPACK_COLUMN,
+                                      XmNnumColumns, 1,
+                                      XmNspacing, 4,
+                                      NULL);
     b = XtVaCreateManagedWidget("Rescan", xmPushButtonWidgetClass, buttons,
                                 NULL);
     XtAddCallback(b, XmNactivateCallback, rescan_cb, (XtPointer)c);
-    c->launchb = XtVaCreateManagedWidget("Launch", xmPushButtonWidgetClass,
+    paint_button(b, "#6fc0d4");
+    c->launchb = XtVaCreateManagedWidget("Start", xmPushButtonWidgetClass,
                                          buttons, NULL);
     XtAddCallback(c->launchb, XmNactivateCallback, launch_cb, (XtPointer)c);
+    paint_button(c->launchb, "#5f9e4a");
     c->stopb = XtVaCreateManagedWidget("Stop", xmPushButtonWidgetClass,
                                        buttons, NULL);
     XtAddCallback(c->stopb, XmNactivateCallback, stop_cb, (XtPointer)c);
+    paint_button(c->stopb, "#e0685c");
     XtSetSensitive(c->stopb, False);
 
     c->state = XtVaCreateManagedWidget("not scanned", xmLabelWidgetClass, rc,

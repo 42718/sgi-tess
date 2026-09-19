@@ -934,6 +934,18 @@ static void mouse_eh(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
     }
 }
 
+static void paint_ui_button(Widget b, const char *spec)
+{
+    Display *d = XtDisplay(b);
+    Colormap cm = DefaultColormap(d, DefaultScreen(d));
+    XColor want, exact;
+
+    if (XAllocNamedColor(d, cm, (char *)spec, &want, &exact)) {
+        XtVaSetValues(b, XmNbackground, want.pixel, NULL);
+    }
+    XtVaSetValues(b, XmNmarginWidth, 10, XmNmarginHeight, 4, NULL);
+}
+
 static void render_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     Ui *u = (Ui *)cd;
@@ -1059,6 +1071,9 @@ static void build_control(Ui *u)
 
     buttons = XtVaCreateManagedWidget("buttons", xmRowColumnWidgetClass, form,
                                       XmNorientation, XmHORIZONTAL,
+                                      XmNpacking, XmPACK_COLUMN,
+                                      XmNnumColumns, 1,
+                                      XmNspacing, 4,
                                       XmNtopAttachment, XmATTACH_WIDGET,
                                       XmNtopWidget,
                                       XtParent(u->colour_pane->form),
@@ -1067,15 +1082,11 @@ static void build_control(Ui *u)
     b = XtVaCreateManagedWidget("Render", xmPushButtonWidgetClass, buttons,
                                 NULL);
     XtAddCallback(b, XmNactivateCallback, render_cb, (XtPointer)u);
+    paint_ui_button(b, "#d9a441");
     b = XtVaCreateManagedWidget("Home", xmPushButtonWidgetClass, buttons,
                                 NULL);
     XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
-
-    u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass, form,
-                                         XmNtopAttachment, XmATTACH_WIDGET,
-                                         XmNtopWidget, buttons,
-                                         XmNleftAttachment, XmATTACH_FORM,
-                                         NULL);
+    paint_ui_button(b, "#c3cad0");
 
     {
         Widget cframe;
@@ -1083,19 +1094,36 @@ static void build_control(Ui *u)
         cframe = XtVaCreateManagedWidget("cframe", xmFrameWidgetClass, form,
                                          XmNshadowType, XmSHADOW_ETCHED_IN,
                                          XmNtopAttachment, XmATTACH_WIDGET,
-                                         XmNtopWidget, u->elapsed,
+                                         XmNtopWidget, buttons,
                                          XmNleftAttachment, XmATTACH_FORM,
                                          XmNrightAttachment, XmATTACH_FORM,
                                          NULL);
-        XtVaCreateManagedWidget("Cluster", xmLabelWidgetClass, cframe,
+        XtVaCreateManagedWidget("Status", xmLabelWidgetClass, cframe,
                                 XmNchildType, XmFRAME_TITLE_CHILD,
                                 NULL);
-        u->cluster = XtVaCreateManagedWidget("stats",
-                                             xmDrawingAreaWidgetClass, cframe,
-                                             XmNheight, 132,
-                                             NULL);
-        XtAddCallback(u->cluster, XmNexposeCallback, stats_expose_cb,
-                      (XtPointer)u);
+        {
+            Widget crc;
+
+            crc = XtVaCreateManagedWidget("crc", xmRowColumnWidgetClass,
+                                          cframe,
+                                          XmNorientation, XmVERTICAL,
+                                          NULL);
+            u->cluster = XtVaCreateManagedWidget("stats",
+                                                 xmDrawingAreaWidgetClass,
+                                                 crc,
+                                                 XmNheight, 132,
+                                                 XmNwidth, TESS_CTRL_W - 24,
+                                                 NULL);
+            XtAddCallback(u->cluster, XmNexposeCallback, stats_expose_cb,
+                          (XtPointer)u);
+            /* The render's progress belongs beside the cluster's, not at the
+               far end of the panel from it. */
+            u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass,
+                                                 crc,
+                                                 XmNalignment,
+                                                 XmALIGNMENT_BEGINNING,
+                                                 NULL);
+        }
         u->clusterframe = cframe;
     }
 
@@ -1340,9 +1368,35 @@ int main(int argc, char **argv)
          * exactly how the render window lost its title bar off the top of the
          * screen while the panel sat 40 pixels lower.
          */
-        /* The panel goes at the render window's actual right edge. */
-        u.ctrl_x = fx + fwid + TESS_GAP;
-        u.ctrl_y = fy;
+        /*
+         * Flush to the right screen edge. The panel's own frame is the same
+         * width as the render window's, so its right edge lands on the screen
+         * edge when placed at screen - (panel + decoration). The render window
+         * is then resized, not moved, to meet it: resizing after realize is
+         * safe, moving is not, and this is why the pair kept leaving a strip
+         * of desktop on the right.
+         */
+        {
+            int decor = fwid - u.width;
+            int want;
+
+            if (decor < 0) {
+                decor = 0;
+            }
+            u.ctrl_x = u.screen_w - (TESS_CTRL_W + decor);
+            u.ctrl_y = fy;
+
+            want = u.ctrl_x - TESS_GAP - decor - fx;
+            if (want > 320 && want != u.width) {
+                u.width = want;
+                u.height = u.width * 3 / 4;
+                XtVaSetValues(u.toplevel,
+                              XmNwidth, u.width,
+                              XmNheight, u.height + 22,
+                              NULL);
+                u.job.scale = 3.2 / (double)u.width;
+            }
+        }
         {
             char msg[160];
 
