@@ -614,6 +614,109 @@ static void mouse_eh(Widget w, XtPointer cd, XEvent *ev, Boolean *cont)
     }
 }
 
+static void render_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+
+    values_to_job(u);
+    if (u->fd >= 0) {
+        send_render(u);
+    }
+}
+
+static void home_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+
+    u->val.cx = -0.6;
+    u->val.cy = 0.0;
+    u->val.scale = 3.2 / (double)(u->width > 0 ? u->width : 1024);
+    u->val.max_iter = 1000;
+    values_to_job(u);
+    tess_params_refresh(u->view_pane);
+    ui_log(u, "home");
+    if (u->fd >= 0) {
+        send_render(u);
+    }
+}
+
+/* The second top-level shell: same app context, no MPI, no blocking. */
+static void build_control(Ui *u)
+{
+    Widget form, buttons, b;
+
+    u->control = XtVaAppCreateShell("control", "Tess",
+                                    topLevelShellWidgetClass,
+                                    XtDisplay(u->toplevel),
+                                    XmNtitle, "Tess control",
+                                    NULL);
+    form = XtVaCreateManagedWidget("cform", xmFormWidgetClass, u->control,
+                                   NULL);
+
+    u->view_pane = tess_params_build(form, "View",
+                                     view_params,
+                                     (int)(sizeof view_params /
+                                           sizeof view_params[0]),
+                                     (void *)&u->val, param_applied,
+                                     (void *)u);
+    XtVaSetValues(XtParent(u->view_pane->form),
+                  XmNtopAttachment, XmATTACH_FORM,
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  NULL);
+
+    u->colour_pane = tess_params_build(form, "Colour",
+                                       colour_params,
+                                       (int)(sizeof colour_params /
+                                             sizeof colour_params[0]),
+                                       (void *)&u->val, param_applied,
+                                       (void *)u);
+    XtVaSetValues(XtParent(u->colour_pane->form),
+                  XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopWidget, XtParent(u->view_pane->form),
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  NULL);
+
+    buttons = XtVaCreateManagedWidget("buttons", xmRowColumnWidgetClass, form,
+                                      XmNorientation, XmHORIZONTAL,
+                                      XmNtopAttachment, XmATTACH_WIDGET,
+                                      XmNtopWidget,
+                                      XtParent(u->colour_pane->form),
+                                      XmNleftAttachment, XmATTACH_FORM,
+                                      NULL);
+    b = XtVaCreateManagedWidget("Render", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, render_cb, (XtPointer)u);
+    b = XtVaCreateManagedWidget("Home", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
+
+    u->elapsed = XtVaCreateManagedWidget("idle", xmLabelWidgetClass, form,
+                                         XmNtopAttachment, XmATTACH_WIDGET,
+                                         XmNtopWidget, buttons,
+                                         XmNleftAttachment, XmATTACH_FORM,
+                                         NULL);
+
+    u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
+    XtVaSetValues(u->log,
+                  XmNeditable, False,
+                  XmNeditMode, XmMULTI_LINE_EDIT,
+                  XmNrows, 10,
+                  XmNcolumns, 52,
+                  NULL);
+    XtVaSetValues(XtParent(u->log),
+                  XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopWidget, u->elapsed,
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  XmNbottomAttachment, XmATTACH_FORM,
+                  NULL);
+    XtManageChild(u->log);
+
+    XtRealizeWidget(u->control);
+}
+
 /* ----------------------------------------------------------------- main */
 
 /*
