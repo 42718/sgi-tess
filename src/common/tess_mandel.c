@@ -93,6 +93,84 @@ void tess_mandel_tile(const TessAssign *a, tess_u8 *out)
     }
 }
 
+/*
+ * The ramps. Each maps a position t in [0,1) to a colour; none of them knows
+ * anything about fractals, and adding one is a case here plus a name in the
+ * GUI's table. They run in the GUI, so switching costs no network traffic.
+ */
+static void ramp_rgb(int ramp, double t, unsigned int *pr, unsigned int *pg,
+                     unsigned int *pb)
+{
+    double r = 0.0, g = 0.0, b = 0.0;
+    double u;
+
+    switch (ramp) {
+    case 1:                                     /* grey */
+        r = g = b = t;
+        break;
+
+    case 2:                                     /* fire */
+        if (t < 0.4) {
+            r = t / 0.4;
+        } else {
+            r = 1.0;
+        }
+        if (t > 0.35) {
+            g = (t - 0.35) / 0.45;
+        }
+        if (t > 0.75) {
+            b = (t - 0.75) / 0.25;
+        }
+        break;
+
+    case 3:                                     /* ice */
+        if (t < 0.5) {
+            b = 0.3 + t;
+            g = t * 0.6;
+        } else {
+            b = 1.0;
+            g = 0.3 + (t - 0.5) * 1.4;
+            r = (t - 0.5) * 1.6;
+        }
+        break;
+
+    case 4:                                     /* spectrum, hue around */
+        u = t * 6.0;
+        if (u < 1.0)      { r = 1.0; g = u; }
+        else if (u < 2.0) { r = 2.0 - u; g = 1.0; }
+        else if (u < 3.0) { g = 1.0; b = u - 2.0; }
+        else if (u < 4.0) { g = 4.0 - u; b = 1.0; }
+        else if (u < 5.0) { r = u - 4.0; b = 1.0; }
+        else              { r = 1.0; b = 6.0 - u; }
+        break;
+
+    case 5:                                     /* copper */
+        r = t * 1.3;
+        g = t * 0.8;
+        b = t * 0.5;
+        break;
+
+    default:                                    /* blue through gold */
+        if (t < 0.5) {
+            r = t * 1.2;
+            g = t * 0.7;
+            b = 0.35 + t;
+        } else {
+            r = 0.6 + (t - 0.5) * 0.8;
+            g = 0.35 + (t - 0.5) * 1.3;
+            b = 0.85 - (t - 0.5) * 0.6;
+        }
+        break;
+    }
+
+    if (r < 0.0) r = 0.0;
+    if (g < 0.0) g = 0.0;
+    if (b < 0.0) b = 0.0;
+    *pr = (unsigned int)(255.0 * (r > 1.0 ? 1.0 : r));
+    *pg = (unsigned int)(255.0 * (g > 1.0 ? 1.0 : g));
+    *pb = (unsigned int)(255.0 * (b > 1.0 ? 1.0 : b));
+}
+
 static tess_u32 rgb(unsigned int r, unsigned int g, unsigned int b)
 {
     return ((r & 255u) << 16) | ((g & 255u) << 8) | (b & 255u);
@@ -135,13 +213,7 @@ void tess_shade(const tess_u8 *in, int npix, int max_iter,
             t += 1.0;
         }
 
-        if (pal->ramp == 1) {
-            r = g = b = (unsigned int)(255.0 * t);
-        } else {
-            r = (unsigned int)(255.0 * (t < 0.5 ? t * 1.2 : 0.6 + (t - 0.5) * 0.8));
-            g = (unsigned int)(255.0 * (t < 0.5 ? t * 0.7 : 0.35 + (t - 0.5) * 1.3));
-            b = (unsigned int)(255.0 * (t < 0.5 ? 0.35 + t * 1.0 : 0.85 - (t - 0.5) * 0.6));
-        }
+        ramp_rgb(pal->ramp, t, &r, &g, &b);
         if (r > 255u) r = 255u;
         if (g > 255u) g = 255u;
         if (b > 255u) b = 255u;

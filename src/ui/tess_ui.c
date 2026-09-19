@@ -173,8 +173,9 @@ static const TessParamDesc view_params[] = {
 };
 
 static const TessParamDesc colour_params[] = {
-    { "ramp",     TESS_P_ENUM, XtOffsetOf(UiValues, ramp),     0.0, 1.0,
-      TESS_LOCAL, { "blue-gold", "grey", 0 } },
+    { "ramp",     TESS_P_ENUM, XtOffsetOf(UiValues, ramp),     0.0, 5.0,
+      TESS_LOCAL, { "blue-gold", "grey", "fire", "ice", "spectrum",
+                    "copper" } },
     { "cycles",   TESS_P_INT,  XtOffsetOf(UiValues, cycles),   1.0, 32.0,
       TESS_LOCAL, { 0 } },
     { "rotate",   TESS_P_INT,  XtOffsetOf(UiValues, rotate),   0.0, 255.0,

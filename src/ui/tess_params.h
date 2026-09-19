@@ -30,7 +30,7 @@ typedef enum {
 #define TESS_CLUSTER 0      /* changing it means a new epoch */
 #define TESS_LOCAL   1      /* changing it re-shades, and costs no network */
 
-#define TESS_MAX_ENUM 6
+#define TESS_MAX_ENUM 8
 
 typedef struct TessParamDesc {
     const char   *label;

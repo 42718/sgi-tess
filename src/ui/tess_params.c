@@ -133,14 +133,11 @@ static void scale_cb(Widget w, XtPointer cd, XtPointer cb)
     }
 }
 
-static void radio_cb(Widget w, XtPointer cd, XtPointer cb)
+/* An option menu entry was chosen. */
+static void menu_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     Binding *b = (Binding *)cd;
-    XmToggleButtonCallbackStruct *s = (XmToggleButtonCallbackStruct *)cb;
 
-    if (!s->set) {
-        return;                 /* only the newly selected one matters */
-    }
     write_value(b->pane, b->index, (double)b->choice);
     if (b->pane->apply) {
         b->pane->apply(b->pane->ctx, &b->pane->descs[b->index]);
@@ -239,12 +236,34 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
             XtAddCallback(p->w[i], XmNvalueChangedCallback, toggle_cb,
                           (XtPointer)b);
         } else if (descs[i].type == TESS_P_ENUM) {
-            Widget box;
+            /*
+             * A dropdown, not a row of radio buttons. Two choices fitted
+             * across a narrow panel; six ramps do not, and a list also says
+             * plainly that these are alternatives rather than independent
+             * switches.
+             */
+            Widget pull, opt, item;
+            XmString none;
 
-            box = XtVaCreateManagedWidget("radio", xmRowColumnWidgetClass, row,
-                                          XmNorientation, XmHORIZONTAL,
-                                          XmNradioBehavior, True,
-                                          XmNpacking, XmPACK_TIGHT,
+            pull = XmCreatePulldownMenu(row, "pull", (ArgList)0, 0);
+            for (j = 0; j < TESS_MAX_ENUM && descs[i].names[j]; j++) {
+                Binding *mb = (Binding *)calloc(1, sizeof(Binding));
+
+                mb->pane = p;
+                mb->index = i;
+                mb->choice = j;
+                item = XtVaCreateManagedWidget(descs[i].names[j],
+                                               xmPushButtonWidgetClass, pull,
+                                               NULL);
+                XtAddCallback(item, XmNactivateCallback, menu_cb,
+                              (XtPointer)mb);
+                p->enumkids[i][j] = item;
+            }
+            none = XmStringCreateLocalized("");
+            opt = XtVaCreateManagedWidget("opt", xmRowColumnWidgetClass, row,
+                                          XmNrowColumnType, XmMENU_OPTION,
+                                          XmNsubMenuId, pull,
+                                          XmNlabelString, none,
                                           XmNmarginHeight, 0,
                                           XmNmarginWidth, 0,
                                           XmNleftAttachment, XmATTACH_POSITION,
@@ -253,20 +272,8 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
                                           XmNtopAttachment, XmATTACH_FORM,
                                           XmNbottomAttachment, XmATTACH_FORM,
                                           NULL);
-            p->w[i] = box;
-            for (j = 0; j < TESS_MAX_ENUM && descs[i].names[j]; j++) {
-                Binding *rb = (Binding *)calloc(1, sizeof(Binding));
-
-                rb->pane = p;
-                rb->index = i;
-                rb->choice = j;
-                p->enumkids[i][j] =
-                    XtVaCreateManagedWidget(descs[i].names[j],
-                                            xmToggleButtonWidgetClass, box,
-                                            NULL);
-                XtAddCallback(p->enumkids[i][j], XmNvalueChangedCallback,
-                              radio_cb, (XtPointer)rb);
-            }
+            XmStringFree(none);
+            p->w[i] = opt;
         } else if (descs[i].type == TESS_P_INT && descs[i].lo < descs[i].hi &&
                    (descs[i].hi - descs[i].lo) <= 512.0) {
             /* A bounded integer is a thing to drag, not to type: cycles and
@@ -320,9 +327,10 @@ void tess_params_refresh(TessParamPane *p)
             XmToggleButtonSetState(p->w[i], v != 0.0 ? True : False, False);
             toggle_label(p->w[i], v != 0.0);
         } else if (p->descs[i].type == TESS_P_ENUM) {
-            for (j = 0; j < TESS_MAX_ENUM && p->descs[i].names[j]; j++) {
-                XmToggleButtonSetState(p->enumkids[i][j],
-                                       (j == (int)v) ? True : False, False);
+            j = (int)v;
+            if (j >= 0 && j < TESS_MAX_ENUM && p->enumkids[i][j]) {
+                XtVaSetValues(p->w[i], XmNmenuHistory, p->enumkids[i][j],
+                              NULL);
             }
         } else if (XmIsScale(p->w[i])) {
             XmScaleSetValue(p->w[i], (int)v);
