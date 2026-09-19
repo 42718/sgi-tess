@@ -60,6 +60,8 @@ struct TessCluster {
 
     pid_t       child;
     int         tries;
+    int         stopstage;
+    XtIntervalId stopt;
     XtAppContext app;
     XtIntervalId poll;
 
@@ -417,14 +419,78 @@ void tess_cluster_launch(TessCluster *c)
     c->poll = XtAppAddTimeOut(c->app, 300, poll_cb, (XtPointer)c);
 }
 
+/*
+ * Take the job down the way Ctrl-C does.
+ *
+ * SIGTERM left tess-node running on aurora: MPT treats an interrupt as "tear
+ * the job down" and a terminate as "die now", and dying now leaves the remote
+ * ranks parented to Array Services with nobody to reap them. So this escalates
+ * the way a person would: interrupt, then terminate, then kill, and finally a
+ * sweep over the hosts with arshell for anything still standing.
+ */
+static void stop_step(XtPointer cd, XtIntervalId *id);
+
+static void stop_sweep(TessCluster *c)
+{
+    char cmd[512];
+    int i;
+
+    for (i = 0; i < c->nhosts; i++) {
+        if (!c->host[i].reachable) {
+            continue;
+        }
+        sprintf(cmd, "arshell %s killall tess-node >/dev/null 2>&1",
+                c->host[i].name);
+        system(cmd);
+        clog(c, "swept leftover ranks on %s%d", c->host[i].name, 0);
+    }
+}
+
 void tess_cluster_stop(TessCluster *c)
 {
     if (c->child <= 0) {
+        stop_sweep(c);          /* nothing of ours, but tidy anyway */
         return;
     }
-    kill(-c->child, SIGTERM);
+    c->stopstage = 0;
+    kill(-c->child, SIGINT);
     set_state(c, "stopping...");
-    clog(c, "sent SIGTERM to the job%s%d", "", 0);
+    clog(c, "sent SIGINT to the job%s%d", "", 0);
+    c->stopt = XtAppAddTimeOut(c->app, 1500, stop_step, (XtPointer)c);
+}
+
+static void stop_step(XtPointer cd, XtIntervalId *id)
+{
+    TessCluster *c = (TessCluster *)cd;
+    int status;
+
+    if (c->child > 0 && waitpid(c->child, &status, WNOHANG) == c->child) {
+        c->child = 0;
+    }
+    if (c->child <= 0) {
+        set_state(c, "stopped");
+        XtSetSensitive(c->launchb, True);
+        XtSetSensitive(c->stopb, False);
+        stop_sweep(c);          /* remote ranks outlive mpirun often enough */
+        return;
+    }
+
+    c->stopstage++;
+    if (c->stopstage == 1) {
+        kill(-c->child, SIGTERM);
+        clog(c, "still there: sent SIGTERM%s%d", "", 0);
+    } else if (c->stopstage == 2) {
+        kill(-c->child, SIGKILL);
+        clog(c, "still there: sent SIGKILL%s%d", "", 0);
+    } else {
+        c->child = 0;
+        set_state(c, "stopped (forced)");
+        XtSetSensitive(c->launchb, True);
+        XtSetSensitive(c->stopb, False);
+        stop_sweep(c);
+        return;
+    }
+    c->stopt = XtAppAddTimeOut(c->app, 1500, stop_step, (XtPointer)c);
 }
 
 int tess_cluster_running(TessCluster *c)
