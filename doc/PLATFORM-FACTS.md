@@ -306,6 +306,15 @@ lucy read 4.8%, and with one `dd if=/dev/zero of=/dev/null` pinning one of its t
 read 52.4%. A counter that had stuck at a plausible-looking value could not have tracked
 that.
 
+**The tick counters run at 100 Hz, so a short sampling window quantises hard.** Over 200 ms
+a two-CPU machine accumulates 40 ticks and a four-CPU machine 80, making the smallest
+non-zero answer 2.5% and 1.25% respectively. Measured over `arshell`, 19 September 2026:
+lucy returned exactly 2.4% and aurora exactly 3.6%, which are one tick and three ticks, and
+both returned 0.0 whenever the machine was merely quiet. Anything wanting a meaningful idle
+figure needs a window of roughly a second, which is 200 to 800 ticks. `tess-probe` gets it
+by leaving its counters in `/tmp/.tess-cpu-ticks` and differencing against its own previous
+run, so no caller has to wait.
+
 Confirmed on both architectures, 19 September 2026:
 
 | | lucy (IP30) | aurora (IP35) |

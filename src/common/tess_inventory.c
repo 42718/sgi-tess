@@ -33,6 +33,7 @@
 
 #ifdef __sgi
 #include <errno.h>
+#include <time.h>
 #include <invent.h>
 #include <sys/sysmp.h>
 #include <sys/sysget.h>
@@ -136,6 +137,103 @@ static int probe_memory(long *memkb, long *freekb, char *why, int whylen)
     return 0;
 }
 
+#ifdef __sgi
+#define TESS_CPU_TICKS_FILE "/tmp/.tess-cpu-ticks"
+
+/*
+ * The kernel's cumulative per-state tick counters, summed across cells.
+ *
+ * SGT_SINFO through sysget rather than sysmp(MP_SAGET): same data,
+ * unprivileged, and summed across cells by the same cookie mechanism.
+ * MP_SAGET stays as the fallback for anything that refuses.
+ */
+static int read_cpu_ticks(long *now)
+{
+    struct sysinfo si;
+    sgt_cookie_t ck;
+    int i;
+
+    memset((char *)&si, 0, sizeof si);
+    SGT_COOKIE_INIT(&ck);
+    if (sysget(SGT_SINFO, (char *)&si, sizeof si, SGT_READ | SGT_SUM,
+               &ck) == -1 &&
+        sysmp(MP_SAGET, MPSA_SINFO, (char *)&si, sizeof si) == -1) {
+        return -1;
+    }
+    for (i = 0; i < CPU_STATES; i++) {
+        now[i] = (long)si.cpu[i];
+    }
+    return 0;
+}
+
+/*
+ * Busy percentage over the gap between this run and the previous one.
+ *
+ * A one-shot probe has no history, so it used to sample twice, 200 ms apart.
+ * At 100 Hz that is 40 ticks on a two-CPU machine and 80 on a four-CPU one,
+ * which quantises the answer to 2.5% and 1.25%: a quiet machine reads exactly
+ * 0.0, and one busy tick reads 2.4%. Measured on lucy and aurora over arshell,
+ * 19 September 2026, which is what made the panel look frozen at zero.
+ *
+ * Leaving the counters in a file means consecutive runs difference across the
+ * real interval between them. The UI polls about once a second, so that is
+ * 200 to 800 ticks and about a tenth of a percent of resolution, with no added
+ * latency: nothing sleeps.
+ *
+ * The file is advisory. A stale one is ignored rather than trusted, and a run
+ * that cannot write it still answers from whatever it could read. Returns -1
+ * when there is no usable previous run, and the caller falls back to sampling.
+ */
+#define TESS_CPU_TICKS_MAX_AGE 60       /* seconds; older is not an interval */
+
+static double cpu_busy_since_last_run(void)
+{
+    long now[CPU_STATES];
+    long ptot, pidle, ntot, nidle, dtot, didle;
+    long when;
+    double busy;
+    time_t t;
+    FILE *f;
+    int i;
+
+    if (read_cpu_ticks(now) != 0) {
+        return -1.0;
+    }
+    ntot = 0;
+    for (i = 0; i < CPU_STATES; i++) {
+        ntot += now[i];
+    }
+    nidle = now[CPU_IDLE];
+    t = time((time_t *)0);
+
+    busy = -1.0;
+    ptot = 0;
+    pidle = 0;
+    when = 0;
+    f = fopen(TESS_CPU_TICKS_FILE, "r");
+    if (f) {
+        if (fscanf(f, "%ld %ld %ld", &ptot, &pidle, &when) != 3) {
+            when = 0;
+        }
+        fclose(f);
+    }
+    if (when > 0 && (long)t >= when && (long)t - when <= TESS_CPU_TICKS_MAX_AGE) {
+        dtot = ntot - ptot;
+        didle = nidle - pidle;
+        if (dtot > 0 && didle >= 0 && didle <= dtot) {
+            busy = 100.0 * (double)(dtot - didle) / (double)dtot;
+        }
+    }
+
+    f = fopen(TESS_CPU_TICKS_FILE, "w");
+    if (f) {
+        fprintf(f, "%ld %ld %ld\n", ntot, nidle, (long)t);
+        fclose(f);
+    }
+    return busy;
+}
+#endif /* __sgi */
+
 /*
  * How busy this machine's CPUs have been since the last call, as a percentage.
  *
@@ -152,7 +250,6 @@ double tess_cpu_busy(void)
 #ifdef __sgi
     static int have_prev = 0;
     static long prev[CPU_STATES];
-    struct sysinfo si;
     long now[CPU_STATES];
     long dtot = 0, didle = 0;
     int i;
@@ -162,19 +259,8 @@ double tess_cpu_busy(void)
      * unprivileged, and summed across cells by the same cookie mechanism.
      * MP_SAGET stays as the fallback for anything that refuses.
      */
-    memset((char *)&si, 0, sizeof si);
-    {
-        sgt_cookie_t ck;
-
-        SGT_COOKIE_INIT(&ck);
-        if (sysget(SGT_SINFO, (char *)&si, sizeof si, SGT_READ | SGT_SUM,
-                   &ck) == -1 &&
-            sysmp(MP_SAGET, MPSA_SINFO, (char *)&si, sizeof si) == -1) {
-            return -1.0;
-        }
-    }
-    for (i = 0; i < CPU_STATES; i++) {
-        now[i] = (long)si.cpu[i];
+    if (read_cpu_ticks(now) != 0) {
+        return -1.0;
     }
     if (!have_prev) {
         for (i = 0; i < CPU_STATES; i++) {
@@ -328,17 +414,22 @@ void tess_inventory(TessInventory *inv)
         (void)probe_memory(&inv->memkb, &inv->freekb, inv->memwhy,
                            TESS_WHYLEN);
         inv->load1 = probe_load();
-        /* Two samples a fifth of a second apart: a one-shot probe has no
-           previous call to difference against. */
-        (void)tess_cpu_busy();
-        {
-            struct timeval tv;
+        /* Difference against the previous run of this program if there was a
+           recent one, which is both longer and free. Only when there was not
+           does this fall back to sampling itself twice, a fifth of a second
+           apart, which is quick but quantised to one tick in 40. */
+        inv->busy = cpu_busy_since_last_run();
+        if (inv->busy < 0.0) {
+            (void)tess_cpu_busy();
+            {
+                struct timeval tv;
 
-            tv.tv_sec = 0;
-            tv.tv_usec = 200000;
-            select(0, (fd_set *)0, (fd_set *)0, (fd_set *)0, &tv);
+                tv.tv_sec = 0;
+                tv.tv_usec = 200000;
+                select(0, (fd_set *)0, (fd_set *)0, (fd_set *)0, &tv);
+            }
+            inv->busy = tess_cpu_busy();
         }
-        inv->busy = tess_cpu_busy();
 
         inv->gm    = (access(GM_LIB_PATH, F_OK) == 0) ? 1 : 0;
         inv->hippi = probe_hippi();
