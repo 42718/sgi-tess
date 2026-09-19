@@ -43,13 +43,33 @@
 
 #include "tess_cluster.h"
 
+/*
+ * One column grid, used by the heading and by every row.
+ *
+ * The heading used to be a single left-attached string relying on space
+ * padding to land over the right columns, while the rows began after a toggle
+ * and a swatch. Nothing made those agree, and they did not. Now each column is
+ * its own widget at its own position in both, so they line up by construction
+ * and stay lined up whatever the font does.
+ */
+#define COL_HOST  12
+#define COL_TYPE  38
+#define COL_CPU   54
+#define COL_LOAD  66
+#define COL_RANKS 78
+
 struct TessCluster {
     Widget      frame;
     Widget      rows[TESS_MAX_HOSTS];
-    Widget      info[TESS_MAX_HOSTS];
+    Widget      info[TESS_MAX_HOSTS];     /* host name */
+    Widget      ctype[TESS_MAX_HOSTS];    /* IP30, IP35 */
+    Widget      ccpu[TESS_MAX_HOSTS];     /* computing/online */
+    Widget      cload[TESS_MAX_HOSTS];    /* busy percentage */
+    Widget      cnote[TESS_MAX_HOSTS];    /* spans the three when unreachable */
     Widget      rankf[TESS_MAX_HOSTS];
     Widget      onbox[TESS_MAX_HOSTS];
     Widget      swatch[TESS_MAX_HOSTS];
+    char        swspec[TESS_MAX_HOSTS][16];  /* colour last allocated */
     Widget      state;
     Widget      transport;
     Widget      launchb;
@@ -299,10 +319,42 @@ static void probe_host(TessCluster *c, int i)
     h->reachable = 1;
 }
 
+/* A heading over one column, at the position that column's cells use. */
+/* Label text, without four lines of XmString ceremony at every call site. */
+static void set_label(Widget w, const char *text)
+{
+    XmString s = XmStringCreateLocalized((char *)text);
+
+    XtVaSetValues(w, XmNlabelString, s, NULL);
+    XmStringFree(s);
+}
+
+static Widget head_label(Widget parent, const char *text, int pos)
+{
+    return XtVaCreateManagedWidget(text, xmLabelWidgetClass, parent,
+                                   XmNalignment, XmALIGNMENT_BEGINNING,
+                                   XmNleftAttachment,
+                                   pos > 0 ? XmATTACH_POSITION : XmATTACH_FORM,
+                                   XmNleftPosition, pos,
+                                   NULL);
+}
+
+/* One cell. Same attachment as its heading, so the two cannot drift. */
+static Widget cell_label(Widget parent, int pos, int right)
+{
+    return XtVaCreateManagedWidget("cell", xmLabelWidgetClass, parent,
+                                   XmNalignment, XmALIGNMENT_BEGINNING,
+                                   XmNleftAttachment, XmATTACH_POSITION,
+                                   XmNleftPosition, pos,
+                                   XmNrightAttachment, XmATTACH_POSITION,
+                                   XmNrightPosition, right,
+                                   XmNrecomputeSize, False,
+                                   NULL);
+}
+
 static void refresh_rows(TessCluster *c)
 {
     char buf[128];
-    XmString s;
     int i;
 
     for (i = 0; i < c->nhosts; i++) {
@@ -318,42 +370,86 @@ static void refresh_rows(TessCluster *c)
             if (compute < 0 || !c->host[i].enabled) {
                 compute = 0;
             }
-            if (c->host[i].reachable && c->host[i].load >= 0.0) {
-                sprintf(buf, "%-8.8s %-5.5s %d/%-2d %3.0f%%",
-                        c->host[i].name, c->host[i].arch, compute,
-                        c->host[i].online, c->host[i].load);
-            } else if (c->host[i].reachable) {
-                sprintf(buf, "%-8.8s %-5.5s %d/%-2d", c->host[i].name,
-                        c->host[i].arch, compute, c->host[i].online);
+            set_label(c->info[i], c->host[i].name);
+
+            if (c->host[i].reachable) {
+                XtUnmanageChild(c->cnote[i]);
+                XtManageChild(c->ctype[i]);
+                XtManageChild(c->ccpu[i]);
+                XtManageChild(c->cload[i]);
+
+                set_label(c->ctype[i],
+                          c->host[i].arch[0] ? c->host[i].arch : "-");
+                sprintf(buf, "%d/%d", compute, c->host[i].online);
+                set_label(c->ccpu[i], buf);
+                if (c->host[i].load >= 0.0) {
+                    sprintf(buf, "%.0f%%", c->host[i].load);
+                } else {
+                    strcpy(buf, "-");
+                }
+                set_label(c->cload[i], buf);
             } else {
-                sprintf(buf, "%-8.8s %-5.5s %s", c->host[i].name,
-                        c->host[i].arch[0] ? c->host[i].arch : "-",
-                        c->host[i].note);
+                XtUnmanageChild(c->ctype[i]);
+                XtUnmanageChild(c->ccpu[i]);
+                XtUnmanageChild(c->cload[i]);
+                XtManageChild(c->cnote[i]);
+                set_label(c->cnote[i], c->host[i].note);
             }
         }
-        s = XmStringCreateLocalized(buf);
-        XtVaSetValues(c->info[i], XmNlabelString, s, NULL);
-        XmStringFree(s);
 
+        /*
+         * Only write the rank field when it actually differs. This refresh
+         * runs once a second now, and setting a text field resets the insert
+         * position: typing a rank while the poll ticked used to fight back.
+         */
         sprintf(buf, "%d", c->host[i].ranks);
-        XmTextFieldSetString(c->rankf[i], buf);
+        {
+            char *cur = XmTextFieldGetString(c->rankf[i]);
 
+            if (!cur || strcmp(cur, buf) != 0) {
+                XmTextFieldSetString(c->rankf[i], buf);
+            }
+            if (cur) {
+                XtFree(cur);
+            }
+        }
+
+        /*
+         * Allocate the swatch colour only when it changes. On a TrueColor
+         * visual repeating the call is free, but on an 8-bit one it consumes
+         * a colormap entry every time, and at one refresh a second that is a
+         * slow leak nobody would connect to a load poll.
+         */
         if (c->swatch[i]) {
-            Display *d = XtDisplay(c->swatch[i]);
-            Colormap cm = DefaultColormap(d, DefaultScreen(d));
-            XColor want, exact;
             const char *spec = c->host[i].reachable ?
                                host_colour(&c->host[i]) : "#8f9298";
 
-            if (XAllocNamedColor(d, cm, (char *)spec, &want, &exact)) {
-                XtVaSetValues(c->swatch[i], XmNbackground, want.pixel, NULL);
+            if (strcmp(c->swspec[i], spec) != 0) {
+                Display *d = XtDisplay(c->swatch[i]);
+                Colormap cm = DefaultColormap(d, DefaultScreen(d));
+                XColor want, exact;
+
+                if (XAllocNamedColor(d, cm, (char *)spec, &want, &exact)) {
+                    XtVaSetValues(c->swatch[i], XmNbackground, want.pixel,
+                                  NULL);
+                }
+                strncpy(c->swspec[i], spec, sizeof c->swspec[i] - 1);
+                c->swspec[i][sizeof c->swspec[i] - 1] = '\0';
             }
         }
 
         /* A disabled host is greyed rather than hidden: it stays in the list
            with its numbers, visibly not taking part. */
-        XtSetSensitive(c->info[i], c->host[i].enabled ? True : False);
-        XtSetSensitive(c->rankf[i], c->host[i].enabled ? True : False);
+        {
+            Boolean on = c->host[i].enabled ? True : False;
+
+            XtSetSensitive(c->info[i], on);
+            XtSetSensitive(c->ctype[i], on);
+            XtSetSensitive(c->ccpu[i], on);
+            XtSetSensitive(c->cload[i], on);
+            XtSetSensitive(c->cnote[i], on);
+            XtSetSensitive(c->rankf[i], on);
+        }
         XmToggleButtonSetState(c->onbox[i],
                                c->host[i].enabled ? True : False, False);
     }
@@ -869,15 +965,12 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
         Widget hdr = XtVaCreateManagedWidget("hdr", xmFormWidgetClass, rc,
                                              XmNfractionBase, 100, NULL);
 
-        XtVaCreateManagedWidget("use    host     type  cpu  load",
-                                xmLabelWidgetClass, hdr,
-                                XmNalignment, XmALIGNMENT_BEGINNING,
-                                XmNleftAttachment, XmATTACH_FORM,
-                                XmNrightAttachment, XmATTACH_POSITION,
-                                XmNrightPosition, 78, NULL);
-        XtVaCreateManagedWidget("ranks", xmLabelWidgetClass, hdr,
-                                XmNleftAttachment, XmATTACH_POSITION,
-                                XmNleftPosition, 78, NULL);
+        head_label(hdr, "use", 0);
+        head_label(hdr, "host", COL_HOST);
+        head_label(hdr, "type", COL_TYPE);
+        head_label(hdr, "cpu", COL_CPU);
+        head_label(hdr, "load", COL_LOAD);
+        head_label(hdr, "ranks", COL_RANKS);
     }
 
     for (i = 0; i < c->nhosts; i++) {
@@ -926,21 +1019,20 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                    NULL);
             XmStringFree(blank);
         }
-        c->info[i] = XtVaCreateManagedWidget("info", xmLabelWidgetClass, row,
-                                             XmNalignment,
-                                             XmALIGNMENT_BEGINNING,
-                                             XmNleftAttachment, XmATTACH_WIDGET,
-                                             XmNleftWidget, c->swatch[i],
-                                             XmNrightAttachment,
-                                             XmATTACH_POSITION,
-                                             XmNrightPosition, 78,
-                                             NULL);
+        c->info[i]  = cell_label(row, COL_HOST, COL_TYPE);
+        c->ctype[i] = cell_label(row, COL_TYPE, COL_CPU);
+        c->ccpu[i]  = cell_label(row, COL_CPU, COL_LOAD);
+        c->cload[i] = cell_label(row, COL_LOAD, COL_RANKS);
+        /* Unreachable: one message across the three number columns, which is
+           worth more than three empty cells. Managed instead of them. */
+        c->cnote[i] = cell_label(row, COL_TYPE, COL_RANKS);
+        XtUnmanageChild(c->cnote[i]);
         c->rankf[i] = XtVaCreateManagedWidget("rf", xmTextFieldWidgetClass,
                                               row,
                                               XmNcolumns, 3,
                                               XmNleftAttachment,
                                               XmATTACH_POSITION,
-                                              XmNleftPosition, 76,
+                                              XmNleftPosition, COL_RANKS,
                                               NULL);
         XtAddCallback(c->rankf[i], XmNactivateCallback, rank_cb,
                       (XtPointer)c);

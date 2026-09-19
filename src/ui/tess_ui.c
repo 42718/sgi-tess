@@ -363,6 +363,9 @@ static void stats_draw(Ui *u)
     XSetForeground(d, u->statsgc, pix(u, "#7d8a93"));
     XDrawString(d, w, u->statsgc, 4, y, "node/cpu", 8);
     XDrawString(d, w, u->statsgc, barx, y, "share of frame", 14);
+    /* Same x and the same field widths as the numbers below, in a fixed font,
+       so the headings sit over their own columns rather than near them. */
+    XDrawString(d, w, u->statsgc, (int)wid - 70, y, "tiles busy", 10);
     y += 6;
     XDrawLine(d, w, u->statsgc, 4, y, (int)wid - 6, y);
 
@@ -414,7 +417,7 @@ static void stats_draw(Ui *u)
             if (busy > 100.0) {
                 busy = 100.0;
             }
-            sprintf(num, "%4d %3.0f%%", u->rank_tiles[r], busy);
+            sprintf(num, "%5d %3.0f%%", u->rank_tiles[r], busy);
         }
         XSetForeground(d, u->statsgc, pix(u, "#101519"));
         XDrawString(d, w, u->statsgc, (int)wid - 70, y, num,
