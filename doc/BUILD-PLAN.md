@@ -15,7 +15,44 @@ through MIPSpro. The portable half is C89 clean under `gmake gate`.
 
 ---
 
-## Build 1 — It compiles, and the cluster paints a picture
+## Build 1 — It compiles, and the cluster paints a picture — **CLOSED 19 September 2026**
+
+**Result.** Compiles clean with MIPSpro on lucy (IP30) and aurora (IP35). The cluster
+renders headless and interactively. 800x600 at 800 iterations, master on lucy computing
+nothing:
+
+| workers | time | speedup |
+|---|---|---|
+| 1 | 1.67 s | 1.00 |
+| 2 | 0.85 s | 1.96 |
+| 4 | 0.61 s | 2.74 |
+| 4 on aurora + 1 on lucy | 0.94 s | 1.78 |
+
+Determinism, both checks green: `cmp` byte-identical across 1, 2 and 4 ranks, and
+byte-identical between an aurora-only render and a mixed lucy+aurora render. An R14000
+and an R16000, built by two separate MIPSpro runs, agree on every escape-time boundary.
+
+The last row is DESIGN.md §3b measured rather than assumed: adding lucy's second CPU made
+the frame **54% slower**, because a 600 MHz R14000 lengthens the tail and rank 0 shares
+those two CPUs with the worker, the X server and the GUI.
+
+**Four bugs, none findable by reading:**
+
+1. The master stopped workers that still had results in flight. MPT sends a 12 KB tile by
+   rendezvous, so those workers blocked in `MPI_Send` forever. Invisible with one worker.
+2. An unknown argument called `exit(2)` before `MPI_Finalize`, stranding every other rank.
+   Triggered by a stale binary that did not know a new flag. The 2001 tiler survives the
+   same treatment because it ignores unknown arguments.
+3. `run_epoch()` stopped every worker at the end, which is right for one-shot PPM and
+   fatal for a GUI: the second frame had nobody to compute it.
+4. `MPI_NAP=2` does not stop a parked rank spinning under MPT 1.9. Four idle workers cost
+   four CPUs. Now in PLATFORM-FACTS.md, with the worker polling and backing off instead.
+
+**Procedural lesson.** Every machine builds its own binary from the shared tree, so a fix
+is not deployed until `gmake fresh` has run **everywhere**. Two of the four bugs above
+wore the costume of something else because one side was stale.
+
+### Original definition
 
 **Do.** Get what exists through MIPSpro on lucy and aurora. Fix what it finds.
 Run the headless path, then the GUI against a real master.
