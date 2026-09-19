@@ -48,11 +48,16 @@ CC        = cc
 ABI       = -64 -mips4
 CFLAGS    = $(ABI) -O2 -I$(COMMON)
 NODE_CFLAGS = $(ABI) -O3 -OPT:roundoff=0:IEEE_arithmetic=1 -I$(COMMON)
-NODE_LIBS = -lmpi -lpthread -lm
+# -lpthread goes back when threads do: DESIGN.md section 8 puts it after
+# -lmpi, but v1 has no threads and ld64 warns about an unused library,
+# which hides the warnings worth reading.
+NODE_LIBS = -lmpi -lm
 MOTIF     = /usr/Motif-2.1
 UI_CFLAGS = $(ABI) -O2 -I$(COMMON) -I$(MOTIF)/include
+# -lSgm when the first Sgm widget appears, -limage when .rgb saving lands in
+# build 5. Both warn as unused today.
 UI_LIBS   = -L$(MOTIF)/lib64 -Wl,-rpath,$(MOTIF)/lib64 \
-            -lXm -lSgm -lXt -lXext -lX11 -limage -lm
+            -lXm -lXt -lXext -lX11 -lm
 else
 # ---- macOS, the portability gate. Not a substitute: LP64 little-endian. ----
 CC        = clang

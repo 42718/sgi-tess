@@ -390,7 +390,7 @@ int main(int argc, char **argv)
     XtSetArg(args[nargs], XmNrightAttachment, XmATTACH_FORM); nargs++;
     XtSetArg(args[nargs], XmNtopAttachment, XmATTACH_FORM); nargs++;
     XtSetArg(args[nargs], XmNbottomAttachment, XmATTACH_WIDGET); nargs++;
-    XtSetArg(args[nargs], XmNbottomWidget, u.status); nargs++;
+    XtSetArg(args[nargs], XmNbottomWidget, (XtArgVal)u.status); nargs++;
     u.canvas = XmCreateDrawingArea(form, "canvas", args, (Cardinal)nargs);
     XtManageChild(u.canvas);
 
