@@ -48,7 +48,7 @@
 
 #include "tess_params.h"
 
-#define TESS_CTRL_W 420      /* control window width */
+#define TESS_CTRL_W 320      /* control window width */
 #define TESS_GAP    8
 #define TESS_DECOR  14       /* window manager border and frame, per window */
 #define TESS_USE    0.80     /* share of the screen width both windows take */
@@ -1153,8 +1153,15 @@ int main(int argc, char **argv)
         if (u.origin_x < 0) {
             u.origin_x = 0;
         }
+        /*
+         * Only the control window is positioned from this measurement, and it
+         * is positioned before it is realized. Moving a shell AFTER it is
+         * mapped sets the client origin rather than the frame origin, so the
+         * window manager's title bar ends up above the requested y - which is
+         * exactly how the render window lost its title bar off the top of the
+         * screen while the panel sat 40 pixels lower.
+         */
         u.ctrl_x = u.origin_x + u.width + ex + TESS_GAP;
-        XtVaSetValues(u.toplevel, XmNx, u.origin_x, XmNy, TESS_GAP, NULL);
         {
             char msg[160];
 
