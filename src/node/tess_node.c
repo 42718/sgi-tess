@@ -36,7 +36,8 @@
 #include "tess_inventory.h"
 
 static int verbose = 0;
-static int idle_us = 2000;      /* -idle-us: sleep between polls when idle */
+static int idle_us = 2000;
+static const char *nonce = (const char *)0;      /* -idle-us: sleep between polls when idle */
 
 /*
  * Wait for rank 0 to say something, cheaply.
@@ -464,6 +465,12 @@ static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
 }
 
 /* Wait for one GUI to connect, then serve epochs until it goes away. */
+/*
+ * With a nonce, bind loopback only and refuse a client that cannot quote it.
+ * The GUI and the master share a machine by design, so nothing legitimate
+ * connects from the network, and an unauthenticated public port on a cluster
+ * head node is not a thing to leave lying around.
+ */
 static int serve_gui(int port, int nranks, int *parked)
 {
     int lfd, cfd, one, type, len;
@@ -484,7 +491,7 @@ static int serve_gui(int port, int nranks, int *parked)
     setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof one);
     memset((char *)&sa, 0, sizeof sa);
     sa.sin_family = AF_INET;
-    sa.sin_addr.s_addr = INADDR_ANY;
+    sa.sin_addr.s_addr = nonce ? htonl(INADDR_LOOPBACK) : INADDR_ANY;
     sa.sin_port = htons((unsigned short)port);
     if (bind(lfd, (struct sockaddr *)&sa, sizeof sa) < 0) {
         perror("bind");
@@ -492,8 +499,8 @@ static int serve_gui(int port, int nranks, int *parked)
         return -1;
     }
     listen(lfd, 1);
-    printf("tess-node: master listening on port %d, %d rank(s)\n",
-           port, nranks);
+    printf("tess-node: master listening on %s port %d, %d rank(s)\n",
+           nonce ? "loopback" : "any", port, nranks);
     fflush(stdout);
 
     /* null length: IRIX declares the third argument int *, macOS socklen_t *,
@@ -517,6 +524,24 @@ static int serve_gui(int port, int nranks, int *parked)
         if (type == TESS_MSG_HELLO) {
             tess_u8 wb[12];
             int n = 0;
+
+            if (nonce) {
+                char got[64];
+                int glen = len - 4;
+
+                if (glen < 0) {
+                    glen = 0;
+                }
+                if (glen > (int)sizeof got - 1) {
+                    glen = (int)sizeof got - 1;
+                }
+                memcpy(got, (char *)buf + 4, (size_t)glen);
+                got[glen] = '\0';
+                if (strcmp(got, nonce) != 0) {
+                    fprintf(stderr, "tess-node: client failed the nonce\n");
+                    break;
+                }
+            }
 
             wel.version = TESS_PROTO_VER;
             wel.ranks = (tess_u32)nranks;
@@ -560,7 +585,8 @@ static int serve_gui(int port, int nranks, int *parked)
 
 static void usage(const char *me)
 {
-    fprintf(stderr, "usage: %s [-listen [port]] [-o file.ppm]\n", me);
+    fprintf(stderr, "usage: %s [-listen [port]] [-nonce hex] [-o file.ppm]\n",
+            me);
     fprintf(stderr, "          [-w px] [-h px] [-max n] [-tile n]\n");
     fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-idle-us n]\n");
     fprintf(stderr, "          [-v] [-help]\n");
@@ -632,6 +658,8 @@ int main(int argc, char **argv)
             job.cx = atof(argv[++i]);
         } else if (strcmp(argv[i], "-cy") == 0 && i + 1 < argc) {
             job.cy = atof(argv[++i]);
+        } else if (strcmp(argv[i], "-nonce") == 0 && i + 1 < argc) {
+            nonce = argv[++i];
         } else if (strcmp(argv[i], "-idle-us") == 0 && i + 1 < argc) {
             idle_us = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-v") == 0) {

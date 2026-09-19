@@ -47,11 +47,12 @@
 #include <Xm/Text.h>
 
 #include "tess_params.h"
+#include "tess_cluster.h"
 
-#define TESS_CTRL_W 320      /* control window width */
+#define TESS_CTRL_W 256      /* control window width */
 #define TESS_GAP    8
 #define TESS_DECOR  14       /* window manager border and frame, per window */
-#define TESS_USE    0.80     /* share of the screen width both windows take */
+#define TESS_USE    0.90     /* share of the screen width both windows take */
 
 #include "tess_types.h"
 #include "tess_proto.h"
@@ -82,6 +83,7 @@ typedef struct Ui {
     Widget     log;
     Widget     cluster;
     Widget     clusterframe;
+    TessCluster *cl;
     Widget     elapsed;
     TessParamPane *view_pane;
     TessParamPane *colour_pane;
@@ -99,6 +101,7 @@ typedef struct Ui {
     int        screen_w, screen_h;
     int        origin_x;
     int        ctrl_x;
+    int        attach;
     int        dragging;
     int        drag_x0, drag_y0;
     int        drag_x1, drag_y1;
@@ -126,6 +129,9 @@ typedef struct Ui {
     char       host[64];
     int        port;
     char       pending_log[160];
+    char       nonce[TESS_NONCE_LEN];
+    char       tree[512];
+    char       hostlist[256];
 
     /* per-rank accounting, straight out of the tile headers */
     int        rank_tiles[64];
@@ -250,6 +256,9 @@ static void set_status(Ui *u, const char *text)
     XtVaSetValues(u->status, XmNlabelString, s, NULL);
     XmStringFree(s);
 }
+
+static void ui_log_cb(void *ctx, const char *msg);
+static void attach_master(Ui *u, int port, const char *nonce);
 
 static int connect_master(const char *host, int port)
 {
@@ -612,6 +621,49 @@ static void tick_cb(XtPointer cd, XtIntervalId *id)
     u->tick = XtAppAddTimeOut(u->app, 200, tick_cb, (XtPointer)u);
 }
 
+/*
+ * Attach to a master the cluster panel just started: connect on loopback, greet
+ * it with the nonce it was given, and hand the socket to Xt.
+ */
+static void attach_master(Ui *u, int port, const char *nonce)
+{
+    tess_u8 hello[4 + TESS_NONCE_LEN];
+    int n;
+
+    if (u->fd >= 0) {
+        return;
+    }
+    u->port = port;
+    strncpy(u->host, "localhost", sizeof u->host - 1);
+    strncpy(u->nonce, nonce, sizeof u->nonce - 1);
+    u->fd = connect_master("localhost", port);
+    if (u->fd < 0) {
+        set_status(u, "master started but would not accept a connection");
+        return;
+    }
+    u->input_id = XtAppAddInput(u->app, u->fd, (XtPointer)XtInputReadMask,
+                                socket_cb, (XtPointer)u);
+    n = tess_put_u32(hello, (tess_u32)TESS_PROTO_VER);
+    memcpy((char *)hello + n, u->nonce, strlen(u->nonce) + 1);
+    n += (int)strlen(u->nonce) + 1;
+    if (tess_frame_write(u->fd, TESS_MSG_HELLO, hello, n) != 0) {
+        set_status(u, "could not greet the master");
+    } else {
+        set_status(u, "connected, waiting for the cluster");
+        ui_log(u, "connected to the master we launched");
+    }
+}
+
+static void cluster_ready_cb(void *ctx, int port, const char *nonce)
+{
+    attach_master((Ui *)ctx, port, nonce);
+}
+
+static void ui_log_cb(void *ctx, const char *msg)
+{
+    ui_log((Ui *)ctx, msg);
+}
+
 /* ------------------------------------------------------------ callbacks */
 
 static void expose_cb(Widget w, XtPointer cd, XtPointer cb)
@@ -950,6 +1002,16 @@ static void build_control(Ui *u)
         u->clusterframe = cframe;
     }
 
+    u->cl = tess_cluster_create(form, u->tree, u->hostlist, u->port,
+                                cluster_ready_cb, (void *)u,
+                                ui_log_cb, (void *)u);
+    XtVaSetValues(tess_cluster_widget(u->cl),
+                  XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopWidget, u->clusterframe,
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_FORM,
+                  NULL);
+
     u->log = XmCreateScrolledText(form, "log", (ArgList)0, 0);
     XtVaSetValues(u->log,
                   XmNeditable, False,
@@ -959,7 +1021,7 @@ static void build_control(Ui *u)
                   NULL);
     XtVaSetValues(XtParent(u->log),
                   XmNtopAttachment, XmATTACH_WIDGET,
-                  XmNtopWidget, u->clusterframe,
+                  XmNtopWidget, tess_cluster_widget(u->cl),
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
                   XmNbottomAttachment, XmATTACH_FORM,
@@ -1024,6 +1086,9 @@ int main(int argc, char **argv)
     u.job.cy = 0.0;
     u.job.scale = 3.2 / 1024.0;
     tess_palette_default(&u.pal);
+    strcpy(u.tree, "/cluster/dev/sgi-tess");
+    strcpy(u.hostlist, "lucy,aurora");
+    u.port = TESS_DEFAULT_PORT;
     u.val.ramp = u.pal.ramp;
     u.val.cycles = u.pal.cycles;
     u.val.rotate = u.pal.rotate;
@@ -1038,6 +1103,12 @@ int main(int argc, char **argv)
             host = argv[++i];
         } else if (strcmp(argv[i], "-port") == 0 && i + 1 < argc) {
             port = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-tree") == 0 && i + 1 < argc) {
+            strncpy(u.tree, argv[++i], sizeof u.tree - 1);
+        } else if (strcmp(argv[i], "-hosts") == 0 && i + 1 < argc) {
+            strncpy(u.hostlist, argv[++i], sizeof u.hostlist - 1);
+        } else if (strcmp(argv[i], "-attach") == 0) {
+            u.attach = 1;
         } else if (strcmp(argv[i], "-w") == 0 && i + 1 < argc) {
             u.width = atoi(argv[++i]);
             width_given = 1;
@@ -1211,13 +1282,17 @@ int main(int argc, char **argv)
     strncpy(u.host, host, sizeof u.host - 1);
     u.host[sizeof u.host - 1] = '\0';
     u.port = port;
-    u.fd = connect_master(host, port);
+    u.fd = u.attach ? connect_master(host, port) : -1;
     if (u.fd < 0) {
         char msg[160];
 
-        sprintf(msg, "no master at %s:%d - start tess-node -listen", host,
-                port);
+        if (u.attach) {
+            sprintf(msg, "no master at %s:%d", host, port);
+        } else {
+            sprintf(msg, "idle - Rescan, then Launch");
+        }
         set_status(&u, msg);
+        tess_cluster_rescan(u.cl);
     } else {
         {
             char msg[160];
