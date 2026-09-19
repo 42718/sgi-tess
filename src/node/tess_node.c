@@ -34,6 +34,20 @@
 #include "tess_mandel.h"
 #include "tess_inventory.h"
 
+static int verbose = 0;
+
+#define VLOG if (verbose) vlog
+
+/* stderr, unbuffered by convention, and prefixed with the rank so a hang in a
+   five-rank job says which side stopped talking. */
+static void vlog(int rank, const char *fmt, int a, int b)
+{
+    fprintf(stderr, "[rank %d] ", rank);
+    fprintf(stderr, fmt, a, b);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+}
+
 typedef struct Tile {
     tess_u32 x, y, w, h;
     int      order;          /* centre-out rank, smaller is sooner */
@@ -120,6 +134,7 @@ static void worker_loop(int rank)
     for (;;) {
         req = rank;
         MPI_Send(&req, 1, MPI_INT, 0, TESS_TAG_REQ, MPI_COMM_WORLD);
+        VLOG(rank, "asked for work (%d,%d)", 0, 0);
         MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
         if (st.MPI_TAG == TESS_TAG_STOP) {
             MPI_Recv(&req, 1, MPI_INT, 0, TESS_TAG_STOP, MPI_COMM_WORLD, &st);
@@ -127,6 +142,7 @@ static void worker_loop(int rank)
         }
         MPI_Recv((void *)&a, (int)sizeof a, MPI_BYTE, 0, TESS_TAG_ASSIGN,
                  MPI_COMM_WORLD, &st);
+        VLOG(rank, "got tile at (%d,%d)", (int)a.x, (int)a.y);
 
         t0 = now_sec();
         tess_mandel_tile(&a, buf);
@@ -142,6 +158,7 @@ static void worker_loop(int rank)
                  MPI_COMM_WORLD);
         MPI_Send((void *)buf, (int)(a.w * a.h * TESS_BYTES_PER_PX), MPI_BYTE, 0,
                  TESS_TAG_RESULT, MPI_COMM_WORLD);
+        VLOG(rank, "sent tile at (%d,%d)", (int)a.x, (int)a.y);
     }
     free((void *)buf);
 }
@@ -219,8 +236,11 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
                 MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, src,
                          TESS_TAG_ASSIGN, MPI_COMM_WORLD);
                 next++;
+                VLOG(0, "assigned tile %d of %d", next, ntiles);
             } else if (!parked[src]) {
                 parked[src] = 1;
+                VLOG(0, "parked rank %d, %d tiles still out", src,
+                     ntiles - done);
             }
         } else if (st.MPI_TAG == TESS_TAG_RESULT) {
             MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src,
@@ -230,6 +250,7 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
             if (rh.epoch == job->epoch) {
                 sink(ctx, &rh, px);
                 done++;
+                VLOG(0, "have %d of %d tiles", done, ntiles);
             }
             /* a tile from an abandoned epoch is dropped, which is what the
                epoch counter is for: DESIGN.md section 3 */
@@ -240,6 +261,7 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
 
     /* Every tile is in, so nothing is outstanding: stop the parked workers,
        then whoever asks next, until all of them have been told. */
+    VLOG(0, "all %d tiles in, stopping %d worker(s)", ntiles, nranks - 1);
     stopped = 0;
     for (i = 1; i < nranks; i++) {
         if (parked[i]) {
@@ -264,6 +286,7 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
         }
     }
 
+    VLOG(0, "stopped %d worker(s), epoch complete (%d)", stopped, 0);
     free((void *)parked);
     free((void *)px);
     free((void *)tiles);
@@ -457,7 +480,7 @@ static void usage(const char *me)
 {
     fprintf(stderr, "usage: %s [-listen [port]] [-o file.ppm]\n", me);
     fprintf(stderr, "          [-w px] [-h px] [-max n] [-tile n]\n");
-    fprintf(stderr, "          [-cx v] [-cy v] [-scale v]\n");
+    fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-v]\n");
     exit(2);
 }
 
@@ -508,6 +531,8 @@ int main(int argc, char **argv)
             job.cx = atof(argv[++i]);
         } else if (strcmp(argv[i], "-cy") == 0 && i + 1 < argc) {
             job.cy = atof(argv[++i]);
+        } else if (strcmp(argv[i], "-v") == 0) {
+            verbose = 1;
         } else if (strcmp(argv[i], "-scale") == 0 && i + 1 < argc) {
             job.scale = atof(argv[++i]);
         } else if (rank == 0) {
