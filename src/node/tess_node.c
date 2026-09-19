@@ -162,7 +162,9 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
     TessResultHdr rh;
     MPI_Status st;
     tess_u8 *px;
-    int ntiles, next, done, live, src, req, stop;
+    int ntiles, next, done, src, req, stop;
+    int nworkers, stopped, i;
+    int *parked;
 
     tiles = plan_tiles(job, &ntiles);
     if (!tiles) {
@@ -177,9 +179,26 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
 
     next = 0;
     done = 0;
-    live = nranks - 1;
+    nworkers = nranks - 1;
+    parked = (int *)calloc((size_t)nranks, sizeof(int));
+    if (!parked) {
+        free((void *)px);
+        free((void *)tiles);
+        return 0;
+    }
 
-    while (done < ntiles && live > 0) {
+    /*
+     * Run until every tile is IN, not until every worker has been stopped.
+     * Stopping a worker that still has a result in flight leaves it blocked in
+     * MPI_Send on a payload nobody will receive, because MPT uses a rendezvous
+     * protocol above its eager threshold and a 64x64 tile is 12 KB. That hangs
+     * the job rather than failing it, and with one worker the message ordering
+     * hides it: the bug needs two workers finishing together to appear.
+     *
+     * A worker that asks when the queue is empty is parked, not stopped, so its
+     * results are still collected. Stops go out once nothing is outstanding.
+     */
+    while (done < ntiles) {
         MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
         src = st.MPI_SOURCE;
 
@@ -200,18 +219,14 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
                 MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, src,
                          TESS_TAG_ASSIGN, MPI_COMM_WORLD);
                 next++;
-            } else {
-                stop = 0;
-                MPI_Send(&stop, 1, MPI_INT, src, TESS_TAG_STOP,
-                         MPI_COMM_WORLD);
-                live--;
+            } else if (!parked[src]) {
+                parked[src] = 1;
             }
         } else if (st.MPI_TAG == TESS_TAG_RESULT) {
             MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src,
                      TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
-            MPI_Recv((void *)px,
-                     (int)(rh.w * rh.h * TESS_BYTES_PER_PX), MPI_BYTE, src,
-                     TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
+            MPI_Recv((void *)px, (int)(rh.w * rh.h * TESS_BYTES_PER_PX),
+                     MPI_BYTE, src, TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
             if (rh.epoch == job->epoch) {
                 sink(ctx, &rh, px);
                 done++;
@@ -223,15 +238,24 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
         }
     }
 
-    /* Drain: every worker still expecting an answer gets a stop. */
-    while (live > 0) {
+    /* Every tile is in, so nothing is outstanding: stop the parked workers,
+       then whoever asks next, until all of them have been told. */
+    stopped = 0;
+    for (i = 1; i < nranks; i++) {
+        if (parked[i]) {
+            stop = 0;
+            MPI_Send(&stop, 1, MPI_INT, i, TESS_TAG_STOP, MPI_COMM_WORLD);
+            stopped++;
+        }
+    }
+    while (stopped < nworkers) {
         MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
         src = st.MPI_SOURCE;
         if (st.MPI_TAG == TESS_TAG_REQ) {
             MPI_Recv(&req, 1, MPI_INT, src, TESS_TAG_REQ, MPI_COMM_WORLD, &st);
             stop = 0;
             MPI_Send(&stop, 1, MPI_INT, src, TESS_TAG_STOP, MPI_COMM_WORLD);
-            live--;
+            stopped++;
         } else {
             MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src, st.MPI_TAG,
                      MPI_COMM_WORLD, &st);
@@ -240,6 +264,7 @@ static int run_epoch(const TessJob *job, int nranks, TileSink sink, void *ctx)
         }
     }
 
+    free((void *)parked);
     free((void *)px);
     free((void *)tiles);
     return done;
