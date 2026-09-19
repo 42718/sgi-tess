@@ -1166,6 +1166,22 @@ int main(int argc, char **argv)
         }
 
         /*
+         * Place the render window BEFORE it is realized, which is the only
+         * time a position means "put the frame here" rather than "move the
+         * client". The decoration is an estimate at this point; the panel is
+         * placed later from a measurement, so the pair still meets exactly.
+         */
+        u.origin_x = sw - (u.width + TESS_CTRL_W + 2 * TESS_GAP +
+                           2 * TESS_DECOR);
+        if (u.origin_x < 0) {
+            u.origin_x = 0;
+        }
+        XtVaSetValues(u.toplevel,
+                      XmNx, u.origin_x,
+                      XmNy, TESS_GAP,
+                      NULL);
+
+        /*
          * The opening view is framed from the window we actually got, not from
          * a hardcoded 1024: 3.2 units across whatever width this is, so the set
          * sits in the frame at any aspect or screen size.
@@ -1213,17 +1229,12 @@ int main(int argc, char **argv)
      * window's frame rather than floating away from it.
      */
     {
-        int ex, ey, total;
+        int ex, ey;
         Display *d = XtDisplay(u.toplevel);
 
         XSync(d, False);
         wm_frame_extra(d, XtWindow(u.toplevel), &ex, &ey);
 
-        total = (int)((double)u.screen_w * TESS_USE);
-        u.origin_x = u.screen_w - total;
-        if (u.origin_x < 0) {
-            u.origin_x = 0;
-        }
         /*
          * Only the control window is positioned from this measurement, and it
          * is positioned before it is realized. Moving a shell AFTER it is
@@ -1232,6 +1243,8 @@ int main(int argc, char **argv)
          * exactly how the render window lost its title bar off the top of the
          * screen while the panel sat 40 pixels lower.
          */
+        /* origin_x is where we asked for the render frame before realizing
+           it, so its right edge is origin_x + width + the measured frame. */
         u.ctrl_x = u.origin_x + u.width + ex + TESS_GAP;
         {
             char msg[160];
