@@ -336,6 +336,8 @@ void tess_cluster_rescan(TessCluster *c)
 
 /* --------------------------------------------------------------- launch */
 
+static void stop_sweep(TessCluster *c);
+
 static void make_nonce(char *out)
 {
     struct timeval tv;
@@ -398,6 +400,15 @@ void tess_cluster_launch(TessCluster *c)
         clog(c, "already running%s%d", "", 0);
         return;
     }
+
+    /*
+     * Clear anything left from a previous job before starting a new one. A
+     * master still holding the port makes the new job fail to bind while the
+     * GUI happily connects to the old one, which then rejects the new nonce:
+     * the user sees "master closed the connection" and nothing explains it.
+     */
+    stop_sweep(c);
+
     make_nonce(c->nonce);
     sprintf(portstr, "%d", c->port);
 
@@ -463,6 +474,7 @@ void tess_cluster_launch(TessCluster *c)
  * sweep over the hosts with arshell for anything still standing.
  */
 static void stop_step(XtPointer cd, XtIntervalId *id);
+static void stop_sweep(TessCluster *c);
 
 static void stop_sweep(TessCluster *c)
 {

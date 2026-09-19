@@ -1401,47 +1401,22 @@ int main(int argc, char **argv)
          * safe, moving is not, and this is why the pair kept leaving a strip
          * of desktop on the right.
          */
-        {
-            int decor = fwid - u.width;
-            int want;
+        /*
+         * Place the panel at the render window's measured frame edge and
+         * resize nothing.
+         *
+         * The previous attempt resized the render window to make the pair
+         * flush with the right screen edge, then re-measured to place the
+         * panel. That cannot work: XSync waits for the SERVER, while the
+         * resize is handled by the window manager, which is another client, so
+         * the re-measurement still read the old geometry and the windows
+         * overlapped by the difference. A few pixels of desktop on the right
+         * is a much smaller problem than a panel with its labels underneath
+         * the fractal.
+         */
+        u.ctrl_x = fx + fwid + TESS_GAP;
+        u.ctrl_y = fy;
 
-            if (decor < 0) {
-                decor = 0;
-            }
-
-            /*
-             * Solve for a render width that makes the pair end exactly at the
-             * right screen edge, then place the panel against the render
-             * window's resulting frame. Doing it the other way round - panel
-             * from the screen edge, render from the panel - was
-             * self-inconsistent, because resizing the render window moves the
-             * edge the panel was measured against.
-             *
-             *   fx + inner + decor + gap + panel + decor = screen
-             */
-            want = u.screen_w - fx - TESS_GAP - TESS_CTRL_W - 2 * decor;
-            if (want > 320) {
-                if (want != u.width) {
-                    u.width = want;
-                    u.height = u.width * 3 / 4;
-                    XtVaSetValues(u.toplevel,
-                                  XmNwidth, u.width,
-                                  XmNheight, u.height + 22,
-                                  NULL);
-                    u.job.scale = 3.2 / (double)u.width;
-                }
-            }
-            /*
-             * Measure again after resizing. Computing the panel's position
-             * from the size we asked for assumes the window manager granted it
-             * exactly and kept the same borders; it does not always, and the
-             * windows overlapped by the difference.
-             */
-            XSync(d, False);
-            wm_frame_geom(d, XtWindow(u.toplevel), &fx, &fy, &fwid, &fhgt);
-            u.ctrl_x = fx + fwid + TESS_GAP;
-            u.ctrl_y = fy;
-        }
         {
             char msg[160];
 

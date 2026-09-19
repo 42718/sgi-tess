@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -494,8 +495,20 @@ static int serve_gui(int port, int nranks, int *parked)
     sa.sin_addr.s_addr = nonce ? htonl(INADDR_LOOPBACK) : INADDR_ANY;
     sa.sin_port = htons((unsigned short)port);
     if (bind(lfd, (struct sockaddr *)&sa, sizeof sa) < 0) {
-        perror("bind");
+        /*
+         * Almost always a master from an earlier job still holding the port.
+         * Say so loudly and take the whole job down: exiting quietly leaves
+         * the new GUI talking to the OLD master, which rejects its nonce and
+         * hangs up, and the symptom that reaches the user is an unexplained
+         * "master closed the connection".
+         */
+        fprintf(stderr, "tess-node: cannot bind port %d: %s\n", port,
+                strerror(errno));
+        fprintf(stderr, "tess-node: another tess-node is probably still "
+                        "running. Stop it, or use a different port.\n");
+        fflush(stderr);
         close(lfd);
+        MPI_Abort(MPI_COMM_WORLD, 3);
         return -1;
     }
     listen(lfd, 1);
