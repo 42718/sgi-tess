@@ -147,15 +147,21 @@ static int tile_cmp(const void *pa, const void *pb)
  * human watching the frame fill should see it resolve there first.
  * DESIGN.md section 3.
  */
-static Tile *plan_tiles(const TessJob *j, int *ntiles)
+static Tile *plan_tiles(const TessJob *j, unsigned int step, int *ntiles)
 {
     Tile *t;
-    unsigned int x, y;
+    unsigned int x, y, span;
     int n, cap;
     double cxp, cyp, dx, dy;
 
-    cap = (int)(((j->width + j->tile - 1) / j->tile) *
-                ((j->height + j->tile - 1) / j->tile));
+    /*
+     * A coarse tile covers step times as much image per side, so the whole
+     * frame is a handful of tiles rather than hundreds: the preview arrives in
+     * one round of hand-outs instead of competing with itself.
+     */
+    span = j->tile * (step > 0 ? step : 1);
+    cap = (int)(((j->width + span - 1) / span) *
+                ((j->height + span - 1) / span));
     t = (Tile *)malloc((size_t)cap * sizeof(Tile));
     if (!t) {
         *ntiles = 0;
@@ -165,12 +171,12 @@ static Tile *plan_tiles(const TessJob *j, int *ntiles)
     cxp = (double)j->width * 0.5;
     cyp = (double)j->height * 0.5;
     n = 0;
-    for (y = 0; y < j->height; y += j->tile) {
-        for (x = 0; x < j->width; x += j->tile) {
+    for (y = 0; y < j->height; y += span) {
+        for (x = 0; x < j->width; x += span) {
             t[n].x = x;
             t[n].y = y;
-            t[n].w = (x + j->tile <= j->width) ? j->tile : j->width - x;
-            t[n].h = (y + j->tile <= j->height) ? j->tile : j->height - y;
+            t[n].w = (x + span <= j->width) ? span : j->width - x;
+            t[n].h = (y + span <= j->height) ? span : j->height - y;
             dx = ((double)x + (double)t[n].w * 0.5) - cxp;
             dy = ((double)y + (double)t[n].h * 0.5) - cyp;
             t[n].order = (int)(dx * dx + dy * dy);
@@ -222,11 +228,12 @@ static void worker_loop(int rank)
         rh.w = a.w;
         rh.h = a.h;
         rh.rank = (tess_u32)rank;
+        rh.step = a.step;
         rh.usec = (tess_u32)((now_sec() - t0) * 1e6);
         MPI_Send((void *)&rh, (int)sizeof rh, MPI_BYTE, 0, TESS_TAG_RESULT,
                  MPI_COMM_WORLD);
-        MPI_Send((void *)buf, (int)(a.w * a.h * TESS_BYTES_PER_PX), MPI_BYTE, 0,
-                 TESS_TAG_RESULT, MPI_COMM_WORLD);
+        MPI_Send((void *)buf, (int)(TESS_SAMPLES(rh) * TESS_BYTES_PER_PX),
+                 MPI_BYTE, 0, TESS_TAG_RESULT, MPI_COMM_WORLD);
         VLOG(rank, "sent tile at (%d,%d)", (int)a.x, (int)a.y);
     }
     free((void *)buf);
@@ -242,7 +249,8 @@ static void worker_loop(int rank)
 typedef void (*TileSink)(void *ctx, const TessResultHdr *rh, const tess_u8 *px);
 
 static int run_epoch(const TessJob *job, int nranks, int *parked,
-                     TileSink sink, void *ctx)
+                     unsigned int step, int (*cancelled)(void *),
+                     void *cctx, TileSink sink, void *ctx)
 {
     Tile *tiles;
     TessAssign a;
@@ -250,9 +258,10 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
     MPI_Status st;
     tess_u8 *px;
     int ntiles, next, done, src, req;
+    int aborted, next_out;
     int i;
 
-    tiles = plan_tiles(job, &ntiles);
+    tiles = plan_tiles(job, step, &ntiles);
     if (!tiles) {
         return 0;
     }
@@ -265,6 +274,8 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
 
     next = 0;
     done = 0;
+    aborted = 0;
+    next_out = 0;
 
     /*
      * Workers parked at the end of the previous epoch are blocked waiting for
@@ -280,6 +291,7 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
             a.y = tiles[next].y;
             a.w = tiles[next].w;
             a.h = tiles[next].h;
+            a.step = step;
             a.width = job->width;
             a.height = job->height;
             a.max_iter = job->max_iter;
@@ -289,6 +301,7 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
             MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, i,
                      TESS_TAG_ASSIGN, MPI_COMM_WORLD);
             next++;
+            next_out++;
             parked[i] = 0;
             VLOG(0, "woke parked rank %d with tile %d", i, next);
         }
@@ -306,6 +319,20 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
      * results are still collected. Stops go out once nothing is outstanding.
      */
     while (done < ntiles) {
+        /*
+         * Abandon on request. The tiles already out still come back and are
+         * still counted, so no worker is left blocked in MPI_Send; they are
+         * simply not handed anything more and the epoch ends early. The GUI
+         * drops what arrives for an epoch it no longer wants.
+         */
+        if (!aborted && cancelled && cancelled(cctx)) {
+            aborted = 1;
+            next = ntiles;
+            VLOG(0, "cancelled with %d of %d tiles", done, ntiles);
+        }
+        if (aborted && done >= next_out) {
+            break;
+        }
         wait_for_any(&st);
         src = st.MPI_SOURCE;
 
@@ -317,6 +344,7 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
                 a.y = tiles[next].y;
                 a.w = tiles[next].w;
                 a.h = tiles[next].h;
+                a.step = step;
                 a.width = job->width;
                 a.height = job->height;
                 a.max_iter = job->max_iter;
@@ -326,6 +354,7 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
                 MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, src,
                          TESS_TAG_ASSIGN, MPI_COMM_WORLD);
                 next++;
+                next_out++;
                 VLOG(0, "assigned tile %d of %d", next, ntiles);
             } else if (!parked[src]) {
                 parked[src] = 1;
@@ -335,7 +364,8 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
         } else if (st.MPI_TAG == TESS_TAG_RESULT) {
             MPI_Recv((void *)&rh, (int)sizeof rh, MPI_BYTE, src,
                      TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
-            MPI_Recv((void *)px, (int)(rh.w * rh.h * TESS_BYTES_PER_PX),
+            MPI_Recv((void *)px,
+                     (int)(TESS_SAMPLES(rh) * TESS_BYTES_PER_PX),
                      MPI_BYTE, src, TESS_TAG_RESULT, MPI_COMM_WORLD, &st);
             if (rh.epoch == job->epoch) {
                 sink(ctx, &rh, px);
@@ -410,15 +440,23 @@ typedef struct PpmCtx {
 static void ppm_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
 {
     PpmCtx *c = (PpmCtx *)ctx;
-    unsigned int row;
-    size_t dst, src, rowbytes;
+    unsigned int row, col, step, sw;
+    size_t dst, src;
 
-    rowbytes = (size_t)rh->w * TESS_BYTES_PER_PX;
+    step = rh->step > 0 ? rh->step : 1;
+    sw = (rh->w + step - 1) / step;
+
+    /* One sample fills a step x step block, so a coarse pass lands as a
+       blocky preview and the fine pass overwrites it pixel for pixel. */
     for (row = 0; row < rh->h; row++) {
-        dst = ((size_t)(rh->y + row) * (size_t)c->job->width + (size_t)rh->x) *
-              TESS_BYTES_PER_PX;
-        src = (size_t)row * rowbytes;
-        memcpy((char *)c->iter + dst, (const char *)px + src, rowbytes);
+        for (col = 0; col < rh->w; col++) {
+            src = ((size_t)(row / step) * sw + (size_t)(col / step)) *
+                  TESS_BYTES_PER_PX;
+            dst = ((size_t)(rh->y + row) * (size_t)c->job->width +
+                   (size_t)(rh->x + col)) * TESS_BYTES_PER_PX;
+            memcpy((char *)c->iter + dst, (const char *)px + src,
+                   TESS_BYTES_PER_PX);
+        }
     }
 }
 
@@ -465,7 +503,49 @@ static int write_ppm(const char *path, const TessJob *job, const tess_u8 *iter)
 typedef struct GuiCtx {
     int fd;
     int broken;
+    tess_u32 epoch;         /* the epoch being rendered */
+    int cancel;             /* a CANCEL for it has arrived */
+    int pending_type;       /* a frame read while cancelling, replayed after */
+    int pending_len;
+    tess_u8 pending[TESS_MAX_FRAME];
 } GuiCtx;
+
+/*
+ * Has the GUI asked us to stop? Reads whatever is waiting on the socket
+ * without blocking, so a CANCEL is noticed between tile hand-outs rather than
+ * after the frame finishes. A RENDER arriving mid-epoch is also a cancel: the
+ * user has moved on, and the epoch counter makes the old tiles harmless.
+ */
+static int gui_cancelled(void *vctx)
+{
+    GuiCtx *g = (GuiCtx *)vctx;
+    struct timeval tv;
+    fd_set rd;
+    tess_u8 buf[TESS_MAX_FRAME];
+    int type, len;
+
+    if (g->broken || g->cancel) {
+        return g->cancel;
+    }
+    FD_ZERO(&rd);
+    FD_SET(g->fd, &rd);
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    if (select(g->fd + 1, &rd, (fd_set *)0, (fd_set *)0, &tv) <= 0) {
+        return 0;
+    }
+    if (tess_frame_read(g->fd, &type, buf, &len) != 0) {
+        g->broken = 1;
+        return 1;
+    }
+    if (type == TESS_MSG_CANCEL || type == TESS_MSG_RENDER) {
+        g->cancel = 1;
+        memcpy((char *)g->pending, (char *)buf, (size_t)len);
+        g->pending_type = type;
+        g->pending_len = len;
+    }
+    return g->cancel;
+}
 
 static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
 {
@@ -484,9 +564,10 @@ static void gui_sink(void *ctx, const TessResultHdr *rh, const tess_u8 *px)
     th.h = rh->h;
     th.rank = rh->rank;
     th.usec = rh->usec;
+    th.step = rh->step;
 
     n = tess_put_tilehdr(body, &th);
-    bytes = (int)(rh->w * rh->h * TESS_BYTES_PER_PX);
+    bytes = (int)(TESS_SAMPLES(th) * TESS_BYTES_PER_PX);
     memcpy((char *)body + n, (const char *)px, (size_t)bytes);
     if (tess_frame_write(g->fd, TESS_MSG_TILE, body, n + bytes) != 0) {
         g->broken = 1;
@@ -575,6 +656,7 @@ static int serve_gui(int port, int nranks, int *parked)
             if (tess_frame_read(cfd, &type, buf, &len) != 0) {
                 break;
             }
+replay:
             if (type == TESS_MSG_HELLO) {
                 tess_u8 wb[12];
                 int n = 0;
@@ -616,7 +698,22 @@ static int serve_gui(int port, int nranks, int *parked)
                     job.tile = TESS_TILE;
                 }
                 t0 = now_sec();
-                tiles = run_epoch(&job, nranks, parked, gui_sink, (void *)&g);
+                g.epoch = job.epoch;
+                g.cancel = 0;
+                g.pending_type = 0;
+
+                /*
+                 * Two passes, not four. An eighth-scale pass over the whole
+                 * frame costs 1.6% of the work and removes the empty canvas
+                 * entirely; quarter and half levels triple the bookkeeping and
+                 * buy nothing a human can see. DESIGN.md section 3.
+                 */
+                tiles = run_epoch(&job, nranks, parked, 8, gui_cancelled,
+                                  (void *)&g, gui_sink, (void *)&g);
+                if (!g.cancel && !g.broken) {
+                    tiles += run_epoch(&job, nranks, parked, 1, gui_cancelled,
+                                       (void *)&g, gui_sink, (void *)&g);
+                }
                 if (g.broken) {
                     break;
                 }
@@ -626,6 +723,16 @@ static int serve_gui(int port, int nranks, int *parked)
                                   (tess_u32)((now_sec() - t0) * 1000.0));
                 if (tess_frame_write(cfd, TESS_MSG_DONE, db, n) != 0) {
                     break;
+                }
+                /* A frame read while cancelling is replayed, so a RENDER that
+                   interrupted this epoch starts the next one immediately. */
+                if (g.pending_type == TESS_MSG_RENDER) {
+                    memcpy((char *)buf, (char *)g.pending,
+                           (size_t)g.pending_len);
+                    len = g.pending_len;
+                    type = TESS_MSG_RENDER;
+                    g.pending_type = 0;
+                    goto replay;
                 }
             } else if (type == TESS_MSG_BYE) {
                 bye = 1;
@@ -800,7 +907,8 @@ int main(int argc, char **argv)
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
         t0 = now_sec();
-        tiles = run_epoch(&job, nranks, parked, ppm_sink, (void *)&c);
+        tiles = run_epoch(&job, nranks, parked, 1, (int (*)(void *))0,
+                          (void *)0, ppm_sink, (void *)&c);
         printf("tess-node: %d tiles in %.2f s\n", tiles, now_sec() - t0);
         if (ppm) {
             if (write_ppm(ppm, &job, c.iter) != 0) {

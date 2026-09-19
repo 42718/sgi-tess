@@ -132,6 +132,7 @@ int tess_put_tilehdr(tess_u8 *p, const TessTileHdr *t)
     n += tess_put_u32(p + n, t->h);
     n += tess_put_u32(p + n, t->rank);
     n += tess_put_u32(p + n, t->usec);
+    n += tess_put_u32(p + n, t->step);
     return n;
 }
 
@@ -146,6 +147,7 @@ int tess_get_tilehdr(const tess_u8 *p, TessTileHdr *t)
     t->h     = tess_get_u32(p + n); n += 4;
     t->rank  = tess_get_u32(p + n); n += 4;
     t->usec  = tess_get_u32(p + n); n += 4;
+    t->step  = tess_get_u32(p + n); n += 4;
     return n;
 }
 

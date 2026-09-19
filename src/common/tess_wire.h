@@ -30,7 +30,7 @@ int tess_put_tilehdr(tess_u8 *p, const TessTileHdr *t);
 int tess_get_tilehdr(const tess_u8 *p, TessTileHdr *t);
 
 #define TESS_JOB_WIRE      44
-#define TESS_TILEHDR_WIRE  28
+#define TESS_TILEHDR_WIRE  32
 
 /*
  * Blocking frame I/O on a socket. Return 0 on success, -1 on error or EOF.

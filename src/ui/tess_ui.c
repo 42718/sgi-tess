@@ -73,6 +73,7 @@ typedef struct UiValues {
     int    cycles;
     int    rotate;
     int    interior;
+    int    by_owner;
 } UiValues;
 
 typedef struct Ui {
@@ -94,6 +95,7 @@ typedef struct Ui {
     int        tiles_expected;
 
     /* the visual's own channel layout, not an assumed 0xRRGGBB */
+    tess_u32   rank_pix[64];   /* each rank's host hue, as 0xRRGGBB */
     int        rshift, gshift, bshift;
     int        rbits, gbits, bbits;
 
@@ -122,6 +124,7 @@ typedef struct Ui {
 
     tess_u32  *fb;            /* what X blits: 32-bit RGB */
     tess_u8   *iter;          /* what the cluster sent: 3 bytes per pixel */
+    tess_u8   *owner;         /* which rank drew each pixel, for tinting */
 
     int        fd;            /* master socket */
     XtInputId  input_id;
@@ -172,7 +175,9 @@ static const TessParamDesc colour_params[] = {
     { "rotate",   TESS_P_INT,  XtOffsetOf(UiValues, rotate),   0.0, 255.0,
       TESS_LOCAL, { 0 } },
     { "interior", TESS_P_ENUM, XtOffsetOf(UiValues, interior), 0.0, 1.0,
-      TESS_LOCAL, { "black", "white", 0 } }
+      TESS_LOCAL, { "black", "white", 0 } },
+    { "by owner", TESS_P_BOOL, XtOffsetOf(UiValues, by_owner), 0.0, 1.0,
+      TESS_LOCAL, { 0 } }
 };
 
 /* ------------------------------------------------------------- plumbing */
@@ -526,6 +531,28 @@ static void blit(Ui *u, int x, int y, int w, int h)
 static void reshade_all(Ui *u);
 
 /* Shade one tile out of the iteration buffer straight into the framebuffer. */
+/* Blend a shaded pixel towards the colour of the machine that drew it. */
+static tess_u32 tint(Ui *u, tess_u32 rgb, int rank)
+{
+    unsigned long hue;
+    unsigned int r, g, b, hr, hg, hb;
+
+    hue = u->rank_pix[rank & 63];
+    if (!hue) {
+        return rgb;
+    }
+    r = (rgb >> 16) & 0xffu;
+    g = (rgb >> 8) & 0xffu;
+    b = rgb & 0xffu;
+    hr = (unsigned int)((hue >> 16) & 0xffu);
+    hg = (unsigned int)((hue >> 8) & 0xffu);
+    hb = (unsigned int)(hue & 0xffu);
+    r = (r * 3u + hr) / 4u;
+    g = (g * 3u + hg) / 4u;
+    b = (b * 3u + hb) / 4u;
+    return (tess_u32)((r << 16) | (g << 8) | b);
+}
+
 static void shade_tile(Ui *u, int x, int y, int w, int h)
 {
     static tess_u32 scratch[TESS_MAX_TILE * 4];
@@ -541,8 +568,16 @@ static void shade_tile(Ui *u, int x, int y, int w, int h)
                              (size_t)x) * TESS_BYTES_PER_PX;
             dst = u->fb + (size_t)(y + row) * (size_t)u->width + (size_t)x;
             tess_shade(src, n, (int)u->job.max_iter, &u->pal, scratch);
-            for (i = 0; i < n; i++) {
-                dst[i] = to_visual(u, scratch[i]);
+            if (u->val.by_owner) {
+                tess_u8 *own = u->owner + (size_t)(y + row) * u->width + x;
+
+                for (i = 0; i < n; i++) {
+                    dst[i] = to_visual(u, tint(u, scratch[i], own[i]));
+                }
+            } else {
+                for (i = 0; i < n; i++) {
+                    dst[i] = to_visual(u, scratch[i]);
+                }
             }
         }
         x += n;
@@ -636,6 +671,15 @@ static void send_render(Ui *u)
     u->job.height = (tess_u32)u->height;
     u->tiles_in = 0;
 
+    /* Abandon whatever is in flight: the master stops handing out tiles and
+       the epoch counter makes the ones already out harmless. */
+    if (u->epoch_t0 > 0.0) {
+        tess_u8 cb[4];
+
+        tess_put_u32(cb, u->job.epoch);
+        (void)tess_frame_write(u->fd, TESS_MSG_CANCEL, cb, 4);
+    }
+
     n = tess_put_job(body, &u->job);
     if (tess_frame_write(u->fd, TESS_MSG_RENDER, body, n) != 0) {
         set_status(u, "master connection lost");
@@ -687,7 +731,7 @@ static void handle_tile(Ui *u, const tess_u8 *body, int len)
 
     n = tess_get_tilehdr(body, &th);
     px = body + n;
-    bytes = (int)(th.w * th.h * TESS_BYTES_PER_PX);
+    bytes = (int)(TESS_SAMPLES(th) * TESS_BYTES_PER_PX);
     if (n + bytes > len) {
         return;
     }
@@ -698,11 +742,25 @@ static void handle_tile(Ui *u, const tess_u8 *body, int len)
         return;                       /* stale geometry after a resize */
     }
 
-    for (row = 0; row < (int)th.h; row++) {
-        memcpy((char *)(u->iter + ((size_t)(th.y + row) * (size_t)u->width +
-                                   (size_t)th.x) * TESS_BYTES_PER_PX),
-               (const char *)(px + (size_t)row * th.w * TESS_BYTES_PER_PX),
-               (size_t)th.w * TESS_BYTES_PER_PX);
+    {
+        unsigned int step = th.step > 0 ? th.step : 1;
+        unsigned int sw = (th.w + step - 1) / step;
+        unsigned int col;
+
+        /* One sample fills a step x step block: the eighth-scale pass lands as
+           a blocky whole-frame preview, the fine pass overwrites it. */
+        for (row = 0; row < (int)th.h; row++) {
+            for (col = 0; col < th.w; col++) {
+                size_t src = ((size_t)((unsigned)row / step) * sw +
+                              (size_t)(col / step)) * TESS_BYTES_PER_PX;
+                size_t dst = ((size_t)(th.y + row) * (size_t)u->width +
+                              (size_t)(th.x + col));
+
+                memcpy((char *)(u->iter + dst * TESS_BYTES_PER_PX),
+                       (const char *)(px + src), TESS_BYTES_PER_PX);
+                u->owner[dst] = (tess_u8)(th.rank & 0xff);
+            }
+        }
     }
     shade_tile(u, (int)th.x, (int)th.y, (int)th.w, (int)th.h);
     blit(u, (int)th.x, (int)th.y, (int)th.w, (int)th.h);
@@ -742,6 +800,20 @@ static void socket_cb(XtPointer cd, int *src, XtInputId *id)
     } else if (type == TESS_MSG_WELCOME) {
         u->ranks = (int)tess_get_u32(buf + 4);
         u->workers = (int)tess_get_u32(buf + 8);
+        {
+            int r;
+
+            for (r = 0; r < 64; r++) {
+                const char *spec = tess_cluster_rank_colour(u->cl, r);
+                unsigned int rr, gg, bb;
+
+                if (spec && sscanf(spec, "#%2x%2x%2x", &rr, &gg, &bb) == 3) {
+                    u->rank_pix[r] = (tess_u32)((rr << 16) | (gg << 8) | bb);
+                } else {
+                    u->rank_pix[r] = 0;
+                }
+            }
+        }
         cluster_update(u);
         sprintf(msg, "connected: %d worker(s)", u->workers);
         set_status(u, msg);
@@ -866,7 +938,9 @@ static void resize_cb(Widget w, XtPointer cd, XtPointer cb)
                                sizeof(tess_u32));
     u->iter = (tess_u8 *)calloc((size_t)u->width * u->height *
                                 TESS_BYTES_PER_PX, 1);
-    if (!u->fb || !u->iter) {
+    free((void *)u->owner);
+    u->owner = (tess_u8 *)calloc((size_t)u->width * u->height, 1);
+    if (!u->fb || !u->iter || !u->owner) {
         die("out of memory on resize");
     }
     recreate_ximage(u);
@@ -1551,7 +1625,8 @@ int main(int argc, char **argv)
     u.fb = (tess_u32 *)calloc((size_t)u.width * u.height, sizeof(tess_u32));
     u.iter = (tess_u8 *)calloc((size_t)u.width * u.height * TESS_BYTES_PER_PX,
                                1);
-    if (!u.fb || !u.iter) {
+    u.owner = (tess_u8 *)calloc((size_t)u.width * u.height, 1);
+    if (!u.fb || !u.iter || !u.owner) {
         die("out of memory");
     }
     recreate_ximage(&u);

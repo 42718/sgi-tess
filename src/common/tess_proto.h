@@ -17,7 +17,7 @@
 #include "tess_types.h"
 
 #define TESS_MAGIC        0x54455353u    /* "TESS" */
-#define TESS_PROTO_VER    1
+#define TESS_PROTO_VER    2
 #define TESS_DEFAULT_PORT 7333
 #define TESS_TILE         64             /* default tile edge, DESIGN.md 3 */
 #define TESS_MAX_TILE     256
@@ -52,10 +52,11 @@ typedef struct TessTileHdr {
     tess_u32 epoch;
     tess_u32 x;
     tess_u32 y;
-    tess_u32 w;
+    tess_u32 w;            /* area covered, in image pixels */
     tess_u32 h;
-    tess_u32 rank;        /* who computed it, for colour-by-owner */
-    tess_u32 usec;        /* how long it took that rank */
+    tess_u32 rank;         /* who computed it, for colour-by-owner */
+    tess_u32 usec;         /* how long it took that rank */
+    tess_u32 step;         /* 1 = every pixel; 8 = the eighth-scale pass */
 } TessTileHdr;
 
 typedef struct TessDone {
@@ -88,6 +89,7 @@ typedef struct TessAssign {
     tess_u32 y;
     tess_u32 w;
     tess_u32 h;
+    tess_u32 step;        /* sample every step-th pixel in both directions */
     tess_u32 width;       /* whole-image geometry, so the worker can map */
     tess_u32 height;
     tess_u32 max_iter;
@@ -104,6 +106,11 @@ typedef struct TessResultHdr {
     tess_u32 h;
     tess_u32 rank;
     tess_u32 usec;
+    tess_u32 step;
 } TessResultHdr;
+
+/* Samples in a tile, given its coverage and its step. */
+#define TESS_SAMPLES(t) ((((t).w + (t).step - 1) / (t).step) * \
+                         (((t).h + (t).step - 1) / (t).step))
 
 #endif /* TESS_PROTO_H */

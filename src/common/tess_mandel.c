@@ -22,7 +22,7 @@
 
 void tess_mandel_tile(const TessAssign *a, tess_u8 *out)
 {
-    unsigned int px, py;
+    unsigned int px, py, step;
     int i;
     double re, im, zr, zi, zr2, zi2, mag2;
     double half_w, half_h;
@@ -33,10 +33,16 @@ void tess_mandel_tile(const TessAssign *a, tess_u8 *out)
     half_w = (double)a->width * 0.5;
     half_h = (double)a->height * 0.5;
     p = out;
+    step = a->step > 0 ? a->step : 1;
 
-    for (py = a->y; py < a->y + a->h; py++) {
+    /*
+     * With step > 1 this samples a coarse grid over the same area: the
+     * eighth-scale first pass computes 1/64 of the pixels for a whole-image
+     * preview that costs 1.6% of the work (DESIGN.md section 3).
+     */
+    for (py = a->y; py < a->y + a->h; py += step) {
         im = a->cy + ((double)py - half_h) * a->scale;
-        for (px = a->x; px < a->x + a->w; px++) {
+        for (px = a->x; px < a->x + a->w; px += step) {
             re = a->cx + ((double)px - half_w) * a->scale;
 
             zr = 0.0;
