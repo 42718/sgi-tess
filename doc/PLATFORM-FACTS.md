@@ -277,6 +277,30 @@ This matters for more than tidiness: `sysget` is the *unprivileged* path. The pr
 root. If `MP_SAGET` turns out to need privilege, memory reads zero as soon as anything runs
 as an ordinary user, so the correct `sysget` call is still worth having.
 
+## MPI_NAP does not stop a parked rank spinning (19 September 2026, measured)
+
+`MPI(1)` presents `MPI_NAP` as the answer to an idle rank pegging a CPU: undefined
+means spin, defined with no value means yield, a positive integer means sleep that many
+milliseconds between checks. DESIGN.md §7 relies on it for exactly that.
+
+It does not cover a rank blocked in `MPI_Probe` under MPT 1.9. Measured on aurora with
+four workers parked between frames and the GUI idle:
+
+```
+arshell aurora printenv MPI_NAP        ->  2
+TIME column, four workers, 30 s apart  ->  0:15 ... 0:45   (each)
+```
+
+Thirty seconds of CPU in thirty seconds of wall time, per worker, with the setting
+confirmed present in the ranks' own environment. So a "parked" rank costs a whole CPU.
+
+The fix is in the application, not the environment: poll with `MPI_Iprobe`, spin briefly
+so tile hand-out stays immediate during a frame, then sleep a couple of milliseconds
+while genuinely idle. `src/node/tess_node.c:wait_for_master()`. Idle CPU on aurora then
+falls to zero between frames.
+
+Worth remembering when any rank has to wait on a human rather than on work.
+
 ## Motif conventions worth honouring
 
 - `appName*sgiMode: TRUE` — one resource line switches on the sculpted IRIX
