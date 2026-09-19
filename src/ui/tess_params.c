@@ -17,6 +17,7 @@
 #include <Xm/Form.h>
 #include <Xm/Frame.h>
 #include <Xm/Label.h>
+#include <Xm/PushB.h>
 #include <Xm/RowColumn.h>
 #include <Xm/Scale.h>
 #include <Xm/TextF.h>
