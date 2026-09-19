@@ -1344,7 +1344,7 @@ int main(int argc, char **argv)
         int scr = DefaultScreen(d);
         int sw = DisplayWidth(d, scr);
         int sh = DisplayHeight(d, scr);
-        int total, avail_h;
+        int avail_h;
 
         /*
          * Both windows together take TESS_USE of the width, flush to the right
@@ -1354,7 +1354,6 @@ int main(int argc, char **argv)
          * overlapped because it placed the panel at render_w + gap, ignoring
          * the border the WM adds on both windows.
          */
-        total = (int)((double)sw * TESS_USE);
         u.screen_w = sw;
         u.screen_h = sh;
 
