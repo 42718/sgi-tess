@@ -53,7 +53,7 @@ Read these in order before doing anything:
 | `arthur` | Onyx2, IR2/IE2 | 4 × R12000 400 MHz | 4 compute ranks |
 | `aurora` | Origin 350 | 4 or 20 × R16000 | compute ranks = whatever is powered on |
 
-Ethernet `172.28.4.8` / `.17` / `.16`. Aurora normally runs one brick (4 CPUs); five bricks
+Ethernet `192.0.2.8` / `.17` / `.16`. Aurora normally runs one brick (4 CPUs); five bricks
 plus router plus L2 is a valid but power-hungry shape, and the software must not care which.
 
 ## Where bring-up actually stands

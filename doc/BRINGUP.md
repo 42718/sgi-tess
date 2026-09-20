@@ -128,7 +128,7 @@ addressing plan. See step 5.
 Each compute node gets exactly **one canonical name**, and the fabric is implied by it:
 
 ```
-arthur.hippi.local        arthur, reached over HIPPI  (10.42.1.x)
+arthur.hippi.local        arthur, reached over HIPPI  (198.51.100.x)
 aurora                    aurora, reached over ethernet — GM needs no address
 lucy.local                lucy — see below
 ```
@@ -142,14 +142,19 @@ The technique that makes this work with a single, identical `arrayd.conf`:
 So the canonical name is a policy statement — "reach arthur over HIPPI" — and each machine
 implements it with whatever interface it actually has.
 
+> **Addresses in this document are examples.** They use the RFC 5737 documentation
+> ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`), which are reserved for
+> writing and never route. Substitute your own; only the *shape* matters, one subnet per
+> fabric with the host octet held constant across them.
+
 Keeping the **host octet identical on every fabric** makes `netstat` and `ping` output
 unambiguous — the subnet tells you which wire, the last octet tells you which machine:
 
 ```
-             admin (100BASE-TX)   HIPPI          gigabit
-lucy         172.28.4.8           10.42.1.8      10.42.2.8
-arthur       172.28.4.17          10.42.1.17     —
-aurora       172.28.4.16          —              10.42.2.16
+             admin (100BASE-TX)  HIPPI           gigabit
+lucy         192.0.2.8           198.51.100.8    203.0.113.8
+arthur       192.0.2.17          198.51.100.17   —
+aurora       192.0.2.16          —               203.0.113.16
 ```
 
 Each pair gets the best wire it has: **HIPPI for lucy↔arthur, gigabit for lucy↔aurora**, and
@@ -159,25 +164,25 @@ All of it is TCP/IP, which is what lets a three-host job use both fabrics at onc
 `/etc/hosts` on **lucy**:
 
 ```
-10.42.1.17      arthur.hippi.local    arthur     # out over hip0
-10.42.2.16      aurora.gige.local     aurora     # out over the gigabit card
-172.28.4.8      lucy.local            lucy
+198.51.100.17   arthur.hippi.local    arthur     # out over hip0
+203.0.113.16    aurora.gige.local     aurora     # out over the gigabit card
+192.0.2.8       lucy.local            lucy
 ```
 
 `/etc/hosts` on **arthur** (HIPPI to lucy, no Myrinet):
 
 ```
-10.42.1.8       lucy.local            lucy       # lucy's HIPPI address
-172.28.4.16     aurora                           # ethernet — they share no fabric
-10.42.1.17      arthur.hippi.local    arthur
+198.51.100.8    lucy.local            lucy       # lucy's HIPPI address
+192.0.2.16      aurora                           # ethernet — they share no fabric
+198.51.100.17   arthur.hippi.local    arthur
 ```
 
 `/etc/hosts` on **aurora** (gigabit to lucy, no HIPPI board — see step 5):
 
 ```
-10.42.2.8       lucy.local            lucy       # lucy's gigabit address
-172.28.4.17     arthur.hippi.local    arthur     # ethernet — they share no fabric
-10.42.2.16      aurora.gige.local     aurora
+203.0.113.8     lucy.local            lucy       # lucy's gigabit address
+192.0.2.17      arthur.hippi.local    arthur     # ethernet — they share no fabric
+203.0.113.16    aurora.gige.local     aurora
 ```
 
 **arthur and aurora share no fabric with each other**, and in Tess's design they never need
@@ -189,7 +194,7 @@ Two rules that save an evening:
 - **A separate subnet per fabric.** Same-subnet addresses on different interfaces leave IRIX's
   routing choice ambiguous, and you get ethernet without being told.
 - **Keep every name resolvable and reverse-resolvable on every host.** `arrayd` performs a
-  `ruserok()` check on the peer address, so if lucy connects to arthur from `10.42.1.8`,
+  `ruserok()` check on the peer address, so if lucy connects to arthur from `198.51.100.8`,
   arthur must map that address back to a name that appears in `~/.rhosts`. Simplest: list all
   three canonical names *and* the short names in `.rhosts` on every host.
 
@@ -277,7 +282,7 @@ process each other's ARP properly."* Only hosts that cannot do HARP need a stati
 ```
 
 Get the local ULA with `essarp -h`, which prints something like
-`ess0: (10.42.1.8) ULA 00:b1:46:00:14:C6 Logical Address 0xe`.
+`ess0: (198.51.100.8) ULA 00:b1:46:00:14:C6 Logical Address 0xe`.
 
 **6 · Load the tuning parameters into the card's EEPROM**, which the installer does not do:
 
@@ -408,9 +413,9 @@ ifconfig -a                          # what did IRIX name the interface
 ```
 
 The real question is IRIX driver support for that specific card — worth settling before
-scheduling the rest of the work. Then give it the `10.42.2.8` address from step 3, and on aurora
+scheduling the rest of the work. Then give it the `203.0.113.8` address from step 3, and on aurora
 confirm its own gigabit interface (an Origin 350's base I/O usually has one — `hinv -c network`)
-and give it `10.42.2.16`.
+and give it `203.0.113.16`.
 
 **No switch needed.** A direct cable between the two is fine; use a crossover cable if the PHYs
 do not auto-negotiate. If you do have a gigabit switch, use it and skip the cabling question.
@@ -488,7 +493,7 @@ array tess-eth
         hostname   aurora
 ```
 
-with `lucy.eth.local` → `172.28.4.8` and `arthur.eth.local` → `172.28.4.17` in every
+with `lucy.eth.local` → `192.0.2.8` and `arthur.eth.local` → `192.0.2.17` in every
 `/etc/hosts`. Then `mpirun -a tess` versus `mpirun -a tess-eth` is a controlled A/B over the
 identical job — useful for lucy↔arthur, where it isolates HIPPI's contribution. It tells you
 nothing about lucy↔aurora, since GM is selected by MPT rather than by name resolution; there,

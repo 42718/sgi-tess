@@ -10,15 +10,18 @@ anything the cluster does as root.
 
 ## 0 · What was built
 
+> **Addresses in this document are examples**, from the RFC 5737 documentation ranges
+> that are reserved for writing and never route. Substitute your own.
+
 | | |
 |---|---|
 | Host | `ha`, Intel N100 NUC, Proxmox VE 8.4.12 |
-| Container | LXC **105**, hostname `nfs`, `172.28.4.32`, Debian 13, **privileged** |
+| Container | LXC **105**, hostname `nfs`, `192.0.2.32`, Debian 13, **privileged** |
 | Kernel | 6.8.12-14-pve (the host's — LXC shares it) |
 | Disk | `/dev/sdb`, Seagate ST2000LM015, 2 TB, 5400 rpm, **SMR** |
 | Volume | VG `hd2`, LV `nfsstore`, ext4, 1.7 T, mounted at `/srv` on the host |
 | Exports | `/srv/people`, `/srv/cluster`, `/srv/data` — all NFSv3, AUTH_SYS, `no_root_squash` |
-| Clients | lucy `172.28.4.8`, arthur `172.28.4.17`, aurora `172.28.4.16`, all IRIX 6.5.30 |
+| Clients | lucy `192.0.2.8`, arthur `192.0.2.17`, aurora `192.0.2.16`, all IRIX 6.5.30 |
 
 ---
 
@@ -27,7 +30,7 @@ anything the cluster does as root.
 `/dev/sdb` was **not** empty. It carried VG `hd2` holding an orphaned LV `vm-102-disk-0`
 (1.82 TB), left behind when Plex's media moved to NFS. Three things established it was dead
 before anything was removed: `pct config 102` showed no reference to it and no `unused0:`
-line, `df` inside 102 showed `/media` coming from `172.28.4.1` over NFS, and a grep of every
+line, `df` inside 102 showed `/media` coming from `192.0.2.1` over NFS, and a grep of every
 guest config found no other claim on it.
 
 ```sh
@@ -85,7 +88,7 @@ pct create 105 local:vztmpl/debian-13-standard_<ver>_amd64.tar.zst \
   --unprivileged 0 \
   --cores 2 --memory 1024 --swap 512 \
   --rootfs local-lvm:8 \
-  --net0 name=eth0,bridge=vmbr0,ip=172.28.4.32/24,gw=172.28.4.1 \
+  --net0 name=eth0,bridge=vmbr0,ip=192.0.2.32/24,gw=192.0.2.1 \
   --onboot 1 \
   --mp0 /srv,mp=/srv
 ```
@@ -158,9 +161,9 @@ restarts rather than chasing whatever rpcbind hands out.
 `/etc/exports`:
 
 ```
-/srv/people   172.28.4.0/24(rw,sync,no_root_squash,no_subtree_check,sec=sys)
-/srv/cluster  172.28.4.0/24(rw,sync,no_root_squash,no_subtree_check,sec=sys)
-/srv/data     172.28.4.0/24(rw,sync,no_root_squash,no_subtree_check,sec=sys)
+/srv/people   192.0.2.0/24(rw,sync,no_root_squash,no_subtree_check,sec=sys)
+/srv/cluster  192.0.2.0/24(rw,sync,no_root_squash,no_subtree_check,sec=sys)
+/srv/data     192.0.2.0/24(rw,sync,no_root_squash,no_subtree_check,sec=sys)
 ```
 
 To apply changes to `/etc/exports`, **`exportfs -ra`**. It re-reads the file and applies the
@@ -183,9 +186,9 @@ On the server:
 
 ```
 # exportfs -v
-/srv/people     172.28.4.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,no_root_squash,no_all_squash)
-/srv/cluster    172.28.4.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,no_root_squash,no_all_squash)
-/srv/data       172.28.4.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,no_root_squash,no_all_squash)
+/srv/people     192.0.2.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,no_root_squash,no_all_squash)
+/srv/cluster    192.0.2.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,no_root_squash,no_all_squash)
+/srv/data       192.0.2.0/24(sync,wdelay,hide,no_subtree_check,sec=sys,rw,secure,no_root_squash,no_all_squash)
 
 # cat /proc/fs/nfsd/versions
 +3 -4 -4.0 -4.1 -4.2
@@ -295,7 +298,7 @@ entries rather than trusting DNS.
 macOS needs `resvport` and will otherwise fail with a misleading error:
 
 ```
-mount_nfs: can't mount /srv/people from 172.28.4.32 onto /Users/rutger/mnt: Operation not permitted
+mount_nfs: can't mount /srv/people from 192.0.2.32 onto /Users/rutger/mnt: Operation not permitted
 ```
 
 That is not a local permissions problem. The export carries `secure` (visible in §4), which
@@ -304,7 +307,7 @@ non-reserved port. The server refuses the mount and macOS reports it as `Operati
 permitted`.
 
 ```sh
-sudo mount -t nfs -o resvport,vers=3 172.28.4.32:/srv/people ~/mnt
+sudo mount -t nfs -o resvport,vers=3 192.0.2.32:/srv/people ~/mnt
 ```
 
 Fixed on the client deliberately. Adding `insecure` to the export would also work, but it

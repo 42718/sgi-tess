@@ -43,9 +43,9 @@ absolute path everywhere**. MPT does no file staging.
 ```sh
 setenv MPI_USE_TCP 1                                        # on every host, see trap 6
 
-mpirun -d /usr/people/rutger lucy 2 ./mpi-hello             # local only
-mpirun -d /usr/people/rutger aurora 2 ./mpi-hello           # remote only
-mpirun -d /usr/people/rutger lucy 1, aurora 1 ./mpi-hello   # both — the milestone
+mpirun -d /usr/people/you lucy 2 ./mpi-hello             # local only
+mpirun -d /usr/people/you aurora 2 ./mpi-hello           # remote only
+mpirun -d /usr/people/you lucy 1, aurora 1 ./mpi-hello   # both — the milestone
 ```
 
 ```
@@ -57,7 +57,7 @@ Line order varies. Two hosts' stdout is not synchronised.
 
 **`-d` is not optional.** Without it the remote working directory is `$HOME`, which for
 root is `/`. You can watch MPT send it: with arrayd logging on, the request reads
-`cmd='cd /usr/people/rutger; exec ./mpi-hello'`, and without `-d` it reads `cd /`.
+`cmd='cd /usr/people/you; exec ./mpi-hello'`, and without `-d` it reads `cd /`.
 
 Climb the ladder in that order. Local, then remote, then both. Each step fails
 differently and the difference is the diagnosis.
@@ -161,13 +161,13 @@ In `/etc/hosts` the **first** name after the address is canonical; the rest are 
 lucy had:
 
 ```
-172.28.4.8      lucy.local lucy
+192.0.2.8       lucy.local lucy
 ```
 
 and aurora had:
 
 ```
-172.28.4.8      lucy
+192.0.2.8       lucy
 ```
 
 So lucy reverse-resolved to `lucy.local`, which is what arrayd logged
@@ -186,9 +186,9 @@ ping: lucy.local: Non-recoverable failure in name resolution
 Plain name first, domain form as an alias, **identical on every host**:
 
 ```
-172.28.4.8      lucy    lucy.local
-172.28.4.17     arthur  arthur.local
-172.28.4.16     aurora  aurora.local
+192.0.2.8       lucy    lucy.local
+192.0.2.17      arthur  arthur.local
+192.0.2.16      aurora  aurora.local
 ```
 
 No daemon restart needed — `gethostbyaddr` reads the file each time.
@@ -237,7 +237,7 @@ services not available`, which simply means arrayd is not running). Use
 
 ```
 ACCEPTED remote connection from lucy on port 40239
-REQUEST REMEXT(19) from root@lucy exec by user root, cmd='cd /usr/people/rutger; exec ./mpi-hello'
+REQUEST REMEXT(19) from root@lucy exec by user root, cmd='cd /usr/people/you; exec ./mpi-hello'
 About to send signal 23 to 1 process(es) in ASH 0x61f6ffff0000002c
 About to send signal 25 to 1 process(es) in ASH 0x61f6ffff0000002c
 ```
@@ -314,7 +314,7 @@ lucy's `ess0` was already down when the hang was reproduced —
 
 ```
 ess0: flags=4022<BROADCAST,NOTRAILERS,DRVRLOCK>
-        inet 10.42.1.8 netmask 0xffffff00 broadcast 10.42.1.255
+        inet 198.51.100.8 netmask 0xffffff00 broadcast 198.51.100.255
 ```
 
 — no `UP` flag, though note it still carries an address, and `asgetnetinfo_array` reports

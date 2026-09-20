@@ -219,7 +219,7 @@ upstream's last written word on the subject is `CHANGES:319` — *"GM is now sup
 6.5, except that IP support is not working."*
 
 So: **`myri0` is worth ten minutes of `ifconfig`, not a plan.** If it comes up, assign
-`10.42.2.0/24` and MPT's TCP fallback lands on Myrinet instead of ethernet. If it does not,
+`203.0.113.0/24` and MPT's TCP fallback lands on Myrinet instead of ethernet. If it does not,
 that subnet stays unused and the fallback is ethernet.
 
 ## Verdict
@@ -303,7 +303,7 @@ byte-order types (`gm_hton_dp()` returns `gm_dp_n_t`, `include/gm_simple_types.h
 dropped a trailing argument from both `gm_ethernet_broadcast()` and `gm_ethernet_send()`
 (`include/gm_ether.h:137-140,152-155`), and `gx.c` predates all of it — six errors. Reviving IP
 would be a real port of a driver its own author called unfinished and upstream called broken
-(`CHANGES:531`). It is out, and `10.42.2.0/24` stays unused.
+(`CHANGES:531`). It is out, and `203.0.113.0/24` stays unused.
 
 ### The attach panic, and what it was (9 September 2026)
 

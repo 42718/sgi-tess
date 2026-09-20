@@ -29,8 +29,8 @@ Target: IRIX 6.5.30, MIPSpro 7.4.4m, MPT 1.9 (MPI 4.4), IRIX IM (Motif) 2.1.20 +
 | `arthur` | **Onyx2**, 2 × dual-CPU nodeboards, **IR2/IE2 pipe** | 4 × 400 MHz | ~7 GB | **HIPPI** → tcp | 4 compute ranks; also a visualization host |
 | `aurora` | **Origin 350**, single system image over NUMAlink, 5 bricks + router + L2 | 20: 8 × 1 GHz + 12 × 800 MHz R16000 | 20 GB (4 GB/brick) | **Myrinet** → GM 1.6 | compute ranks = whatever is powered on |
 
-Addressing: ethernet `172.28.4.8` lucy, `.17` arthur, `.16` aurora; HIPPI `10.42.1.0/24` with
-the host octet kept identical (`10.42.1.8`, `10.42.1.17`). Myrinet needs `10.42.2.0/24` only if
+Addressing: ethernet `192.0.2.8` lucy, `.17` arthur, `.16` aurora; HIPPI `198.51.100.0/24` with
+the host octet kept identical (`198.51.100.8`, `198.51.100.17`). Myrinet needs `203.0.113.0/24` only if
 the GM build provides an IP interface — GM bypass itself uses no IP.
 
 ### aurora has two shapes, and the software must not care
@@ -205,7 +205,7 @@ What it costs and buys, for a 1920×1200 frame against ~6.8 s of estimated compu
 
 **Gigabit lands within about one percentage point of GM using a path that already works.** That
 retires the GM work from the critical path entirely — no `libgm.so` rebuild, no
-`gm_register_cmd_memory` shim, no mapper bring-up — and it reuses the `10.42.2.0/24` subnet that
+`gm_register_cmd_memory` shim, no mapper bring-up — and it reuses the `203.0.113.0/24` subnet that
 was freed when Myrinet turned out to need no IP at all.
 
 GM stays interesting for a two-host lucy+aurora job, where MPT *will* select it and where the

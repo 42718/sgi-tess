@@ -44,7 +44,7 @@ work here: `hostname` exits before MPT's startup handshake, and MPT reports that
 
 ### 3 · Hosts file, ethernet only  ·  all three
 Identical `/etc/hosts` everywhere, ethernet addresses only for now:
-`172.28.4.8 lucy`, `172.28.4.17 arthur`, `172.28.4.16 aurora`. Plus `~/.rhosts`
+`192.0.2.8 lucy`, `192.0.2.17 arthur`, `192.0.2.16 aurora`. Plus `~/.rhosts`
 listing all three, mode 600.
 ```sh
 grep sgi-arrayd /etc/services                 # sgi-arrayd 5434/tcp, identical everywhere
@@ -99,7 +99,7 @@ sustained from a 20-CPU aurora, so ethernet at 11 MB/s should already have 4× h
 ```sh
 hinv -c network ; ifconfig -a                    # is the card seen, and by which driver
 ```
-Driver support for that specific card is the real question. Then `10.42.2.8` / `10.42.2.16`,
+Driver support for that specific card is the real question. Then `203.0.113.8` / `203.0.113.16`,
 direct cable (crossover if the PHYs don't negotiate), then chase `mtu 9000`.
 ☐ `netstat -i` counters move on the gigabit interface, not `ef0`.
 ☐ pingpong again — expect 25–60 MB/s; the PCI bus limits it as much as the wire.
