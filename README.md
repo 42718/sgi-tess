@@ -39,6 +39,7 @@ than caring which.
 
 ```
 doc/DEPLOY.md            prerequisites, build, and how to run the interface
+doc/PREFLIGHT.md         the preflight checks, and the setup wizard they feed
 doc/DESIGN.md            the engineering contract — decisions, scheduling, wire format
 doc/PLATFORM-FACTS.md    every platform claim, each citing the install medium it came from
 doc/CHECKLIST.md         linear bring-up runbook; steps 1-5 are the critical path

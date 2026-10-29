@@ -108,6 +108,19 @@ and you debug code that was never compiled. `fresh` exists because this cost us 
 
 ## 4. Verifying before you start the UI
 
+**The quick way is `tess-preflight`**, which runs the prerequisites in section 1
+and the failure modes in section 7 as eighteen checks and prints the remedy for
+each one that fails:
+
+```
+./build/IP30/tess-preflight
+arshell aurora /cluster/dev/sgi-tess/build/IP35/tess-preflight -compute -q
+```
+
+[doc/PREFLIGHT.md](PREFLIGHT.md) lists every check and what a failure means.
+The two checks below are what it automates, and are still worth doing by hand
+the first time on a new machine.
+
 Two checks, in this order. They take a minute and they localise every failure that follows.
 
 **Each machine can describe itself:**
@@ -200,6 +213,9 @@ rejects a client that greets it with the wrong one.
 | Edits appear to do nothing | NFS clock skew. `gmake fresh` |
 | `tess-probe` reports 0 MB memory | Running as an ordinary user against the `MP_SAGET` fallback. See the `via` line, and `doc/PLATFORM-FACTS.md` |
 | Ranks survive Stop | `SIGTERM` does not reliably end them; `SIGINT` does. Stop escalates and then sweeps with `arshell killall` |
+
+Every row above is a check in `tess-preflight`, which prints the remedy rather
+than making you find this table. Run it first.
 
 `doc/PLATFORM-FACTS.md` records every platform claim with the evidence behind it, and is
 the right place to look when something behaves differently on your hardware.

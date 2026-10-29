@@ -7,7 +7,8 @@
 # same time without overwriting each other's objects.
 #
 #   gmake              everything this machine can build
-#   gmake probe        tess-probe    (inventory, needs nothing)
+#   gmake probe        tess-probe     (inventory, needs nothing)
+#   gmake preflight    tess-preflight (the setup checks, needs nothing)
 #   gmake tiler        tess-tiler    (the milestone 0 backend, from baseline/)
 #   gmake node         tess-node     (MPI, no Motif)
 #   gmake ui           tess-ui       (Motif, no MPI)
@@ -33,9 +34,10 @@ ARCH    := $(shell uname -m)
 SYS     := $(shell uname -s)
 BUILD   := build/$(ARCH)
 COMMON  := src/common
-VPATH    = $(COMMON):src/probe:src/node:src/ui
+VPATH    = $(COMMON):src/probe:src/preflight:src/node:src/ui
 
 INVENTORY_SRC = $(COMMON)/tess_inventory.c
+CHECK_SRC     = $(COMMON)/tess_check.c
 WIRE_SRC      = $(COMMON)/tess_wire.c
 MANDEL_SRC    = $(COMMON)/tess_mandel.c
 COMMON_SRCS   = $(WIRE_SRC) $(MANDEL_SRC)
@@ -76,6 +78,7 @@ MPICC     = mpicc
 endif
 
 PROBE  = $(BUILD)/tess-probe
+PREFLT = $(BUILD)/tess-preflight
 TILER  = $(BUILD)/tess-tiler
 NODE   = $(BUILD)/tess-node
 UI     = $(BUILD)/tess-ui
@@ -83,9 +86,9 @@ UI     = $(BUILD)/tess-ui
 NODE_SRCS = $(wildcard src/node/*.c)
 UI_SRCS   = $(wildcard src/ui/*.c)
 
-.PHONY: all probe tiler node ui info gate fresh clean distclean
+.PHONY: all probe preflight tiler node ui info gate fresh clean distclean
 
-all: probe tiler node ui
+all: probe preflight tiler node ui
 
 info:
 	@echo "arch      $(ARCH) ($(SYS))"
@@ -94,6 +97,7 @@ info:
 	@echo "mpi_ext   $(if $(filter 1,$(HAVE_MPI_EXT)),present,absent: transport counters disabled)"
 	@echo "node      $(if $(NODE_SRCS),$(words $(NODE_SRCS)) source(s),no sources yet)"
 	@echo "ui        $(if $(UI_SRCS),$(words $(UI_SRCS)) source(s),no sources yet)"
+	@echo "checks    $(shell grep -c '^    { \"' $(COMMON)/tess_check.c 2>/dev/null) preflight checks"
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -103,6 +107,17 @@ probe: $(PROBE)
 
 $(PROBE): src/probe/tess_probe.c $(INVENTORY_SRC) $(COMMON)/tess_inventory.h | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/probe/tess_probe.c $(INVENTORY_SRC)
+
+# ---- tess-preflight: doc/DEPLOY.md sections 1 and 7, executable. Needs
+#      nothing but libc, deliberately: the machine whose Motif or MPT is at
+#      fault still has to be able to run the thing that says so. Runs over
+#      arshell on every host, which the Motif wizard cannot. ----
+preflight: $(PREFLT)
+
+$(PREFLT): src/preflight/tess_preflight.c $(CHECK_SRC) $(INVENTORY_SRC) \
+           $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ src/preflight/tess_preflight.c $(CHECK_SRC) \
+	  $(INVENTORY_SRC)
 
 # ---- tess-tiler: milestone 0. The 2001 row tiler, C89 corrected, kept
 #      buildable so there is always a working MPI backend to test the cluster
@@ -160,6 +175,7 @@ gate:
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(WIRE_SRC) -o /dev/null
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(MANDEL_SRC) -o /dev/null
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(INVENTORY_SRC) -o /dev/null
+	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(CHECK_SRC) -o /dev/null
 	@echo "gate: portable sources are C89 clean"
 
 clean:
