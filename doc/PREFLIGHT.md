@@ -210,10 +210,19 @@ new question appeared.
    is the one nobody looks at. Settle it by stopping Array Services once
    (`/etc/init.d/array stop`) and running `tess-preflight`, then starting it
    again.
-2. **Is 30 seconds the right threshold for `clock`?** Lucy measured 51 and
-   warns. If that skew is permanent on this cluster, the warning will be
-   permanent too, and a warning you always see is a warning you stop reading.
-   Either the clocks get fixed (`chkconfig timed on` on the SGIs and the file
-   server) or the threshold becomes a documented, deliberately larger number.
-   My preference is to fix the clocks, because `gmake fresh` is a workaround
-   for a problem that has a real solution.
+2. **Is 30 seconds the right threshold for `clock`?** Lucy's 51 seconds is
+   **fixed** as of 29 October: the NFS server now serves the RFC-868 time
+   service and the SGIs run `timeslave` against it. The full account, with
+   measurements, is in
+   [PLATFORM-FACTS.md](PLATFORM-FACTS.md#clock-synchronisation).
+   The threshold was chosen before any of that was known, so once a settled
+   synchronised figure exists it should probably come down well below 30.
+   Note the check compares **epochs**, so it is immune to the `TZ` confusion
+   that made lucy look an hour out immediately afterwards: that was Europe
+   leaving CEST on 25 October, not a clock fault, and `date -u` on lucy was
+   correct throughout.
+
+3. **arthur and aurora still need `timeslave`.** Only lucy has been done. Any
+   machine that builds in the shared tree needs the same treatment, or the
+   `stale` check is comparing mtimes written by a disciplined clock against
+   binaries built by an undisciplined one.

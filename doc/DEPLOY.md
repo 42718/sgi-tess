@@ -210,7 +210,7 @@ rejects a client that greets it with the wrong one.
 | "master closed the connection" | A master from a previous job still holds port 7333, so the new job cannot bind and the GUI attaches to the old one, which rejects the new nonce. Start now sweeps first; if it persists, `killall tess-node` on every host |
 | Every host shows "no answer" | `arshell` is not running as root, or `arrayd` is not configured with these hosts |
 | A host shows no CPU percentage | Its `tess-probe` is stale and predates the `busy=` field. `gmake fresh` on that machine |
-| Edits appear to do nothing | NFS clock skew. `gmake fresh` |
+| Edits appear to do nothing | NFS clock skew. `gmake fresh`. Fix it properly with `timeslave` against the file server: see PLATFORM-FACTS.md, "Clock synchronisation" |
 | `tess-probe` reports 0 MB memory | Running as an ordinary user against the `MP_SAGET` fallback. See the `via` line, and `doc/PLATFORM-FACTS.md` |
 | Ranks survive Stop | `SIGTERM` does not reliably end them; `SIGINT` does. Stop escalates and then sweeps with `arshell killall` |
 

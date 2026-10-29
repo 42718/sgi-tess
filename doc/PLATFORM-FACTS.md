@@ -368,6 +368,128 @@ falls to zero between frames.
 
 Worth remembering when any rank has to wait on a human rather than on work.
 
+## Clock synchronisation — why `gmake fresh` existed, and how it was fixed (29 October 2026, measured)
+
+The shared tree lives on NFS and every machine builds natively in it, so the
+`make` comparison that decides whether to recompile is between an mtime written
+by one machine and a clock belonging to another. The whole `gmake fresh` rule
+exists because those disagreed. This records by how much, which way, and what
+the fix was.
+
+### What was measured
+
+| Pair | Skew | How |
+|---|---|---|
+| NFS server (the clock stamping the tree) vs the Mac | **0 s** | file written on the share, mtime compared to `time()` |
+| The Mac vs `time.apple.com` | **+0.008 s** | `sntp` |
+| **lucy vs the tree** | **51 s** | `tess-preflight -only clock` |
+
+So the server was right and lucy was the outlier. That matters, because the
+instinct is to elect a master among the SGIs: doing so would have propagated
+lucy's 51 seconds to arthur and aurora and left all three disagreeing with the
+clock that stamps the files. **The time master is the NFS server.** The SGIs are
+all slaves and there is no master among them.
+
+### Nothing on the network served time
+
+Probed 29 October 2026 from the Mac: `172.28.4.254` (router), `172.28.4.251`
+(pihole), `172.28.4.32` (NFS), `172.28.4.1` (gateway). All four answer ICMP
+echo. **None answered udp/37 or udp/123.** So something had to be enabled
+regardless of which daemon the SGIs run.
+
+### What IRIX `timeslave` actually needs
+
+From `timeslave(1M)`, IRIX 6.5.30:
+
+```
+timeslave [ options ] -H netmaster
+timeslave [ options ] -C /dev/ttydXX
+```
+
+| Option | Meaning |
+|---|---|
+| `-H netmaster` | host with a better clock |
+| `-p port` | port for the RFC-868 Internet time service |
+| `-r rate` | measurement interval, min 5 s, default 3 m 30 s |
+| `-W` / `-w` | timeouts for the time service (4 s) and ICMP (1 s) |
+| `-t` / `-T` | min / max ICMP packets per measurement |
+| `-P param-file` | persists the computed `timetrim`; use `/var/adm/timetrim` |
+| `-D max-drift` | default 10,000,000 ns/s, i.e. 10 ms/s |
+
+**It uses two protocols, not one.** UDP datagrams to the `time` service to
+establish the day, then **ICMP timestamp packets** (type 13/14) for the precise
+measurement. Answering ICMP *echo* (type 8/0) proves nothing about timestamp;
+they are different types and firewalls that permit ICMP usually mean echo only.
+Both had to work, and both did.
+
+`timeslave` has **no init script of its own**. `network(1M)` says it starts
+"the inetd, timed, timeslave, rarpd, and rwhod daemons" from the `timeslave`
+`chkconfig` flag, and lists `timeslave.options` as **required** rather than
+optional — which follows, since `-H` has no default.
+
+### The configuration that works
+
+On the NFS server (Debian 13 LXC, reached with `pct enter 105`; it deliberately
+runs no sshd):
+
+```sh
+apt install openbsd-inetd
+echo 'time  dgram  udp  wait  root  internal' >> /etc/inetd.conf
+systemctl restart openbsd-inetd
+```
+
+`time` is an inetd **internal** service: no helper binary, no custom daemon, and
+the only thing listening is udp/37.
+
+On each SGI:
+
+```sh
+echo '-H 172.28.4.32 -P /var/adm/timetrim' > /etc/config/timeslave.options
+chkconfig -f timeslave on
+/usr/etc/timeslave -H 172.28.4.32 -P /var/adm/timetrim
+```
+
+Start it by hand the first time. **Do not use `/etc/init.d/network restart` on a
+machine whose working tree is an NFS mount from the host you are syncing to.**
+
+Evidence it worked, from lucy's `/var/adm/SYSLOG`:
+
+```
+timeslave[1626] date changed from 10/29/26 14:24:58
+```
+
+### The one-hour trap that is not a clock problem
+
+Immediately after `timeslave` corrected lucy, it read exactly one hour off.
+That is not drift. Europe/Amsterdam left CEST for CET on **Sunday 25 October
+2026**, so local time is UTC+1 and lucy's `TZ` is set to GMT.
+
+`date -u` on lucy was **correct**, which settles it: the system clock is right
+and only the display is wrong. Unix keeps the clock in UTC, file mtimes and
+`time()` are UTC epoch, and `TZ` affects nothing but what `date` prints. So a
+wrong `TZ` costs you nothing in the build and costs you an hour the first time
+you correlate lucy's SYSLOG against the server's.
+
+The POSIX string encoding the current EU rules, for `/etc/TIMEZONE`:
+
+```
+CET-1CEST,M3.5.0/2,M10.5.0/3
+```
+
+Last Sunday in March at 02:00, last Sunday in October at 03:00. IRIX 6.5 accepts
+POSIX `TZ` strings; it also has an older `MET-1MDT` convention, so read what the
+file holds before replacing it.
+
+### Consequences for the build
+
+`tess-preflight`'s `clock` check compares **epochs**, so it is immune to `TZ` and
+measures the thing that actually breaks `make`. Its threshold is 30 seconds,
+which was chosen before any of the above was known and should be revisited now
+that a synchronised figure exists.
+
+`gmake fresh` remains correct practice, but with the clocks disciplined it is
+belt-and-braces rather than load-bearing.
+
 ## Motif conventions worth honouring
 
 - `appName*sgiMode: TRUE` — one resource line switches on the sculpted IRIX
