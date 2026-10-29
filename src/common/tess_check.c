@@ -674,7 +674,8 @@ static void chk_probe(const TessCheckCtx *ctx, TessCheckResult *r,
 {
     char arch[32];
     char cmd[640];
-    char out[1024];
+    char out[2048];
+    char head[512];
     char detail[TESS_CHECK_DETAILLEN];
 
     if (blocked_by(done, ndone, "build")) {
@@ -682,19 +683,24 @@ static void chk_probe(const TessCheckCtx *ctx, TessCheckResult *r,
         return;
     }
     this_arch(arch, (int)sizeof arch);
-    sprintf(cmd, "%s/build/%s/tess-probe 2>&1", ctx->tree, arch);
+    /* -v, because the `via` line that says which memory call answered exists
+       only in the verbose block. The machine-readable first line stops at
+       hippi= and carries no memwhy field: see tess_inventory_line(). */
+    sprintf(cmd, "%s/build/%s/tess-probe -v 2>&1", ctx->tree, arch);
     run_capture(cmd, out, (int)sizeof out);
-    first_line(out);
+    strncpy(head, out, sizeof head - 1);
+    head[sizeof head - 1] = '\0';
+    first_line(head);
 
-    if (strstr(out, "tess-probe") == NULL) {
-        sprintf(detail, "probe did not report: %.140s", out);
+    if (strstr(head, "tess-probe") == NULL) {
+        sprintf(detail, "probe did not report: %.140s", head);
         setr(r, TESS_FAIL, detail,
              "This host's tess-probe did not produce its inventory line.\n"
              "Rebuild it:  cd <tree> && gmake fresh\n"
              "If it still fails, run it directly to see the error.");
         return;
     }
-    if (strstr(out, "busy=") == NULL) {
+    if (strstr(head, "busy=") == NULL) {
         setr(r, TESS_WARN, "probe runs but predates the busy= field",
              "The UI will show this host with no CPU percentage. Rebuild:\n"
              "    cd <tree> && gmake fresh");
@@ -702,15 +708,14 @@ static void chk_probe(const TessCheckCtx *ctx, TessCheckResult *r,
     }
     /* The via line distinguishes the documented path from the fallback, which
        reads zero for an unprivileged caller. See DEPLOY.md section 4. */
-    if (strstr(out, "memwhy=sysget") == NULL &&
-        strstr(out, "sysget(SGT_RMINFO) ok") == NULL) {
+    if (strstr(out, "sysget(SGT_RMINFO) ok") == NULL) {
         setr(r, TESS_WARN, "probe fell back off sysget(SGT_RMINFO)",
              "Memory figures came from the sysmp(MP_SAGET) fallback, which\n"
              "reports zero for an ordinary user. Run `tess-probe -v` and read\n"
              "the `via` line. doc/PLATFORM-FACTS.md records both paths.");
         return;
     }
-    sprintf(detail, "%.150s", out);
+    sprintf(detail, "%.150s", head);
     setr(r, TESS_PASS, detail, "");
 }
 

@@ -151,19 +151,69 @@ launches `tess-setup`. The expensive checks — the probe, the clock file, the
 cluster tests — do not belong on a timer, so the indicator runs the cheap ones
 and says when it last ran the rest.
 
-**Open question for the hardware owner.** Three checks are guesses about *your*
-machines rather than facts read off them, and should be corrected before the
-wizard is built on top of them:
+## What lucy actually reported, 29 October 2026
 
-1. `cc -version` is assumed to print a line containing `MIPSpro`. If MIPSpro
-   7.4.4m words it differently the check downgrades to WARN when it should
-   PASS.
-2. `ainfo machines` is assumed to exit non-zero or print nothing when `arrayd`
-   is down. If it exits zero with an error on stdout, the check passes when it
-   should fail.
-3. Motif is assumed to be at `/usr/Motif-2.1` with `lib64` and `include`, which
-   is where the Makefile looks. Worth confirming that is where it actually is
-   on lucy rather than where the Makefile hopes.
+First run on lucy (IP30), as an ordinary user: **15 pass, 2 warn, 1 fail.**
+The three assumptions this document previously flagged are now facts read off
+the machine rather than guesses:
 
-The way to settle all three is to run `tess-preflight` on lucy and read the
-`detail` column, which prints what each command actually said.
+| Check | What lucy said |
+|---|---|
+| `cc` | `MIPSpro Compilers: Version 7.4.4m` |
+| `gmake` | `GNU Make 3.82` |
+| `mpirun` | `/usr/bin/mpirun` |
+| `libmpi` | `/usr/lib64/libmpi.so` |
+| `mpiext` | `/usr/include/mpi_ext.h` present, so transport counters are on |
+| `arrayd` | `ainfo machines` answered, 12 lines |
+| `motif` | `/usr/Motif-2.1`, headers and lib64 both present |
+| `display` | `DISPLAY=:0.0` |
+| `irix` | `IRIX64 6.5` |
+
+So the Makefile's assumptions about where things live are correct on this
+machine, and `cc -version` does contain the word MIPSpro.
+
+**The clock skew is 51 seconds.** Measured, not inferred: lucy's clock and the
+clock stamping files in the shared tree disagree by that much. This is the
+first time that number has been written down, and it is the mechanism behind
+the `gmake fresh` rule. Note how close it runs to the margin the `stale` check
+reported in the same run, 83 seconds between the newest source and the binary
+built from it: a rebuild that happened inside a minute of an edit would be
+indistinguishable from a stale one.
+
+**The one failure was `root`, and it was correct.** The run was as an ordinary
+user, which is exactly the condition under which `arshell` returns nothing and
+every host shows "no answer" — the reported symptom. The check does its job.
+
+### A false positive this run caught
+
+`probe` warned "fell back off sysget(SGT_RMINFO)" on a machine where nothing
+had fallen back. The check searched for the `via` line in the wrong text: the
+machine-readable first line of `tess-probe` stops at `hippi=` and carries no
+`memwhy` field at all — see `tess_inventory_line()` — while the `via` line
+exists only in the `-v` block. The check would have warned on every machine
+forever, including a healthy one.
+
+Fixed by running `tess-probe -v` and searching the whole block. Recorded here
+because a check that cries wolf is worse than a missing check: it trains you to
+ignore the thing you built to be believed.
+
+## Still open for the hardware owner
+
+Two of the three guesses are settled above. One is only half settled, and one
+new question appeared.
+
+1. **`arrayd`, the negative case.** Lucy's Array Services was running, so the
+   check passed. What `ainfo machines` does when `arrayd` is *down* is still
+   assumed: the check treats a non-zero exit or empty output as failure. If it
+   instead exits zero and prints an error, the check passes when it should
+   fail — and that is the one direction that matters, because a passing check
+   is the one nobody looks at. Settle it by stopping Array Services once
+   (`/etc/init.d/array stop`) and running `tess-preflight`, then starting it
+   again.
+2. **Is 30 seconds the right threshold for `clock`?** Lucy measured 51 and
+   warns. If that skew is permanent on this cluster, the warning will be
+   permanent too, and a warning you always see is a warning you stop reading.
+   Either the clocks get fixed (`chkconfig timed on` on the SGIs and the file
+   server) or the threshold becomes a documented, deliberately larger number.
+   My preference is to fix the clocks, because `gmake fresh` is a workaround
+   for a problem that has a real solution.
