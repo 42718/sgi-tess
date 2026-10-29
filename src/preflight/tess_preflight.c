@@ -30,7 +30,9 @@ static void usage(const char *me)
             "  -port <n>     the master's loopback port (default 7333)\n"
             "  -compute      skip the display-host checks: Motif, X, root, port\n"
             "  -q            one line per check, no remedies\n"
-            "  -1            a single summary line, for a caller that wants a light\n",
+            "  -1            a single summary line, for a caller that wants a light\n"
+            "  -only <id>    run just one check, stopping as soon as it has run.\n"
+            "                Cheap enough to loop: -only clock\n",
             me);
 }
 
@@ -49,10 +51,12 @@ int main(int argc, char **argv)
     int nskip;
     char *p;
     char *nl;
+    const char *only;
 
     tess_check_ctx_default(&ctx);
     quiet = 0;
     oneline = 0;
+    only = (const char *)0;
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-tree") == 0 && i + 1 < argc) {
@@ -64,6 +68,9 @@ int main(int argc, char **argv)
             ctx.port = atoi(argv[i]);
         } else if (strcmp(argv[i], "-compute") == 0) {
             ctx.display = 0;
+        } else if (strcmp(argv[i], "-only") == 0 && i + 1 < argc) {
+            i++;
+            only = argv[i];
         } else if (strcmp(argv[i], "-q") == 0) {
             quiet = 1;
         } else if (strcmp(argv[i], "-1") == 0) {
@@ -75,6 +82,38 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 2;
         }
+    }
+
+    if (only) {
+        /* Run in order up to and including the one asked for, so a check still
+           sees the prerequisites it depends on, then stop. Nothing later runs,
+           which is what makes this cheap enough to sit in a loop. */
+        int want;
+        want = -1;
+        for (i = 0; i < tess_check_count(); i++) {
+            if (strcmp(tess_check_id_at(i), only) == 0) {
+                want = i;
+                break;
+            }
+        }
+        if (want < 0) {
+            fprintf(stderr, "%s: no check called \"%s\". Known checks:\n",
+                    argv[0], only);
+            for (i = 0; i < tess_check_count(); i++) {
+                fprintf(stderr, "  %s\n", tess_check_id_at(i));
+            }
+            return 2;
+        }
+        n = 0;
+        for (i = 0; i <= want; i++) {
+            tess_check_run_one(i, &ctx, r, n, &r[n]);
+            n++;
+        }
+        printf("%-4s  %-12s %s\n", tess_check_status_name(r[want].status),
+               r[want].id, r[want].detail);
+        fflush(stdout);
+        return r[want].status == TESS_FAIL ? 2
+             : (r[want].status == TESS_WARN ? 1 : 0);
     }
 
     n = tess_check_run_all(&ctx, r, MAXRESULTS);

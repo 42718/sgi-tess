@@ -645,16 +645,22 @@ static void chk_clock(const TessCheckCtx *ctx, TessCheckResult *r,
         setr(r, TESS_WARN, "could not stat the probe file", "");
         return;
     }
+    /* Signed, deliberately. Which way round it is decides whether the trap is
+       benign or not: a tree clock BEHIND this host means files written from
+       elsewhere arrive looking older than binaries built here, and make skips
+       them silently. Ahead is merely untidy. Throwing the sign away hides the
+       difference, which an earlier version of this check did. */
     skew = stamp - now;
-    if (skew < 0) {
-        skew = -skew;
-    }
-    if (skew <= 30) {
-        sprintf(detail, "tree and local clock agree within %ld s", skew);
+    if (skew <= 30 && skew >= -30) {
+        sprintf(detail, "tree and local clock agree within %ld s", labs(skew));
         setr(r, TESS_PASS, detail, "");
         return;
     }
-    sprintf(detail, "tree clock differs from this host by %ld s", skew);
+    if (skew > 0) {
+        sprintf(detail, "tree clock is %ld s AHEAD of this host", skew);
+    } else {
+        sprintf(detail, "tree clock is %ld s BEHIND this host", -skew);
+    }
     setr(r, TESS_WARN, detail,
          "The filesystem holding the tree disagrees with this host's clock.\n"
          "That is what makes `make` skip edited files and report success.\n"
