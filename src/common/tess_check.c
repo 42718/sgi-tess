@@ -651,7 +651,11 @@ static void chk_clock(const TessCheckCtx *ctx, TessCheckResult *r,
        them silently. Ahead is merely untidy. Throwing the sign away hides the
        difference, which an earlier version of this check did. */
     skew = stamp - now;
-    if (skew <= 30 && skew >= -30) {
+    /* 2 s, not 0: time() and the mtime are both whole seconds, and the stat
+       follows the write, so a disciplined clock can still read 1 s out. lucy
+       on timeslave reads 0 s; it read 51 s before, and the old 30 s threshold
+       would have passed half that. */
+    if (skew <= 2 && skew >= -2) {
         sprintf(detail, "tree and local clock agree within %ld s", labs(skew));
         setr(r, TESS_PASS, detail, "");
         return;
@@ -664,9 +668,9 @@ static void chk_clock(const TessCheckCtx *ctx, TessCheckResult *r,
     setr(r, TESS_WARN, detail,
          "The filesystem holding the tree disagrees with this host's clock.\n"
          "That is what makes `make` skip edited files and report success.\n"
-         "Always use `gmake fresh` on this tree, and consider running NTP on\n"
-         "the SGIs and the file server so they agree:\n"
-         "    chkconfig timed on\n"
+         "Use `gmake fresh` on this tree until it is fixed. The fix is\n"
+         "timeslave against the file server, which is the time master:\n"
+         "doc/PLATFORM-FACTS.md, \"Clock synchronisation\".\n"
          "This is a warning, not a failure: `fresh` works around it.");
 }
 

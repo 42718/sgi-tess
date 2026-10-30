@@ -483,9 +483,10 @@ file holds before replacing it.
 ### Consequences for the build
 
 `tess-preflight`'s `clock` check compares **epochs**, so it is immune to `TZ` and
-measures the thing that actually breaks `make`. Its threshold is 30 seconds,
-which was chosen before any of the above was known and should be revisited now
-that a synchronised figure exists.
+measures the thing that actually breaks `make`. Its threshold is 2 seconds.
+It was 30, chosen before any of the above was known; lucy on `timeslave` then
+read 0 s (30 October 2026), and 2 rather than 0 allows for both sides being
+whole seconds.
 
 `gmake fresh` remains correct practice, but with the clocks disciplined it is
 belt-and-braces rather than load-bearing.

@@ -199,8 +199,8 @@ ignore the thing you built to be believed.
 
 ## Still open for the hardware owner
 
-Two of the three guesses are settled above. One is only half settled, and one
-new question appeared.
+Two of the three guesses are settled above. One is only half settled, and the
+clock question that appeared is now settled too.
 
 1. **`arrayd`, the negative case.** Lucy's Array Services was running, so the
    check passed. What `ainfo machines` does when `arrayd` is *down* is still
@@ -210,17 +210,17 @@ new question appeared.
    is the one nobody looks at. Settle it by stopping Array Services once
    (`/etc/init.d/array stop`) and running `tess-preflight`, then starting it
    again.
-2. **Is 30 seconds the right threshold for `clock`?** Lucy's 51 seconds is
-   **fixed** as of 29 October: the NFS server now serves the RFC-868 time
-   service and the SGIs run `timeslave` against it. The full account, with
-   measurements, is in
-   [PLATFORM-FACTS.md](PLATFORM-FACTS.md#clock-synchronisation).
-   The threshold was chosen before any of that was known, so once a settled
-   synchronised figure exists it should probably come down well below 30.
-   Note the check compares **epochs**, so it is immune to the `TZ` confusion
-   that made lucy look an hour out immediately afterwards: that was Europe
-   leaving CEST on 25 October, not a clock fault, and `date -u` on lucy was
-   correct throughout.
+2. **The `clock` threshold: settled at 2 seconds.** Lucy's 51 seconds was
+   fixed on 29 October: the NFS server serves the RFC-868 time service and the
+   SGIs run `timeslave` against it. The full account, with measurements, is in
+   [PLATFORM-FACTS.md](PLATFORM-FACTS.md#clock-synchronisation). On 30 October
+   lucy read `PASS clock tree and local clock agree within 0 s`, so the
+   threshold came down from 30, which was chosen before any of that was known.
+   It is 2 rather than 0 because the mtime and `time()` are both whole seconds.
+   The check compares **epochs**, so it is immune to the `TZ` confusion that
+   made lucy look an hour out immediately afterwards: that was Europe leaving
+   CEST on 25 October, not a clock fault, and `date -u` on lucy was correct
+   throughout.
 
 3. **arthur and aurora still need `timeslave`.** Only lucy has been done. Any
    machine that builds in the shared tree needs the same treatment, or the
