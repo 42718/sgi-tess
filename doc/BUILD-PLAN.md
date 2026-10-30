@@ -190,7 +190,13 @@ memory and CPU figures against `tess-probe -v` on each host.
   right for one host and proves the counters are live. The check this build
   is defined by, `TCP` nonzero and `GM` zero, needs a second host and waits
   for aurora.
-- Panel against `tess-probe -v`: not yet done.
+- Panel against `tess-probe -v`: cannot be done yet, because the panel has no
+  memory figure. CPU cannot disagree, since the panel's load column is the
+  probe's own `busy=` read over `arshell`. lucy's probe: 2560 MB total, 2328 MB
+  free via `sysget(SGT_RMINFO)`, busy 2.1 %.
+- Not built: the PCP read path (`pmFetch` for `hinv.*`, `kernel.all.load`,
+  `mem.freemem`). Nothing in `src/` links `libpcp`, so build 5's "Do" is not
+  finished, independent of aurora.
 
 ---
 
