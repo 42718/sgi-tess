@@ -989,6 +989,14 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                       XmNshadowThickness, 0,
                                       XmNmarginHeight, 0,
                                       XmNmarginWidth, 0, NULL);
+        /*
+         * The toggle is stripped to its indicator and given a fixed width
+         * that ends before the swatch. With Motif's default highlight,
+         * shadow, margins and label spacing it was some 30 pixels wide, so its
+         * backdrop ran under the colour chip at COL_SWATCH and the form pushed
+         * the row about to make room. Top and bottom attached so the
+         * indicator sits on the row's centre line with the labels.
+         */
         {
             XmString empty = XmStringCreateLocalized("");
 
@@ -1001,7 +1009,20 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                   XmNindicatorSize, 16,
                                                   XmNselectColor,
                                                   select_pixel(row),
+                                                  XmNhighlightThickness, 0,
+                                                  XmNshadowThickness, 0,
+                                                  XmNmarginWidth, 0,
+                                                  XmNmarginHeight, 0,
+                                                  XmNmarginLeft, 0,
+                                                  XmNmarginRight, 0,
+                                                  XmNspacing, 0,
+                                                  XmNwidth, COL_SWATCH - 4,
+                                                  XmNrecomputeSize, False,
                                                   XmNleftAttachment,
+                                                  XmATTACH_FORM,
+                                                  XmNtopAttachment,
+                                                  XmATTACH_FORM,
+                                                  XmNbottomAttachment,
                                                   XmATTACH_FORM,
                                                   NULL);
             XmStringFree(empty);
@@ -1029,6 +1050,10 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                                    XmNleftAttachment,
                                                    XmATTACH_FORM,
                                                    XmNleftOffset, COL_SWATCH,
+                                                   XmNtopAttachment,
+                                                   XmATTACH_POSITION,
+                                                   XmNtopPosition, 50,
+                                                   XmNtopOffset, -6,
                                                    NULL);
             XmStringFree(blank);
         }
