@@ -161,8 +161,10 @@ else
 endif
 endif
 
-$(UI): $(UI_SRCS) $(COMMON_SRCS) $(COMMON_HDRS) | $(BUILD)
-	$(CC) $(UI_CFLAGS) -o $@ $(UI_SRCS) $(COMMON_SRCS) $(UI_LIBS)
+$(UI): $(UI_SRCS) $(COMMON_SRCS) $(COMMON_HDRS) $(CHECK_SRC) $(INVENTORY_SRC) \
+       $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h | $(BUILD)
+	$(CC) $(UI_CFLAGS) -o $@ $(UI_SRCS) $(COMMON_SRCS) $(CHECK_SRC) \
+	  $(INVENTORY_SRC) $(UI_LIBS)
 
 fresh:
 	@$(MAKE) clean

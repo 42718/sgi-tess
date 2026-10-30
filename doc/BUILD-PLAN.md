@@ -168,12 +168,11 @@ is a real security difference, not a cosmetic one.
 
 **Do.** `MPI_SGI_stat_get()` in the master for per-transport byte counters, so
 the panel reports **which interconnect is carrying traffic** rather than which
-one was requested. Per-rank tiles/s, idle time, bytes. PCP read path via
-`pmFetch` for `hinv.*`, `kernel.all.load`, `mem.freemem`, with the
-`arshell`+`sysget` fallback already proven by `tess-probe`. Save as PPM and SGI
-`.rgb` from the GUI.
+one was requested. Per-rank tiles/s, idle time, bytes. Host CPU and memory
+from `tess-probe` over `arshell`. Save as PPM and SGI `.rgb` from the GUI.
 
-**Proves.** The panel and PCP cannot disagree, because they read one source.
+**Proves.** The panel and `tess-probe` cannot disagree, because the panel is
+`tess-probe`.
 Transport is measured, not assumed — the lesson from the GM work.
 
 **Delivers.** The performance monitoring half of the original goal: data flowing
@@ -194,9 +193,12 @@ memory and CPU figures against `tess-probe -v` on each host.
   memory figure. CPU cannot disagree, since the panel's load column is the
   probe's own `busy=` read over `arshell`. lucy's probe: 2560 MB total, 2328 MB
   free via `sysget(SGT_RMINFO)`, busy 2.1 %.
-- Not built: the PCP read path (`pmFetch` for `hinv.*`, `kernel.all.load`,
-  `mem.freemem`). Nothing in `src/` links `libpcp`, so build 5's "Do" is not
-  finished, independent of aurora.
+- PCP: dropped from this build, 30 October 2026. PCP already collects from
+  the array through its own agents, so Tess reading it back would duplicate
+  that for figures `tess-probe` already supplies. See "After the six".
+- Memory: a `free` column added, from the probe's `freekb=`, refreshed with
+  the load. The panel widened from 256 to 296 to fit it. Seen on lucy, and it
+  agrees with `tess-probe -v` because it is the same line.
 
 ---
 
@@ -230,5 +232,8 @@ The framework is done and the GM work has somewhere to live:
 - **MPT over GM, correctly.** The host table plus translation on send and
   receive inside libgm, which is the honest fix for the identity problem the
   `GM_MPT_NODE_ID` shim only papered over. Same document, last two sections.
+- **Tess reading PCP.** Dropped from build 5. PCP already gathers from the
+  array on its own; a reason to read it back here would be history or
+  `pmlogger` graphs in the panel, not current figures.
 
-Either is a good winter project. Neither blocks anything above.
+Any of them is a good winter project. None blocks anything above.

@@ -57,7 +57,8 @@
 #define COL_TYPE   100
 #define COL_CPU    140
 #define COL_LOAD   174
-#define COL_RANKS  210
+#define COL_FREE   210
+#define COL_RANKS  250
 
 struct TessCluster {
     Widget      frame;
@@ -66,7 +67,8 @@ struct TessCluster {
     Widget      ctype[TESS_MAX_HOSTS];    /* IP30, IP35 */
     Widget      ccpu[TESS_MAX_HOSTS];     /* computing/online */
     Widget      cload[TESS_MAX_HOSTS];    /* busy percentage */
-    Widget      cnote[TESS_MAX_HOSTS];    /* spans the three when unreachable */
+    Widget      cfree[TESS_MAX_HOSTS];    /* free memory, from the probe */
+    Widget      cnote[TESS_MAX_HOSTS];    /* spans the four when unreachable */
     Widget      rankf[TESS_MAX_HOSTS];
     Widget      onbox[TESS_MAX_HOSTS];
     Widget      swatch[TESS_MAX_HOSTS];
@@ -87,6 +89,7 @@ struct TessCluster {
     int         tries;
     int         relaunch;
     int         dirty;          /* config changed since the job started */
+    int         solo;           /* master and one worker share a CPU */
     int         stopstage;
     int         pollhost;       /* idle poll visits one host per tick */
     XtIntervalId stopt;
@@ -179,6 +182,18 @@ static int rank_to_host(TessCluster *c, int rank, int *cpu)
 {
     int i, base = 0;
 
+    /* A solo job launched two ranks on the display host whatever the rank
+       field says, so both of them are its: the master on cpu0, the worker
+       sharing it but labelled cpu1 like any other display-host worker. */
+    if (c->solo) {
+        if (rank < 0 || rank > 1) {
+            return -1;
+        }
+        if (cpu) {
+            *cpu = rank;
+        }
+        return 0;
+    }
     for (i = 0; i < c->nhosts; i++) {
         if (c->host[i].ranks <= 0) {
             continue;
@@ -265,6 +280,14 @@ static int field_int(const char *line, const char *key)
     return atoi(p + strlen(key));
 }
 
+/* Free memory, or -1 for a probe too old to send freekb=. */
+static long field_freekb(const char *line)
+{
+    const char *p = strstr(line, "freekb=");
+
+    return p ? atol(p + 7) : -1L;
+}
+
 static void probe_host(TessCluster *c, int i)
 {
     TessHost *h = &c->host[i];
@@ -275,6 +298,7 @@ static void probe_host(TessCluster *c, int i)
     h->arch[0] = '\0';
     h->cpus = 0;
     h->online = 0;
+    h->freekb = -1L;
     strcpy(h->note, "no answer");
 
     sprintf(cmd, "arshell %s uname -m 2>&1", h->name);
@@ -290,6 +314,12 @@ static void probe_host(TessCluster *c, int i)
         h->note[sizeof h->note - 1] = '\0';
         clog1(c, "probe: unexpected reply:");
         clog1(c, line);
+        if (strstr(line, "stty")) {
+            /* The shell startup files printed before the command ran. */
+            strcpy(h->note, "shell prints stty");
+            clog1(c, "probe: an unguarded stty in .cshrc or .login on that");
+            clog1(c, "probe: host. Wrap it: if ( $?prompt ) stty ...");
+        }
         return;
     }
     strncpy(h->arch, line, sizeof h->arch - 1);
@@ -312,6 +342,7 @@ static void probe_host(TessCluster *c, int i)
     }
     h->cpus = field_int(line, "cpus=");
     h->online = field_int(line, "online=");
+    h->freekb = field_freekb(line);
     {
         const char *lp = strstr(line, "busy=");
 
@@ -386,6 +417,7 @@ static void refresh_rows(TessCluster *c)
                 XtManageChild(c->ctype[i]);
                 XtManageChild(c->ccpu[i]);
                 XtManageChild(c->cload[i]);
+                XtManageChild(c->cfree[i]);
 
                 set_label(c->ctype[i],
                           c->host[i].arch[0] ? c->host[i].arch : "-");
@@ -397,10 +429,20 @@ static void refresh_rows(TessCluster *c)
                     strcpy(buf, "-");
                 }
                 set_label(c->cload[i], buf);
+                /* GB, one decimal: lucy reads 2.3G, a full aurora two
+                   digits, and both fit the column. */
+                if (c->host[i].freekb >= 0L) {
+                    sprintf(buf, "%.1fG",
+                            (double)c->host[i].freekb / (1024.0 * 1024.0));
+                } else {
+                    strcpy(buf, "-");
+                }
+                set_label(c->cfree[i], buf);
             } else {
                 XtUnmanageChild(c->ctype[i]);
                 XtUnmanageChild(c->ccpu[i]);
                 XtUnmanageChild(c->cload[i]);
+                XtUnmanageChild(c->cfree[i]);
                 XtManageChild(c->cnote[i]);
                 set_label(c->cnote[i], c->host[i].note);
             }
@@ -456,6 +498,7 @@ static void refresh_rows(TessCluster *c)
             XtSetSensitive(c->ctype[i], on);
             XtSetSensitive(c->ccpu[i], on);
             XtSetSensitive(c->cload[i], on);
+            XtSetSensitive(c->cfree[i], on);
             XtSetSensitive(c->cnote[i], on);
             XtSetSensitive(c->rankf[i], on);
         }
@@ -540,6 +583,9 @@ static void probe_load_only(TessCluster *c, int i)
         h->load = -1.0;
         return;
     }
+    /* Free memory rides on the same line, so it refreshes with the load and
+       the panel cannot disagree with tess-probe: it is tess-probe. */
+    h->freekb = field_freekb(line);
     lp = strstr(line, "busy=");
     if (!lp) {
         if (h->load >= 0.0) {
@@ -655,7 +701,7 @@ static void poll_cb(XtPointer cd, XtIntervalId *id)
      */
     c->tries++;
     if (c->ready && c->ready(c->ctx, c->port, c->nonce) == 0) {
-        set_state(c, "running");
+        set_state(c, c->solo ? "running, one CPU shared" : "running");
         clog(c, "attached to the master on port %s%d", "", c->port);
         return;
     }
@@ -673,7 +719,7 @@ void tess_cluster_launch(TessCluster *c)
     char spec[TESS_MAX_HOSTS][512];
     char ranks[TESS_MAX_HOSTS][16];
     char portstr[16];
-    int argc, i, groups, ranks_here;
+    int argc, i, groups, ranks_here, workers;
 
     /*
      * Start means apply. A change to the host set or the rank counts only
@@ -700,6 +746,33 @@ void tess_cluster_launch(TessCluster *c)
     make_nonce(c->nonce);
     sprintf(portstr, "%d", c->port);
 
+    /*
+     * Count the ranks that would compute. With none - a single-CPU box on its
+     * own, or every other host unticked - the master would hand out tiles to
+     * nobody and the window would stay black. Run one worker beside the master
+     * on the display host instead, sharing its CPU, so Tess still works as a
+     * Mandelbrot demo on one machine. The master polls and sleeps rather than
+     * spinning (tess_node.c, wait_for_any), so the worker gets the CPU.
+     */
+    workers = 0;
+    for (i = 0; i < c->nhosts; i++) {
+        if (!c->host[i].reachable) {
+            continue;
+        }
+        if (i == 0) {
+            if (c->host[i].enabled && c->host[i].ranks > 1) {
+                workers += c->host[i].ranks - 1;
+            }
+        } else if (c->host[i].enabled && c->host[i].ranks > 0) {
+            workers += c->host[i].ranks;
+        }
+    }
+    c->solo = (workers == 0);
+    if (c->solo) {
+        clog1(c, "warning: no CPU left to compute, so the master and one");
+        clog1(c, "worker share this host's CPU. Slow, but it renders.");
+    }
+
     argc = 0;
     argv[argc++] = "mpirun";
     argv[argc++] = "-d";
@@ -717,6 +790,9 @@ void tess_cluster_launch(TessCluster *c)
              */
             if (!c->host[i].enabled || ranks_here < 1) {
                 ranks_here = 1;
+            }
+            if (c->solo) {
+                ranks_here = 2;
             }
         } else if (!c->host[i].enabled || !c->host[i].reachable ||
                    ranks_here <= 0) {
@@ -981,6 +1057,7 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
         grid_label(hdr, "type", COL_TYPE);
         grid_label(hdr, "cpu", COL_CPU);
         grid_label(hdr, "load", COL_LOAD);
+        grid_label(hdr, "free", COL_FREE);
         grid_label(hdr, "ranks", COL_RANKS);
     }
 
@@ -1061,6 +1138,7 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
         c->ctype[i] = grid_label(row, "cell", COL_TYPE);
         c->ccpu[i]  = grid_label(row, "cell", COL_CPU);
         c->cload[i] = grid_label(row, "cell", COL_LOAD);
+        c->cfree[i] = grid_label(row, "cell", COL_FREE);
         /* Unreachable: one message where the numbers would be, which is worth
            more than three empty cells. Managed instead of them. */
         c->cnote[i] = grid_label(row, "cell", COL_TYPE);

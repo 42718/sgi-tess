@@ -18,7 +18,7 @@ inventory: asking the same question more than one way is how the answers drift.
 | `src/common/tess_check.c` | the checks and their remedies | libc |
 | `tess-preflight` | prints them, on any host and over `arshell` | libc |
 | `tess-setup` | the Motif wizard over the same checks | Motif, X |
-| `tess-ui` | a RAG light over the cheap subset | already Motif |
+| `tess-ui` | runs the checks as it starts, in its own window | already Motif |
 
 **The text tool exists because the Motif one cannot do its job.** A wizard that
 needs Motif and a working X server cannot tell you that your Motif or your X
@@ -26,9 +26,14 @@ server is the problem, and it cannot run over `arshell` on a compute host that
 has no display at all. So the checks live below both, and the wizard is a
 front end rather than the thing itself.
 
-`tess-setup` and the `tess-ui` indicator are **not built yet**. This document
-describes all three so the check list can be reviewed once; the two Motif
-pieces follow after `tess-preflight` has been run on real hardware.
+`tess-setup` is **not built**. `tess-ui` runs the checks at startup
+(`src/ui/tess_startcheck.c`, 30 October 2026): a window opens over the render
+window and fills in one check at a time. All green, it says so and closes
+itself after 60 seconds, counting down on its **Close** button. Anything amber or red, it stays open and
+lists the remedy for each, in the order to fix them, with **Recheck** and
+**Close**. The report is selectable text, so a remedy can be pasted into a
+terminal. It does not run with `-attach`, where the master already holds the
+port and the port check would fail on the very thing being attached to.
 
 ## Running it
 
@@ -144,12 +149,12 @@ row and for the whole list, because the point of a wizard is the loop: fix,
 recheck, watch it go green. Then the cluster tests above, run in order, each one
 unlocking the next.
 
-**The `tess-ui` indicator.** A single light in the existing cluster panel
-showing the worst status from the cheap subset, so you can see at a glance
-whether a failed render is your fault or the machine's, and a button that
-launches `tess-setup`. The expensive checks — the probe, the clock file, the
-cluster tests — do not belong on a timer, so the indicator runs the cheap ones
-and says when it last ran the rest.
+**The cluster tests in `tess-ui`.** The startup window runs the single-host
+checks only. The cluster tests above need every host up, and one powered-off
+host would hold the window open on an `arshell` timeout. The first of them is
+the one that has bitten twice: `arshell <host> true` must print nothing, or an
+unguarded `stty` in the shell startup files corrupts every reply. Until it is
+a check, the cluster panel recognises that reply and says so.
 
 ## What lucy actually reported, 29 October 2026
 

@@ -29,6 +29,7 @@ typedef struct TessHost {
     int  enabled;                  /* unticked: contributes nothing */
     int  reachable;
     double load;                   /* 1-minute average, -1 unknown */
+    long freekb;                   /* free memory from the probe, -1 unknown */
     char note[64];
 } TessHost;
 

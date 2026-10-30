@@ -49,8 +49,9 @@
 
 #include "tess_params.h"
 #include "tess_cluster.h"
+#include "tess_startcheck.h"
 
-#define TESS_CTRL_W 256      /* control window width */
+#define TESS_CTRL_W 296      /* control window width: 40 more for "free" */
 #define TESS_GAP    8
 #define TESS_DECOR  14       /* window manager border and frame, per window */
 #define TESS_USE    0.90     /* share of the screen width both windows take */
@@ -2035,6 +2036,12 @@ int main(int argc, char **argv)
             sprintf(msg, "idle - Rescan, then Launch");
         }
         set_status(&u, msg);
+        /* Not with -attach: a master already running holds the port, and
+           the port check would fail on the very thing being attached to. */
+        if (!u.attach) {
+            tess_startcheck_run(u.toplevel, u.tree, port, ui_log_cb,
+                                (void *)&u);
+        }
         tess_cluster_rescan(u.cl);
     } else {
         {
