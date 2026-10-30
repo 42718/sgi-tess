@@ -183,6 +183,15 @@ back from the array nodes to lucy and being displayed.
 `_GM` is zero. Save a `.rgb` and open it in `imgview`. Compare the panel's
 memory and CPU figures against `tess-probe -v` on each host.
 
+**Status, 30 October 2026, lucy only (aurora powered off).**
+
+- Save: done. The `.rgb` opens in `imgview` and matches the screen.
+- Transport: a lucy-only job reads `transport: shared memory 86 KB`, which is
+  right for one host and proves the counters are live. The check this build
+  is defined by, `TCP` nonzero and `GM` zero, needs a second host and waits
+  for aurora.
+- Panel against `tess-probe -v`: not yet done.
+
 ---
 
 ## Build 6 — Prove it is a framework, and cut the seam
