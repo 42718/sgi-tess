@@ -3,3 +3,10 @@ design/capture.html
 
 # per-architecture build output: IP27, IP30, IP35, arm64
 build/
+
+# MIPSpro leaves an object per source in the current directory when it
+# compiles several sources in one command, as the UI and node builds do
+*.o
+
+# a captured tess-preflight run, scratch
+preflight.out
