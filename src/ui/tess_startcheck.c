@@ -13,6 +13,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <Xm/Xm.h>
@@ -32,6 +33,7 @@ typedef struct StartCheck {
     Widget          summary;
     Widget          text;
     Widget          closeb;
+    Widget          quitb;     /* live only when something failed */
     int             left;      /* seconds until "all green" closes itself */
     XtAppContext    app;
     TessCheckCtx    ctx;
@@ -133,6 +135,10 @@ static void sc_finish(void)
         return;
     }
 
+    /* A failure usually means the UI cannot work as started - not root is
+       the common one - and the fix is to quit, fix, and start again. A
+       warning leaves it usable, so Quit stays ghosted for those. */
+    XtSetSensitive(sc.quitb, fails > 0);
     sprintf(line, "%d failed, %d warning(s). Fix them in this order, then "
             "Recheck", fails, warns);
     sc_summary(line, fails ? "#c0504d" : "#d9a33a");
@@ -186,6 +192,7 @@ static void sc_start(void)
         sc.closet = 0;
     }
     close_label("Close");
+    XtSetSensitive(sc.quitb, False);
     XmTextSetString(sc.text, "");
     sc.n = tess_check_count();
     if (sc.n > SC_MAX) {
@@ -206,12 +213,19 @@ static void close_cb(Widget w, XtPointer cd, XtPointer cb)
     sc_close();
 }
 
+/* Only reachable after a failed check, before anything has been launched in
+   the normal course, so there is no job to take down first. */
+static void quit_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    exit(1);
+}
+
 void tess_startcheck_run(Widget parent, const char *tree, int port,
                          void (*logf)(void *, const char *), void *logctx)
 {
     Arg args[4];
     int n;
-    Widget buttons, recheck, close;
+    Widget buttons, recheck, close, quit;
     XmString title;
 
     if (sc.dialog) {
@@ -259,8 +273,16 @@ void tess_startcheck_run(Widget parent, const char *tree, int port,
                                       XmNrightWidget, close,
                                       XmNrightOffset, 6,
                                       NULL);
+    quit = XtVaCreateManagedWidget("Quit", xmPushButtonWidgetClass, buttons,
+                                   XmNrightAttachment, XmATTACH_WIDGET,
+                                   XmNrightWidget, recheck,
+                                   XmNrightOffset, 6,
+                                   XmNsensitive, False,
+                                   NULL);
     sc.closeb = close;
+    sc.quitb = quit;
     XtAddCallback(close, XmNactivateCallback, close_cb, (XtPointer)0);
+    XtAddCallback(quit, XmNactivateCallback, quit_cb, (XtPointer)0);
     XtAddCallback(recheck, XmNactivateCallback, recheck_cb, (XtPointer)0);
 
     /* Named "log" so it takes the fixed-width face the UI's log pane uses,

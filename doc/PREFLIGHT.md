@@ -31,7 +31,8 @@ front end rather than the thing itself.
 window and fills in one check at a time. All green, it says so and closes
 itself after 60 seconds, counting down on its **Close** button. Anything amber or red, it stays open and
 lists the remedy for each, in the order to fix them, with **Recheck** and
-**Close**. The report is selectable text, so a remedy can be pasted into a
+**Close**, and a **Quit** that is ghosted unless a check failed: a failure such
+as not running as root means quitting and starting again anyway. The report is selectable text, so a remedy can be pasted into a
 terminal. It does not run with `-attach`, where the master already holds the
 port and the port check would fail on the very thing being attached to.
 
