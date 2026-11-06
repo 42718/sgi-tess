@@ -458,6 +458,15 @@ Evidence it worked, from lucy's `/var/adm/SYSLOG`:
 timeslave[1626] date changed from 10/29/26 14:24:58
 ```
 
+And from aurora's, on 6 November, where the clock had run 611 s fast:
+
+```
+Nov  6 14:15:32 5D:aurora timeslave[2198]: date changed from 11/06/26 14:25:43
+```
+
+Both stepped at once rather than slewing, and both then read 0 s in the
+`clock` check. arthur is not done.
+
 ### The one-hour trap that is not a clock problem
 
 Immediately after `timeslave` corrected lucy, it read exactly one hour off.

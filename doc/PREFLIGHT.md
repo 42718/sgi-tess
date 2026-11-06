@@ -228,7 +228,9 @@ clock question that appeared is now settled too.
    CEST on 25 October, not a clock fault, and `date -u` on lucy was correct
    throughout.
 
-3. **arthur and aurora still need `timeslave`.** Only lucy has been done. Any
-   machine that builds in the shared tree needs the same treatment, or the
-   `stale` check is comparing mtimes written by a disciplined clock against
-   binaries built by an undisciplined one.
+3. **arthur still needs `timeslave`.** lucy was done on 29 October and aurora
+   on 6 November. aurora was 611 s fast, in the direction that makes `make`
+   skip edits: its preflight read `tree clock is 611 s BEHIND this host`, then
+   `timeslave` logged `date changed from 11/06/26 14:25:43` at 14:15:32 and
+   the check read 0 s. arthur builds in the shared tree too, so it needs the
+   same before it joins the array.
