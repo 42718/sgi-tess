@@ -205,7 +205,8 @@ memory and CPU figures against `tess-probe -v` on each host.
 - PCP: dropped from this build, 30 October 2026. PCP already collects from
   the array through its own agents, so Tess reading it back would duplicate
   that for figures `tess-probe` already supplies. See "After the six".
-- aurora's row and `tess-probe -v` agree: 4 CPUs, 3.8 GB free.
+- aurora's probe reads 4 CPUs online and 3.8 GB free. Its row in the panel
+  was not read back, so that comparison is the one loose end.
 - Memory: a `free` column added, from the probe's `freekb=`, refreshed with
   the load. The panel widened from 256 to 296 to fit it. Seen on lucy, and it
   agrees with `tess-probe -v` because it is the same line.
