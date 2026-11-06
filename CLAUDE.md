@@ -1,6 +1,6 @@
 # Tess — distributed render framework for IRIX
 
-**Status: builds 1-4 closed, build 5 in progress.** `tess-probe`, `tess-node` and `tess-ui`
+**Status: builds 1-5 closed, build 6 next.** `tess-probe`, `tess-node` and `tess-ui`
 all exist and render across lucy and aurora over TCP, byte-identical on both architectures;
 see `doc/BUILD-PLAN.md` for what each build closed and what remains. `baseline/` holds the
 2001-era originals this replaces; `tools/` holds small probes; `src/` holds the real tree.

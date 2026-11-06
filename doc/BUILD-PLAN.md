@@ -164,7 +164,7 @@ is a real security difference, not a cosmetic one.
 
 ---
 
-## Build 5 — Telemetry: what the cluster is actually doing
+## Build 5 — Telemetry: what the cluster is actually doing — **CLOSED 6 November 2026**
 
 **Do.** `MPI_SGI_stat_get()` in the master for per-transport byte counters, so
 the panel reports **which interconnect is carrying traffic** rather than which
@@ -186,9 +186,18 @@ memory and CPU figures against `tess-probe -v` on each host.
 
 - Save: done. The `.rgb` opens in `imgview` and matches the screen.
 - Transport: a lucy-only job reads `transport: shared memory 86 KB`, which is
-  right for one host and proves the counters are live. The check this build
-  is defined by, `TCP` nonzero and `GM` zero, needs a second host and waits
-  for aurora.
+  right for one host and proves the counters are live.
+- **Transport, closed 6 November**, lucy and aurora with Myrinet disconnected:
+  `transport: TCP 59 KB`. TCP is nonzero, and GM cannot be anything else but
+  zero with the cable out, though the panel names only the largest counter
+  and does not print it.
+- **What that number is.** 59 KB is small for a frame because it is only what
+  the master *sent*: `MPI_SGI_stat(3)` counts "bytes sent", by the calling
+  process, including MPT's own acknowledgements. The master sends tile
+  assignments; the pixels coming back from aurora are counted on aurora's
+  ranks, which do not report them. So the line answers "which fabric", which
+  is what this build asked, and not "how much traffic". Making it the second
+  would mean each worker sending its counters with its last tile.
 - Panel against `tess-probe -v`: cannot be done yet, because the panel has no
   memory figure. CPU cannot disagree, since the panel's load column is the
   probe's own `busy=` read over `arshell`. lucy's probe: 2560 MB total, 2328 MB
@@ -196,6 +205,7 @@ memory and CPU figures against `tess-probe -v` on each host.
 - PCP: dropped from this build, 30 October 2026. PCP already collects from
   the array through its own agents, so Tess reading it back would duplicate
   that for figures `tess-probe` already supplies. See "After the six".
+- aurora's row and `tess-probe -v` agree: 4 CPUs, 3.8 GB free.
 - Memory: a `free` column added, from the probe's `freekb=`, refreshed with
   the load. The panel widened from 256 to 296 to fit it. Seen on lucy, and it
   agrees with `tess-probe -v` because it is the same line.

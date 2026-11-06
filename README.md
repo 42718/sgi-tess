@@ -15,8 +15,8 @@ prefetch pipeline, and a two-window Motif UI, all running across a small heterog
 MIPS cluster over MPI.
 
 **Status: it renders.** `tess-probe`, `tess-node` and `tess-ui` all exist and draw a frame
-across lucy and aurora over MPI, byte-identical on both architectures. Builds 1 to 4 of
-`doc/BUILD-PLAN.md` are closed; build 5 is in progress. `doc/DESIGN.md` remains the
+across lucy and aurora over MPI, byte-identical on both architectures. Builds 1 to 5 of
+`doc/BUILD-PLAN.md` are closed; build 6 is next. `doc/DESIGN.md` remains the
 contract.
 
 **[doc/DEPLOY.md](doc/DEPLOY.md) is the deployment guide**: what you need, how to get the
