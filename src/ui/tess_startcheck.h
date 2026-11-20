@@ -7,9 +7,11 @@
  * Anything amber or red: it stays, and lists what to do about each one, in
  * the order to do it, with a Recheck button for the fix-and-look loop.
  *
- * This is the cheap half of what PREFLIGHT.md planned as tess-setup plus a
- * light in the panel. The cluster-wide tests are not here: they need every
- * host up, and a powered-off aurora would hold the window open on a timeout.
+ * Then each host in hostlist, all at once and in the background: answering
+ * through Array Services without stray output, the shared tree there, a
+ * build of this version for its architecture, its clock against the share,
+ * and no tess-node left running. A host that does not answer in time is a
+ * SKIP, so a powered-off machine never holds the window open.
  *
  * C89, Motif 2.1.
  */
@@ -20,6 +22,7 @@
 #include <Xm/Xm.h>
 
 void tess_startcheck_run(Widget parent, const char *tree, int port,
+                         const char *hostlist,
                          void (*logf)(void *, const char *), void *logctx);
 
 #endif /* TESS_STARTCHECK_H */

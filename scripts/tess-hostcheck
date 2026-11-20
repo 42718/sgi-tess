@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# tess-hostcheck - what tess-ui needs to know about one cluster host.
+#
+# tess-ui runs this on every configured host as it starts, over Array
+# Services, and reads the answer. One fact per line, after a header line, so
+# anything a login file prints arrives before the header and is caught:
+#
+#   arshell aurora sh /cluster/dev/sgi-tess/scripts/tess-hostcheck /cluster/dev/sgi-tess
+#
+#   tess-hostcheck 1
+#   arch  IP35
+#   tree  ok
+#   build 1.0-rc1
+#   clock PASS  clock        tree and local clock agree within 0 s
+#   nodes 0
+#
+# Read-only. Bourne shell, no GNU tools.
+
+TREE=$1
+ARCH=`uname -m`
+
+echo "tess-hostcheck 1"
+echo "arch  $ARCH"
+if [ -z "$TREE" ] || [ ! -d "$TREE/build" ]; then
+    echo "tree  missing"
+    exit 0
+fi
+echo "tree  ok"
+
+ver=`$TREE/build/$ARCH/tess-node -version 2>/dev/null | awk '{ print $2 }'`
+echo "build ${ver:-none}"
+
+if [ -x $TREE/build/$ARCH/tess-preflight ]; then
+    c=`$TREE/build/$ARCH/tess-preflight -tree $TREE -only clock -q 2>/dev/null |
+        grep '^[A-Z][A-Z]*  *clock' | sed -n 1p`
+    echo "clock ${c:-unknown}"
+fi
+
+echo "nodes `ps -e | grep -c ' tess-node *$'`"

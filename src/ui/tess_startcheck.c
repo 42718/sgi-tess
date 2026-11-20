@@ -9,12 +9,22 @@
  * The report is a read-only text field rather than a row of labels, so a
  * remedy can be selected and pasted into a terminal.
  *
+ * After this host's checks, the cluster: every configured host is asked at
+ * once, in the background, through scripts/tess-hostcheck over arshell, and
+ * gets SC_HOST_S seconds to answer. A host that does not answer is a SKIP,
+ * not a failure, because a powered-off aurora or arthur is normal here and
+ * must not hold the window open.
+ *
  * C89, Motif 2.1.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include <Xm/Xm.h>
 /* after Xm.h, which pulls in Intrinsic.h: Shell.h needs externalref */
@@ -27,9 +37,21 @@
 
 #include "tess_check.h"
 #include "tess_startcheck.h"
+#include "tess_version.h"
 
-#define SC_MAX      32
+#define SC_MAX      40
 #define SC_CLOSE_S  60         /* how long "all green" stays up, seconds */
+#define SC_HOSTS    8
+#define SC_HOST_S   20         /* how long a host gets to answer, seconds */
+
+typedef struct HostRun {
+    char   name[64];
+    char   out[64];            /* where its answer is collected */
+    pid_t  pid;
+    int    done;
+    int    timedout;
+    int    status;
+} HostRun;
 
 typedef struct StartCheck {
     Widget          dialog;
@@ -46,6 +68,11 @@ typedef struct StartCheck {
     XtIntervalId    closet;
     void          (*logf)(void *, const char *);
     void           *logctx;
+    char            hostlist[256];
+    HostRun         host[SC_HOSTS];
+    int             nhosts;
+    int             hostticks;
+    XtIntervalId    hostt;     /* set while hosts are being asked */
 } StartCheck;
 
 /* One window per process, so one of these. */
@@ -118,18 +145,26 @@ static void close_timeout_cb(XtPointer cd, XtIntervalId *id)
 static void sc_finish(void)
 {
     char line[160];
-    int i, fails = 0, warns = 0;
+    int i, fails = 0, warns = 0, skips = 0;
 
     for (i = 0; i < sc.n; i++) {
         if (sc.res[i].status == TESS_FAIL) {
             fails++;
         } else if (sc.res[i].status == TESS_WARN) {
             warns++;
+        } else if (sc.res[i].status == TESS_SKIP) {
+            skips++;
         }
     }
 
     if (fails == 0 && warns == 0) {
-        sprintf(line, "All %d checks passed", sc.n);
+        if (skips > 0) {
+            /* With nothing failing, a skip is a host that did not answer. */
+            sprintf(line, "All %d checks passed; %d host(s) did not answer",
+                    sc.n - skips, skips);
+        } else {
+            sprintf(line, "All %d checks passed", sc.n);
+        }
         sc_summary(line, "#5f9e4a");
         sprintf(line, "preflight: all %d checks passed", sc.n);
         sc_log(line);
@@ -169,12 +204,268 @@ static void sc_finish(void)
     XmTextShowPosition(sc.text, 0);
 }
 
+/* Stop any host still being asked, and forget them: Recheck, or a close. */
+static void hosts_stop(void)
+{
+    int i, st;
+
+    if (sc.hostt) {
+        XtRemoveTimeOut(sc.hostt);
+        sc.hostt = 0;
+    }
+    for (i = 0; i < sc.nhosts; i++) {
+        if (!sc.host[i].done && sc.host[i].pid > 0) {
+            kill(-sc.host[i].pid, SIGKILL);
+            waitpid(sc.host[i].pid, &st, 0);
+        }
+        unlink(sc.host[i].out);
+    }
+    sc.nhosts = 0;
+}
+
+/* Add to a result: worse status wins, remedies accumulate. */
+static void note(TessCheckResult *r, int status, const char *detail,
+                 const char *remedy)
+{
+    if (status > r->status) {
+        r->status = status;
+    }
+    if (detail && *detail) {
+        if (r->detail[0]) {
+            strncat(r->detail, "; ",
+                    sizeof r->detail - strlen(r->detail) - 1);
+        }
+        strncat(r->detail, detail, sizeof r->detail - strlen(r->detail) - 1);
+    }
+    if (remedy && *remedy) {
+        strncat(r->remedy, remedy, sizeof r->remedy - strlen(r->remedy) - 1);
+        strncat(r->remedy, "\n", sizeof r->remedy - strlen(r->remedy) - 1);
+    }
+}
+
+/* Turn one host's answer into a result line. */
+static void host_result(HostRun *h, TessCheckResult *r)
+{
+    FILE *f;
+    char line[256], key[16], val[200], arch[16], tmp[400];
+    int header = 0, clockok = 0, n;
+
+    memset((char *)r, 0, sizeof *r);
+    strncpy(r->id, h->name, sizeof r->id - 1);
+    sprintf(r->title, "cluster host %.24s", h->name);
+    r->status = TESS_PASS;
+    arch[0] = '\0';
+
+    if (h->timedout) {
+        r->status = TESS_SKIP;
+        sprintf(r->detail, "no answer in %d s: powered off?", SC_HOST_S);
+        return;
+    }
+    f = fopen(h->out, "r");
+    if (!f) {
+        note(r, TESS_FAIL, "no answer collected", "");
+        return;
+    }
+    while (fgets(line, sizeof line, f)) {
+        n = (int)strlen(line);
+        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
+            line[--n] = '\0';
+        }
+        if (!header) {
+            if (strcmp(line, "tess-hostcheck 1") == 0) {
+                header = 1;
+            } else if (strstr(line, "asrcmdv failed")) {
+                /* arshell's own message when the other arrayd does not
+                   answer, a powered-off host among them: not login noise */
+                r->status = TESS_SKIP;
+                sprintf(r->detail, "no answer: powered off? (%.120s)", line);
+                fclose(f);
+                return;
+            } else if (line[0]) {
+                sprintf(tmp, "prints \"%.60s\" before anything", line);
+                note(r, TESS_FAIL, tmp,
+                     "Output from a login file breaks every mpirun launch.\n"
+                     "Usually an unguarded stty in that host's /.cshrc:\n"
+                     "    if ( $?prompt ) stty intr ^C\n"
+                     "Its own text above says which. doc/MPI-HELLO.md, trap 2.");
+                break;
+            }
+            continue;
+        }
+        key[0] = val[0] = '\0';
+        if (sscanf(line, "%15s %199[^\n]", key, val) < 1) {
+            continue;
+        }
+        if (strcmp(key, "arch") == 0) {
+            strncpy(arch, val, sizeof arch - 1);
+            arch[sizeof arch - 1] = '\0';
+        } else if (strcmp(key, "tree") == 0 && strcmp(val, "ok") != 0) {
+            sprintf(tmp, "%.40s has no %.100s", h->name, sc.ctx.tree);
+            note(r, TESS_FAIL, tmp,
+                 "Mount the share there at the same path as on this host.");
+        } else if (strcmp(key, "build") == 0) {
+            if (strcmp(val, "none") == 0) {
+                sprintf(tmp, "no %s build", arch);
+                note(r, TESS_FAIL, tmp, "");
+                sprintf(tmp, "Build it there:\n    arshell %.40s \"cd %.150s ; "
+                        "gmake fresh\"", h->name, sc.ctx.tree);
+                note(r, TESS_FAIL, "", tmp);
+            } else if (strcmp(val, TESS_VERSION) != 0) {
+                sprintf(tmp, "%s build is %.30s, this UI %s", arch, val,
+                        TESS_VERSION);
+                note(r, TESS_WARN, tmp, "");
+                sprintf(tmp, "Rebuild it there so both run one version:\n"
+                        "    arshell %.40s \"cd %.150s ; gmake fresh\"",
+                        h->name, sc.ctx.tree);
+                note(r, TESS_WARN, "", tmp);
+            }
+        } else if (strcmp(key, "clock") == 0 && strncmp(val, "PASS", 4) == 0) {
+            clockok = 1;
+        } else if (strcmp(key, "clock") == 0 && strcmp(val, "unknown") != 0) {
+            /* tess-preflight's line is "FAIL  clock  <what>": keep <what> */
+            char *w = val;
+            int k;
+
+            for (k = 0; k < 2; k++) {
+                while (*w && *w != ' ') {
+                    w++;
+                }
+                while (*w == ' ') {
+                    w++;
+                }
+            }
+            sprintf(tmp, "clock: %.120s", *w ? w : val);
+            note(r, TESS_WARN, tmp,
+                 "Its clock and the share's disagree, so make there can skip\n"
+                 "edited files. timeslave against the file server: INSTALL.md,\n"
+                 "section 2.");
+        } else if (strcmp(key, "nodes") == 0 && atoi(val) > 0) {
+            sprintf(tmp, "%d tess-node already running", atoi(val));
+            note(r, TESS_WARN, tmp, "");
+            sprintf(tmp, "Left from an earlier job, or another UI's. If no "
+                    "job should be running:\n    arshell %.40s killall "
+                    "tess-node", h->name);
+            note(r, TESS_WARN, "", tmp);
+        }
+    }
+    fclose(f);
+    if (!header && r->status == TESS_PASS) {
+        sprintf(tmp, "arshell gave nothing back (status %d)",
+                WIFEXITED(h->status) ? WEXITSTATUS(h->status) : -1);
+        note(r, TESS_FAIL, tmp,
+             "Array Services did not run the check there. As root:\n"
+             "    array uptime\n"
+             "should answer from every host. scripts/tess-setup on that host\n"
+             "says what is missing.");
+    }
+    if (r->status == TESS_PASS) {
+        sprintf(r->detail, "%s, %s, %s", arch[0] ? arch : "?", TESS_VERSION,
+                clockok ? "clock agrees" : "clock not checked");
+    }
+}
+
+static void sc_finish(void);
+
+/* Every quarter second until each host has answered or run out of time. */
+static void hosts_poll_cb(XtPointer cd, XtIntervalId *id)
+{
+    char line[TESS_CHECK_DETAILLEN + 64];
+    int i, st, left = 0;
+
+    sc.hostt = 0;
+    sc.hostticks++;
+    for (i = 0; i < sc.nhosts; i++) {
+        HostRun *h = &sc.host[i];
+
+        if (h->done) {
+            continue;
+        }
+        if (waitpid(h->pid, &st, WNOHANG) == h->pid) {
+            h->done = 1;
+            h->status = st;
+        } else if (sc.hostticks >= SC_HOST_S * 4) {
+            kill(-h->pid, SIGKILL);
+            waitpid(h->pid, &st, 0);
+            h->done = 1;
+            h->timedout = 1;
+        } else {
+            left++;
+        }
+    }
+    if (left > 0) {
+        sc.hostt = XtAppAddTimeOut(sc.app, 250, hosts_poll_cb, (XtPointer)0);
+        return;
+    }
+
+    for (i = 0; i < sc.nhosts && sc.n < SC_MAX; i++) {
+        host_result(&sc.host[i], &sc.res[sc.n]);
+        unlink(sc.host[i].out);
+        sprintf(line, "%-4s  %-8s %s\n",
+                tess_check_status_name(sc.res[sc.n].status),
+                sc.res[sc.n].id, sc.res[sc.n].detail);
+        sc_append(line);
+        sc.n++;
+    }
+    sc.nhosts = 0;
+    sc_finish();
+}
+
+/* Ask every configured host at once. 0 if there were none to ask. */
+static int hosts_start(void)
+{
+    char list[256], cmd[1024], line[160];
+    char *p, *q;
+    pid_t pid;
+
+    strncpy(list, sc.hostlist, sizeof list - 1);
+    list[sizeof list - 1] = '\0';
+    sc.nhosts = 0;
+    sc.hostticks = 0;
+    for (p = list; p && *p && sc.nhosts < SC_HOSTS; p = q ? q + 1 : q) {
+        HostRun *h = &sc.host[sc.nhosts];
+
+        q = strchr(p, ',');
+        if (q) {
+            *q = '\0';
+        }
+        if (!*p) {
+            continue;
+        }
+        memset((char *)h, 0, sizeof *h);
+        strncpy(h->name, p, sizeof h->name - 1);
+        sprintf(h->out, "/tmp/tess-hc.%d.%d", (int)getpid(), sc.nhosts);
+        sprintf(cmd, "arshell %.60s sh %.300s/scripts/tess-hostcheck %.300s "
+                "> %s 2>&1", h->name, sc.ctx.tree, sc.ctx.tree, h->out);
+        pid = fork();
+        if (pid < 0) {
+            continue;
+        }
+        if (pid == 0) {
+            setpgid(0, 0);      /* so a timeout takes arshell down too */
+            execl("/bin/sh", "sh", "-c", cmd, (char *)0);
+            _exit(127);
+        }
+        h->pid = pid;
+        sc.nhosts++;
+    }
+    if (sc.nhosts == 0) {
+        return 0;
+    }
+    sprintf(line, "Asking %d cluster host(s), up to %d s", sc.nhosts,
+            SC_HOST_S);
+    sc_summary(line, (const char *)0);
+    sc.hostt = XtAppAddTimeOut(sc.app, 250, hosts_poll_cb, (XtPointer)0);
+    return 1;
+}
+
 static void step_cb(XtPointer cd, XtIntervalId *id)
 {
     char line[TESS_CHECK_DETAILLEN + 64];
 
     if (sc.next >= sc.n) {
-        sc_finish();
+        if (!hosts_start()) {
+            sc_finish();
+        }
         return;
     }
     sprintf(line, "Checking %d of %d: %s", sc.next + 1, sc.n,
@@ -193,6 +484,7 @@ static void step_cb(XtPointer cd, XtIntervalId *id)
 
 static void sc_start(void)
 {
+    hosts_stop();
     if (sc.closet) {
         XtRemoveTimeOut(sc.closet);
         sc.closet = 0;
@@ -201,8 +493,8 @@ static void sc_start(void)
     XtSetSensitive(sc.quitb, False);
     XmTextSetString(sc.text, "");
     sc.n = tess_check_count();
-    if (sc.n > SC_MAX) {
-        sc.n = SC_MAX;
+    if (sc.n > SC_MAX - SC_HOSTS) {
+        sc.n = SC_MAX - SC_HOSTS;
     }
     sc.next = 0;
     XtManageChild(sc.dialog);
@@ -216,6 +508,7 @@ static void recheck_cb(Widget w, XtPointer cd, XtPointer cb)
 
 static void close_cb(Widget w, XtPointer cd, XtPointer cb)
 {
+    hosts_stop();
     sc_close();
 }
 
@@ -223,10 +516,12 @@ static void close_cb(Widget w, XtPointer cd, XtPointer cb)
    the normal course, so there is no job to take down first. */
 static void quit_cb(Widget w, XtPointer cd, XtPointer cb)
 {
+    hosts_stop();
     exit(1);
 }
 
 void tess_startcheck_run(Widget parent, const char *tree, int port,
+                         const char *hostlist,
                          void (*logf)(void *, const char *), void *logctx)
 {
     Arg args[4];
@@ -237,6 +532,7 @@ void tess_startcheck_run(Widget parent, const char *tree, int port,
     int depth;
     Colormap cmap;
 
+    strncpy(sc.hostlist, hostlist ? hostlist : "", sizeof sc.hostlist - 1);
     if (sc.dialog) {
         sc_start();
         return;

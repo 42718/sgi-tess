@@ -2573,8 +2573,8 @@ int main(int argc, char **argv)
         /* Not with -attach: a master already running holds the port, and
            the port check would fail on the very thing being attached to. */
         if (!u.attach) {
-            tess_startcheck_run(u.toplevel, u.tree, port, ui_log_cb,
-                                (void *)&u);
+            tess_startcheck_run(u.toplevel, u.tree, port, u.hostlist,
+                                ui_log_cb, (void *)&u);
         }
         tess_cluster_rescan(u.cl);
     } else {

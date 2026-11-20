@@ -17,7 +17,7 @@ inventory: asking the same question more than one way is how the answers drift.
 |---|---|---|
 | `src/common/tess_check.c` | the checks and their remedies | libc |
 | `tess-preflight` | prints them, on any host and over `arshell` | libc |
-| `tess-setup` | the Motif wizard over the same checks | Motif, X |
+| `scripts/tess-setup` | checks a machine against `sgi-tess.config`, and with `-apply` fixes what it can | `/bin/sh` |
 | `tess-ui` | runs the checks as it starts, in its own window | already Motif |
 
 **The text tool exists because the Motif one cannot do its job.** A wizard that
@@ -26,7 +26,13 @@ server is the problem, and it cannot run over `arshell` on a compute host that
 has no display at all. So the checks live below both, and the wizard is a
 front end rather than the thing itself.
 
-`tess-setup` is **not built**. `tess-ui` runs the checks at startup
+The Motif wizard was never built. `tess-setup` became a shell script instead,
+20 November 2026, for the same reason as the text tool: the machine being set
+up may not have a working display, Motif or even a build yet. It checks one
+machine against `sgi-tess.config` (names, Array Services, the other hosts
+answering silently, shells, time, the build) and changes nothing unless run
+with `-apply`, which asks before each change and keeps a dated copy of every
+system file it edits. `tess-ui` runs the checks at startup
 (`src/ui/tess_startcheck.c`, 30 October 2026): a window opens over the render
 window and fills in one check at a time. All green, it says so and closes
 itself after 60 seconds, counting down on its **Close** button. Anything amber or red, it stays open and

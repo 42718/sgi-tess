@@ -1,0 +1,468 @@
+#!/bin/sh
+#
+# tess-setup - bring this machine into line with sgi-tess.config.
+#
+# Every machine reads the same sgi-tess.config over the share, so running this
+# on each of them converges the cluster on one description of itself: the
+# same hosts in every arrayd.conf, every name resolving everywhere, Array
+# Services and timeslave running, shells that print nothing, and a build of
+# the current version for this machine's architecture.
+#
+#   tess-setup              check only. Says what is right, what it would
+#                           change, and what needs a person. Changes nothing.
+#   tess-setup -apply       make the changes, asking before each one
+#   tess-setup -config f    another settings file
+#
+# Run as root, on each machine, starting with the one that already works:
+#
+#   sh /cluster/dev/sgi-tess/scripts/tess-setup
+#
+# Before it changes a system file it keeps a copy beside it, named
+# <file>.tess-<date>. It never edits arrayd.auth: authentication is reported,
+# and what to change is printed, because a wrong key locks the array.
+#
+# Exit status: 0 nothing to do, 1 changes it can make, 2 something needs a
+# person.
+#
+# Bourne shell: IRIX /bin/sh. The root shell is csh, so this needs its
+# shebang or "sh" in front. No GNU tools.
+
+APPLY=0
+CFG=
+DIR=`cd \`dirname $0\`/.. 2>/dev/null && pwd`
+TMP=/tmp/tess-setup.$$
+STAMP=`date +%Y%m%d-%H%M%S`
+NWOULD=0
+NNEED=0
+
+trap 'rm -f $TMP $TMP.*' 0 1 2 15
+
+usage() {
+    echo "usage: $0 [-apply] [-config file]" >&2
+    exit 2
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -apply) APPLY=1; shift ;;
+        -config) CFG=$2; shift 2 ;;
+        -h|-help|--help) usage ;;
+        *) usage ;;
+    esac
+done
+[ -n "$CFG" ] || CFG=$DIR/sgi-tess.config
+
+# ---------------------------------------------------------------- reporting
+
+ok() {
+    printf "ok     %-10s %s\n" "$1" "$2"
+}
+
+# need area detail remedy...: something only a person can do
+need() {
+    printf "need   %-10s %s\n" "$1" "$2"
+    shift 2
+    for l in "$@"; do
+        echo "                  $l"
+    done
+    NNEED=`expr $NNEED + 1`
+}
+
+# change area detail command: something this script can do. Dry run: say
+# so. -apply: ask, then run the command, which is one shell string.
+change() {
+    printf "would  %-10s %s\n" "$1" "$2"
+    echo "                  $3"
+    if [ $APPLY -eq 0 ]; then
+        NWOULD=`expr $NWOULD + 1`
+        return 1
+    fi
+    printf "                  apply? [y/N] "
+    read ans < /dev/tty
+    case "$ans" in
+        y|Y|yes)
+            if eval "$3"; then
+                echo "                  done"
+                return 0
+            fi
+            echo "                  FAILED"
+            NNEED=`expr $NNEED + 1`
+            return 1
+            ;;
+    esac
+    echo "                  skipped"
+    NWOULD=`expr $NWOULD + 1`
+    return 1
+}
+
+# backup file: keep a dated copy beside it before changing it
+backup() {
+    cp -p "$1" "$1.tess-$STAMP"
+}
+
+# run_to secs cmd...: run cmd with its output in $TMP.out, stopped after
+# secs. Status 124 when it had to be stopped. A powered-off host makes
+# arshell wait a long time, and that must not stall the whole check.
+run_to() {
+    t=$1
+    shift
+    "$@" > $TMP.out 2>&1 &
+    pid=$!
+    n=0
+    while kill -0 $pid 2>/dev/null; do
+        if [ $n -ge $t ]; then
+            kill $pid 2>/dev/null
+            wait $pid 2>/dev/null
+            return 124
+        fi
+        sleep 1
+        n=`expr $n + 1`
+    done
+    wait $pid
+}
+
+# in_hosts name: is name a host name on a live line of /etc/hosts
+in_hosts() {
+    awk '$1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == "'"$1"'") f = 1 }
+         END { if (f) exit 0; exit 1 }' /etc/hosts
+}
+
+# first_name name: the canonical (first) name on the line that has name
+first_name() {
+    awk '$1 !~ /^#/ { for (i = 2; i <= NF; i++) if ($i == "'"$1"'") { print $2; exit } }' /etc/hosts
+}
+
+# ------------------------------------------------------------------ config
+
+# cfg key: the value of the first "key value" line, comment removed
+cfg() {
+    sed -n -e 's/#.*//' -e "s/^[ 	]*$1[ 	][ 	]*//p" "$CFG" |
+        sed 's/[ 	]*$//' | sed -n 1p
+}
+
+# cfg_address host: the address an "address host a.b.c.d" line gives
+cfg_address() {
+    [ -f "$CFG" ] || return 0
+    sed -n -e 's/#.*//' \
+        -e "s/^[ 	]*address[ 	][ 	]*$1[ 	][ 	]*\([0-9.][0-9.]*\).*/\1/p" \
+        "$CFG" | sed -n 1p
+}
+
+if [ "`id | sed -n 's/^uid=\([0-9]*\).*/\1/p'`" != 0 ]; then
+    echo "$0: run this as root: arshell, arrayd.conf and /etc/hosts need it" >&2
+    exit 2
+fi
+
+ME=`hostname | sed 's/\..*//'`
+ARCH=`uname -m`
+if [ $APPLY -eq 1 ]; then
+    echo "tess-setup on $ME ($ARCH): checking, and changing what you agree to"
+else
+    echo "tess-setup on $ME ($ARCH): checking only. Nothing is changed."
+    echo "Run with -apply to make the changes marked \"would\"."
+fi
+echo ""
+
+# What Array Services already knows, for a config that does not exist yet.
+AINFO_HOSTS=`ainfo machines 2>/dev/null | sed -n 's/^[ 	]*[Mm][Aa][Cc][Hh][Ii][Nn][Ee][ 	][ 	]*\([^ 	]*\).*/\1/p'`
+AINFO_HOSTS=`echo $AINFO_HOSTS`
+AINFO_ARRAY=`ainfo dfltarray 2>/dev/null | sed -n 's/^[ 	]*[Aa][Rr][Rr][Aa][Yy][ 	][ 	]*\([^ 	]*\).*/\1/p' | sed -n 1p`
+
+write_config() {
+    {
+        echo "# sgi-tess.config - written by tess-setup on $ME, $STAMP."
+        echo "# sgi-tess.config.example explains each setting."
+        echo "tree      $DIR"
+        echo "hosts     $P_HOSTS"
+        [ -n "$P_ARRAY" ] && echo "array     $P_ARRAY"
+        echo "port      7333"
+    } > "$CFG"
+}
+
+if [ -f "$CFG" ]; then
+    ok config "$CFG"
+    TREE=`cfg tree`
+    HOSTS=`cfg hosts | tr ',' ' '`
+    ARRAYNAME=`cfg array`
+    [ -n "$TREE" ] || TREE=$DIR
+    [ -n "$HOSTS" ] || HOSTS=$AINFO_HOSTS
+    [ -n "$ARRAYNAME" ] || ARRAYNAME=$AINFO_ARRAY
+else
+    P_HOSTS=$AINFO_HOSTS
+    [ -n "$P_HOSTS" ] || P_HOSTS=$ME
+    P_ARRAY=$AINFO_ARRAY
+    change config "no $CFG yet: write one, from what Array Services knows" \
+        "write_config   # tree $DIR, hosts $P_HOSTS${P_ARRAY:+, array $P_ARRAY}"
+    TREE=$DIR
+    HOSTS=$P_HOSTS
+    ARRAYNAME=$P_ARRAY
+fi
+HOSTS=`echo $HOSTS`
+
+case " $HOSTS " in
+    *" $ME "*) ok hosts "$HOSTS" ;;
+    *) need hosts "this machine, $ME, is not in the hosts line" \
+           "add it to the hosts line in $CFG, or tess-ui will add it" \
+           "on its own and the other machines will not know it" ;;
+esac
+
+if [ -d "$TREE/src" ] && [ -d "$TREE/build" ]; then
+    ok tree "$TREE"
+else
+    need tree "$TREE is not a Tess tree on this machine" \
+        "mount the share here at the same path as on the others"
+fi
+
+# ------------------------------------------------------------------- names
+
+for h in $HOSTS; do
+    if in_hosts $h; then
+        first=`first_name $h`
+        if [ "$first" = "$h" ]; then
+            ok names "$h is in /etc/hosts"
+        else
+            need names "$h is in /etc/hosts, but its line starts with $first" \
+                "put the plain name first: Array Services and mpirun use" \
+                "the first name, and the others may not resolve $first" \
+                "(doc/MPI-HELLO.md, trap 3)"
+        fi
+        continue
+    fi
+    addr=`cfg_address $h`
+    if [ -n "$addr" ]; then
+        change names "$h is not in /etc/hosts; add it, $addr, from the config" \
+            "backup /etc/hosts && echo \"$addr	$h\" >> /etc/hosts"
+    else
+        need names "$h is not in /etc/hosts here" \
+            "add its line by hand, copied from a machine that knows it:" \
+            "    grep $h /etc/hosts" \
+            "or put \"address $h <ip>\" in $CFG and run -apply"
+    fi
+done
+
+# --------------------------------------------------------- Array Services
+
+ACONF=/usr/lib/array/arrayd.conf
+AAUTH=/usr/lib/array/arrayd.auth
+
+if versions -b 2>/dev/null | grep '^I  *arraysvcs ' > /dev/null; then
+    ok array "Array Services installed"
+else
+    need array "Array Services (arraysvcs) is not installed" \
+        "install it from the IRIX 6.5 Applications CD; mpirun needs it"
+fi
+
+if grep '^sgi-arrayd[ 	]' /etc/services > /dev/null; then
+    ok services "sgi-arrayd in /etc/services"
+else
+    change services "sgi-arrayd is not in /etc/services; add 5434/tcp" \
+        "backup /etc/services && echo \"sgi-arrayd	5434/tcp	# SGI array services daemon\" >> /etc/services"
+fi
+
+if chkconfig array; then
+    ok array "starts at boot"
+else
+    change array "Array Services is off at boot; turn it on" \
+        "chkconfig array on"
+fi
+
+# add_machines "h1 h2": add machine lines after the array line, install the
+# file and restart Array Services, then make sure ainfo lists every host. If
+# it does not, the previous file goes back and arrayd is restarted on it.
+add_machines() {
+    cp $ACONF $TMP.conf || return 1
+    for h in $1; do
+        sed "/^[ 	]*[Aa][Rr][Rr][Aa][Yy][ 	][ 	]*$ARRAYNAME[ 	]*\(#.*\)*$/a\\
+	machine $h
+" $TMP.conf > $TMP.new && mv $TMP.new $TMP.conf || return 1
+    done
+    backup $ACONF || return 1
+    cp $TMP.conf $ACONF && /etc/init.d/array restart
+    sleep 2
+    now=`ainfo machines 2>/dev/null | sed -n 's/^[ 	]*[Mm][Aa][Cc][Hh][Ii][Nn][Ee][ 	][ 	]*\([^ 	]*\).*/\1/p' | tr '\012' ' '`
+    for h in $HOSTS; do
+        case " $now " in
+            *" $h "*) ;;
+            *)
+                echo "                  arrayd does not list $h after the change;"
+                echo "                  putting $ACONF.tess-$STAMP back"
+                cp $ACONF.tess-$STAMP $ACONF && /etc/init.d/array restart
+                return 1
+                ;;
+        esac
+    done
+    return 0
+}
+
+# arrayd.conf: every configured host as a machine line. This assumes one
+# array in the file, which is what arrayconfig writes and what Tess uses.
+if [ -z "$ARRAYNAME" ]; then
+    need arrayd.conf "no array named, in the config or by Array Services" \
+        "set one up first: arrayconfig -m -a <name> $HOSTS" \
+        "then put \"array <name>\" in $CFG"
+elif grep -i "^[ 	]*array[ 	][ 	]*$ARRAYNAME[ 	]*\(#.*\)*$" $ACONF > /dev/null 2>&1; then
+    :
+else
+    need arrayd.conf "$ACONF has no array $ARRAYNAME" \
+        "arrayconfig -m -a $ARRAYNAME $HOSTS writes one, replacing the file:" \
+        "copy it first. Then run this again."
+fi
+if [ -n "$ARRAYNAME" ] && \
+   grep -i "^[ 	]*array[ 	][ 	]*$ARRAYNAME[ 	]*\(#.*\)*$" $ACONF > /dev/null 2>&1; then
+    missing=
+    for h in $HOSTS; do
+        egrep -i "^[ 	]*machine[ 	]+$h([ 	]|#|$)" $ACONF > /dev/null ||
+            missing="$missing $h"
+    done
+    missing=`echo $missing`
+    if [ -z "$missing" ]; then
+        ok arrayd.conf "array $ARRAYNAME lists $HOSTS"
+    else
+        change arrayd.conf "array $ARRAYNAME lacks: $missing. Add, check, restart arrayd" \
+            "add_machines \"$missing\""
+    fi
+fi
+
+if ps -e | grep ' arrayd *$' > /dev/null; then
+    ok arrayd "running"
+else
+    change arrayd "arrayd is not running; start it" \
+        "/etc/init.d/array start"
+fi
+
+# The authentication in force is the last AUTHENTICATION line read.
+auth=`egrep -i '^[ 	]*authentication[ 	]' $AAUTH 2>/dev/null | sed -n '$p' | awk '{ print $2 }'`
+case "$auth" in
+    SIMPLE|simple|NONE|none)
+        ok auth "AUTHENTICATION $auth" ;;
+    NOREMOTE|noremote|"")
+        need auth "AUTHENTICATION is ${auth:-NOREMOTE, the default}: remote requests are refused" \
+            "in $AAUTH, comment out \"AUTHENTICATION NOREMOTE\" and use" \
+            "SIMPLE with keys, or NONE on a private network. Then:" \
+            "    /etc/init.d/array restart" ;;
+    *)
+        need auth "AUTHENTICATION $auth is not one tess-setup knows" ;;
+esac
+
+# --------------------------------------------------------- the other hosts
+
+if ps -e | grep ' arrayd *$' > /dev/null; then
+    for h in $HOSTS; do
+        [ "$h" = "$ME" ] && continue
+        run_to 15 arshell $h true
+        rc=$?
+        out=`tr -d '\015' < $TMP.out | sed -n 1p`
+        # arshell's own complaint when the other arrayd does not answer, a
+        # powered-off host among them, is output too; it is not a login file.
+        if [ $rc -eq 124 ] || echo "$out" | grep 'asrcmdv failed' > /dev/null; then
+            need reach "$h: no answer${out:+ ($out)}" \
+                "powered off, or not in its own arrayd.conf yet: run" \
+                "tess-setup on $h as well"
+        elif [ -n "$out" ]; then
+            need reach "$h answers, but prints: $out" \
+                "any output breaks mpirun. Usually an unguarded stty in" \
+                "$h:/.cshrc; guard it: if ( \$?prompt ) stty intr ^C"
+        elif [ $rc -ne 0 ]; then
+            need reach "$h: arshell failed, status $rc"
+        else
+            ok reach "$h answers through Array Services, silently"
+        fi
+    done
+fi
+
+# ------------------------------------------------------ this host's shells
+
+for c in "csh -c true" "csh -l -c true"; do
+    out=`$c 2>&1 | sed -n 1p`
+    if [ -z "$out" ]; then
+        ok shell "$c prints nothing"
+    else
+        need shell "$c prints: $out" \
+            "mpirun starts ranks through a shell like this one, and any" \
+            "output breaks the launch. Guard interactive lines in /.cshrc" \
+            "and /.login with: if ( \$?prompt ) then ... endif"
+    fi
+done
+
+# ------------------------------------------------------------------- time
+
+# What matters is that this clock agrees with the file server's, which
+# stamps every file in the tree: the clock line below measures exactly that.
+# Which daemon keeps it there is the site's choice. timeslave against the file
+# server needs nothing installed; NTP does as well, as long as the file server
+# follows the same time source.
+sync=
+for d in timeslave xntpd ntpd timed; do
+    if ps -e | grep " $d *\$" > /dev/null; then
+        sync="${sync:+$sync, }$d"
+    fi
+done
+if [ -n "$sync" ]; then
+    ok time "kept in step by $sync"
+else
+    need time "nothing keeps this clock in step with the share's" \
+        "It drifts, and make then skips edited files without a word." \
+        "timeslave against the file server, or NTP if the file server" \
+        "uses the same source. INSTALL.md, section 2."
+fi
+
+PREFLIGHT=$TREE/build/$ARCH/tess-preflight
+if [ -x $PREFLIGHT ]; then
+    if run_to 30 $PREFLIGHT -tree $TREE -only clock -q && \
+       grep '^PASS' $TMP.out > /dev/null; then
+        ok clock "agrees with the share"
+    else
+        need clock "`sed -n '$p' $TMP.out`" \
+            "see INSTALL.md, section 2"
+    fi
+fi
+
+# A gmake fresh fails with "Directory not empty" while a tess-node from the
+# old build is still running: NFS keeps the deleted binary as a .nfs file
+# until the last process holding it exits.
+n=`ps -e | grep -c ' tess-node *$'`
+if [ "$n" -gt 0 ]; then
+    change nodes "$n tess-node running: a job, or left from one. If no job should be running, stop them" \
+        "killall tess-node"
+else
+    ok nodes "no tess-node running"
+fi
+
+# ------------------------------------------------------------------ build
+
+VER=`sed -n 's/^#define TESS_VERSION "\(.*\)"/\1/p' $TREE/src/common/tess_version.h 2>/dev/null`
+NODE=$TREE/build/$ARCH/tess-node
+have=`$NODE -version 2>/dev/null | awk '{ print $2 }'`
+if [ -z "$VER" ]; then
+    need build "cannot read the version from $TREE/src/common/tess_version.h"
+elif [ "$have" = "$VER" ]; then
+    ok build "$ARCH build is $VER"
+else
+    if type cc > /dev/null 2>&1 && type gmake > /dev/null 2>&1; then
+        change build "${have:+$ARCH build is $have, the source is $VER: rebuild}${have:-no $ARCH build yet: build $VER}" \
+            "(cd $TREE && gmake fresh)"
+    else
+        need build "no $ARCH build of $VER, and no cc or gmake here" \
+            "install MIPSpro and GNU make: INSTALL.md, section 1"
+    fi
+fi
+
+if type mpirun > /dev/null 2>&1; then
+    ok mpi "`versions -b 2>/dev/null | sed -n 's/^I  *mpt  *[^ ]*  *//p'`"
+else
+    need mpi "no mpirun: install MPT 1.9 (mpt, mpi)"
+fi
+
+# ---------------------------------------------------------------- summary
+
+echo ""
+if [ $NWOULD -eq 0 ] && [ $NNEED -eq 0 ]; then
+    echo "$ME is set up."
+    exit 0
+fi
+[ $NWOULD -gt 0 ] && echo "$NWOULD change(s) tess-setup can make: run it again with -apply."
+[ $NNEED -gt 0 ] && echo "$NNEED item(s) need doing by hand, above."
+if [ $NNEED -gt 0 ]; then
+    exit 2
+fi
+exit 1
