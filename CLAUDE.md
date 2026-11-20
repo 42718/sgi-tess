@@ -1,11 +1,14 @@
 # Tess — distributed render framework for IRIX
 
-**Status: builds 1-5 closed, build 6 next.** `tess-probe`, `tess-node` and `tess-ui`
-all exist and render across lucy and aurora over TCP, byte-identical on both architectures;
-see `doc/BUILD-PLAN.md` for what each build closed and what remains. `baseline/` holds the
+**Status: 1.0-rc1, after `v1.0-beta`.** Builds 1-5 closed, and build 6's module half:
+Mandelbrot and Julia render across lucy (IP30), arthur (IP27) and aurora (IP35) over TCP,
+tiles agreeing on all three. In since the tag: `sgi-tess.config`,
+`scripts/tess-setup`, and the UI's startup cluster check. Open for 1.0: the tardist. After
+it: build 6's link seam (transport behind an interface). The version string lives only in
+`src/common/tess_version.h`. See `doc/BUILD-PLAN.md` for what each build closed. `baseline/` holds the
 2001-era originals this replaces; `tools/` holds small probes; `src/` holds the real tree.
 
-**There is no git on lucy or aurora.** Version control happens on the Mac against the same
+**There is no git on the SGIs.** Version control happens on the Mac against the same
 NFS tree the machines build from, so an edit is live on both the moment it is written and
 there is nothing to pull.
 
@@ -59,8 +62,9 @@ plus router plus L2 is a valid but power-hungry shape, and the software must not
 
 ## Where bring-up actually stands
 
-- MPT + Array Services: **installed and working on lucy and aurora.** `arshell` and
-  multi-host `mpirun` both run, over GM and over TCP. arthur is not in the array yet.
+- MPT + Array Services: **installed and working on lucy, arthur and aurora.** `arshell` and
+  multi-host `mpirun` both run, over GM and over TCP; arthur over TCP only, its Myrinet
+  card has no working GM driver yet. All three are in array 42718.
 - arthur's HIPPI: **parked.** Receive-side sync/LLRC failure, TX clean, firmware 4.0 valid.
   Next untried test is the spare board. State recorded in BRINGUP.md.
 - lucy's HIPPI (`ess0`, Essential driver, not SGI's `hipXX`): configured, link never came up.

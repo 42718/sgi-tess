@@ -14,14 +14,15 @@ isn't the fractal — it's the framework underneath: a tile scheduler, a credit-
 prefetch pipeline, and a two-window Motif UI, all running across a small heterogeneous
 MIPS cluster over MPI.
 
-**Status: it renders.** `tess-probe`, `tess-node` and `tess-ui` all exist and draw a frame
-across lucy and aurora over MPI, byte-identical on both architectures. Builds 1 to 5 of
-`doc/BUILD-PLAN.md` are closed; build 6 is next. `doc/DESIGN.md` remains the
-contract.
+**Status: 1.0-rc1**, after `v1.0-beta`. Builds 1 to 5 of `doc/BUILD-PLAN.md` are closed, and the module half
+of build 6: Mandelbrot and Julia sets render across lucy, arthur and aurora over MPI, with
+tiles from all three architectures agreeing. The config file and the setup script are in;
+still open for 1.0 is the `inst` package, and after it build 6's link seam.
+`doc/DESIGN.md` remains the contract.
 
-**[doc/DEPLOY.md](doc/DEPLOY.md) is the deployment guide**: what you need, how to get the
-source onto machines that have no git, how to build it per architecture, and how to run the
-interface.
+**[INSTALL.md](INSTALL.md) is the short path** from nothing to a rendered frame.
+**[doc/DEPLOY.md](doc/DEPLOY.md) is the full deployment guide**: the reasons behind each
+step, how to run the interface, and what to do when something fails.
 
 ## The cluster
 
@@ -38,6 +39,7 @@ than caring which.
 ## Layout
 
 ```
+INSTALL.md               building from source, the short version
 doc/DEPLOY.md            prerequisites, build, and how to run the interface
 doc/PREFLIGHT.md         the preflight checks, and the setup wizard they feed
 doc/DESIGN.md            the engineering contract — decisions, scheduling, wire format

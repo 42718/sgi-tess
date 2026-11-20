@@ -187,7 +187,7 @@ to set the height, which made `-h lucy,arthur` a zero-height window with the def
 it is help now, and the height is `-height`.
 
 Every program answers `-version` with the release, the architecture it was built for and
-the build date, for example `1.0-beta (IP27, built Nov 20 2026)`. `tess-ui` shows the
+the build date, for example `1.0-rc1 (IP27, built Nov 20 2026)`. `tess-ui` shows the
 release in both window titles and puts the full line first in its log, so a screenshot
 says which build it is.
 

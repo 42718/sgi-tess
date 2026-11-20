@@ -3,7 +3,7 @@
 The short path from nothing to a rendered frame. [doc/DEPLOY.md](doc/DEPLOY.md) has the
 reasons behind each step and what to do when one fails.
 
-Tess 1.0-beta is built from source on each machine. A `tardist` for `inst` is planned for
+Tess 1.0-rc1 is built from source on each machine. A `tardist` for `inst` is planned for
 1.0. Every command below runs **as root**, in IRIX's root shell, `csh`. They paste
 cleanly into it.
 
@@ -158,7 +158,7 @@ Check the build is the release you meant:
 ```
 
 ```
-tess-node 1.0-beta (IP27, built Nov 20 2026)
+tess-node 1.0-rc1 (IP27, built Nov 20 2026)
 ```
 
 ## 7. Check, then run
