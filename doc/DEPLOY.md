@@ -169,21 +169,31 @@ The defaults match a standard layout, so that bare form is the same as spelling 
 
 | Switch | Default | What it does |
 |---|---|---|
-| `-hosts a,b,c` | `lucy,aurora` | the cluster. **The first host is the display host** |
+| `-hosts a,b,c` | `lucy,aurora` | the cluster. The machine the UI runs on is always moved to the front, or added if missing: the master runs there |
 | `-tree <path>` | `/cluster/dev/sgi-tess` | where the binaries live, on every machine |
 | `-port <n>` | `7333` | loopback port the master listens on |
 | `-savedir <path>` | `.` | where saved images go |
-| `-w <px>` / `-h <px>` | fitted to the screen | fixed frame size, for reproducible output |
+| `-w <px>` / `-height <px>` | fitted to the screen | fixed frame size, for reproducible output |
 | `-attach` | off | attach to a job already running instead of launching one |
 | `-host <name>` | `localhost` | attach to a master somewhere else |
+| `-version` | | print the version and exit |
+| `-h` / `-help` | | print the switches and exit |
 
-Unrecognised switches are currently ignored without a word, so check your spelling.
+Unrecognised switches are still ignored without a word, so check your spelling. `-h` used
+to set the height, which made `-h lucy,arthur` a zero-height window with the default hosts;
+it is help now, and the height is `-height`.
+
+Every program answers `-version` with the release, the architecture it was built for and
+the build date, for example `1.0-beta (IP27, built Nov 20 2026)`. `tess-ui` shows the
+release in both window titles and puts the full line first in its log, so a screenshot
+says which build it is.
 
 Then: **Rescan** to discover the hosts, adjust rank counts and tick boxes, **Start** to
 launch the job, **Render** to draw a frame.
 
 The host order matters. The first host runs the GUI, the master rank and the shading pass,
-so its first rank computes nothing: two ranks on lucy means one computing CPU there.
+so its first rank computes nothing: two ranks on lucy means one computing CPU there. The
+UI puts its own machine first whatever order `-hosts` gave.
 Compute hosts have nothing else to do and offer every CPU they have. Unticking the display
 host does not remove it, it drops it to master only, because the master is what the GUI
 connects to.

@@ -31,6 +31,8 @@
 #
 
 ARCH    := $(shell uname -m)
+# Which of the builds in the shared tree a binary is: tess_version.h prints it.
+ARCHDEF := -DTESS_ARCH='"$(ARCH)"'
 SYS     := $(shell uname -s)
 BUILD   := build/$(ARCH)
 COMMON  := src/common
@@ -46,26 +48,27 @@ MODULE_SRCS   = $(COMMON)/tess_modules.c $(wildcard $(COMMON)/tess_mod_*.c)
 COMMON_SRCS   = $(WIRE_SRC) $(MANDEL_SRC) $(MODULE_SRCS)
 COMMON_HDRS   = $(COMMON)/tess_types.h $(COMMON)/tess_proto.h \
                 $(COMMON)/tess_wire.h $(COMMON)/tess_mandel.h \
-                $(COMMON)/tess_module.h $(COMMON)/tess_paramdesc.h
+                $(COMMON)/tess_module.h $(COMMON)/tess_paramdesc.h \
+                $(COMMON)/tess_version.h
 
 ifeq ($(findstring IP,$(ARCH)),IP)
 # ---- IRIX, MIPSpro. The authoritative build. DESIGN.md section 8. ----
 CC        = cc
 ABI       = -64 -mips4
-CFLAGS    = $(ABI) -O2 -I$(COMMON)
+CFLAGS    = $(ABI) -O2 -I$(COMMON) $(ARCHDEF)
 # MPI_SGI_stat_get lives in mpi_ext.h, and is called per
 # doc/mpt/man/MPI_SGI_stat.txt: arrays of counter indices in, arrays of values
 # out, returns void. TESS_MPI_STAT=0 disables it if a machine lacks the header.
 TESS_MPI_STAT ?= 1
 HAVE_MPI_EXT := $(shell test -f /usr/include/mpi_ext.h && echo $(TESS_MPI_STAT) || echo 0)
 NODE_CFLAGS = $(ABI) -O3 -OPT:roundoff=0:IEEE_arithmetic=1 -I$(COMMON) \
-              -DTESS_HAVE_MPI_EXT=$(HAVE_MPI_EXT)
+              -DTESS_HAVE_MPI_EXT=$(HAVE_MPI_EXT) $(ARCHDEF)
 # -lpthread goes back when threads do: DESIGN.md section 8 puts it after
 # -lmpi, but v1 has no threads and ld64 warns about an unused library,
 # which hides the warnings worth reading.
 NODE_LIBS = -lmpi -lm
 MOTIF     = /usr/Motif-2.1
-UI_CFLAGS = $(ABI) -O2 -I$(COMMON) -I$(MOTIF)/include
+UI_CFLAGS = $(ABI) -O2 -I$(COMMON) -I$(MOTIF)/include $(ARCHDEF)
 # -lSgm when the first Sgm widget appears, -limage when .rgb saving lands in
 # build 5. Both warn as unused today.
 UI_LIBS   = -L$(MOTIF)/lib64 -Wl,-rpath,$(MOTIF)/lib64 \
@@ -73,7 +76,7 @@ UI_LIBS   = -L$(MOTIF)/lib64 -Wl,-rpath,$(MOTIF)/lib64 \
 else
 # ---- macOS, the portability gate. Not a substitute: LP64 little-endian. ----
 CC        = clang
-CFLAGS    = -std=c89 -pedantic -Wall -O2 -I$(COMMON)
+CFLAGS    = -std=c89 -pedantic -Wall -O2 -I$(COMMON) $(ARCHDEF)
 NODE_CFLAGS = $(CFLAGS)
 NODE_LIBS = -lm
 UI_CFLAGS = $(CFLAGS)
@@ -95,6 +98,7 @@ UI_SRCS   = $(wildcard src/ui/*.c)
 all: probe preflight tiler node ui
 
 info:
+	@echo "version   $(shell sed -n 's/^#define TESS_VERSION "\(.*\)"/\1/p' $(COMMON)/tess_version.h)"
 	@echo "arch      $(ARCH) ($(SYS))"
 	@echo "build dir $(BUILD)"
 	@echo "cc        $(CC) $(CFLAGS)"
@@ -109,7 +113,8 @@ $(BUILD):
 # ---- tess-probe: inventory only, no MPI, no X, builds anywhere ----
 probe: $(PROBE)
 
-$(PROBE): src/probe/tess_probe.c $(INVENTORY_SRC) $(COMMON)/tess_inventory.h | $(BUILD)
+$(PROBE): src/probe/tess_probe.c $(INVENTORY_SRC) $(COMMON)/tess_inventory.h \
+          $(COMMON)/tess_version.h | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/probe/tess_probe.c $(INVENTORY_SRC)
 
 # ---- tess-preflight: doc/DEPLOY.md sections 1 and 7, executable. Needs
@@ -119,7 +124,8 @@ $(PROBE): src/probe/tess_probe.c $(INVENTORY_SRC) $(COMMON)/tess_inventory.h | $
 preflight: $(PREFLT)
 
 $(PREFLT): src/preflight/tess_preflight.c $(CHECK_SRC) $(INVENTORY_SRC) \
-           $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h | $(BUILD)
+           $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h \
+           $(COMMON)/tess_version.h | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/preflight/tess_preflight.c $(CHECK_SRC) \
 	  $(INVENTORY_SRC)
 

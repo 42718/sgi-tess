@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "tess_check.h"
+#include "tess_version.h"
 
 #define MAXRESULTS 64
 
@@ -26,14 +27,18 @@ static void usage(const char *me)
 {
     fprintf(stderr,
             "usage: %s [-tree <path>] [-port <n>] [-compute] [-q] [-1]\n"
+            "          [-only <id>] [-version]\n"
             "  -tree <path>  the shared tree (default /cluster/dev/sgi-tess)\n"
             "  -port <n>     the master's loopback port (default 7333)\n"
             "  -compute      skip the display-host checks: Motif, X, root, port\n"
             "  -q            one line per check, no remedies\n"
-            "  -1            a single summary line, for a caller that wants a light\n"
-            "  -only <id>    run just one check, stopping as soon as it has run.\n"
-            "                Cheap enough to loop: -only clock\n",
+            "  -1            a single summary line, for a caller that wants a light\n",
             me);
+    /* in two parts: C89 promises string literals of 509 characters only */
+    fprintf(stderr,
+            "  -only <id>    run just one check, stopping as soon as it has run.\n"
+            "                Cheap enough to loop: -only clock\n"
+            "  -version      print the version and exit\n");
 }
 
 int main(int argc, char **argv)
@@ -71,6 +76,9 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "-only") == 0 && i + 1 < argc) {
             i++;
             only = argv[i];
+        } else if (strcmp(argv[i], "-version") == 0) {
+            printf("tess-preflight %s\n", TESS_VERSION_LINE);
+            return 0;
         } else if (strcmp(argv[i], "-q") == 0) {
             quiet = 1;
         } else if (strcmp(argv[i], "-1") == 0) {
@@ -137,6 +145,7 @@ int main(int argc, char **argv)
         return worst == TESS_FAIL ? 2 : (worst == TESS_WARN ? 1 : 0);
     }
 
+    printf("tess-preflight %s\n", TESS_VERSION_LINE);
     for (i = 0; i < n; i++) {
         printf("%-4s  %-12s %s\n", tess_check_status_name(r[i].status),
                r[i].id, r[i].detail);

@@ -39,6 +39,7 @@
 #include "tess_mandel.h"
 #include "tess_module.h"
 #include "tess_inventory.h"
+#include "tess_version.h"
 
 static int verbose = 0;
 static int idle_us = 2000;
@@ -896,7 +897,7 @@ static void usage(const char *me)
             me);
     fprintf(stderr, "          [-w px] [-h px] [-max n] [-tile n]\n");
     fprintf(stderr, "          [-cx v] [-cy v] [-scale v] [-idle-us n]\n");
-    fprintf(stderr, "          [-v] [-help]\n");
+    fprintf(stderr, "          [-v] [-help] [-version]\n");
     fflush(stderr);
 }
 
@@ -910,10 +911,14 @@ int main(int argc, char **argv)
     TessInventory inv;
     int *parked;
 
-    /* -v before the real parse, so the trace covers the parse itself. */
+    /* -v before the real parse, so the trace covers the parse itself.
+       -version before MPI_Init, so it answers without mpirun. */
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0) {
             verbose = 1;
+        } else if (strcmp(argv[i], "-version") == 0) {
+            printf("tess-node %s\n", TESS_VERSION_LINE);
+            return 0;
         }
     }
 
@@ -1026,6 +1031,7 @@ int main(int argc, char **argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
     tess_inventory(&inv);
+    printf("tess-node %s\n", TESS_VERSION_LINE);
     printf("tess-node: master on %s, %d rank(s), %d worker(s)\n",
            inv.host, nranks, nranks - 1);
     fflush(stdout);

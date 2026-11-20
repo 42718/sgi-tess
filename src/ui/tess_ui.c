@@ -63,6 +63,7 @@
 #include "tess_wire.h"
 #include "tess_mandel.h"
 #include "tess_module.h"
+#include "tess_version.h"
 
 /*
  * Everything the panes edit. The descriptor tables below point into this by
@@ -265,6 +266,22 @@ static void wm_metrics_save(const WmMetrics *m)
     fprintf(f, "%d %d %d %d %d\n", m->decor_x, m->decor_y, m->border_x,
             m->border_y, m->pos_is_client);
     fclose(f);
+}
+
+static void usage(const char *me)
+{
+    fprintf(stderr,
+            "usage: %s [-hosts host,host,...] [-tree <path>] [-port <n>]\n"
+            "          [-savedir <dir>] [-w <px>] [-height <px>] [-attach]\n"
+            "          [-host <name>] [-version] [-help]\n"
+            "  -hosts    the machines to offer in the Cluster pane. This one\n"
+            "            is always first: the master runs where the UI does\n"
+            "  -tree     the shared tree, the same path on every host\n"
+            "  -w        render window width, -height its height\n"
+            "  -attach   connect to a master already running, start nothing\n",
+            me);
+    /* apart: C89 promises string literals of 509 characters only */
+    fprintf(stderr, "Standard X options such as -display also work.\n");
 }
 
 static void die(const char *msg)
@@ -1741,7 +1758,7 @@ static void build_control(Ui *u)
     u->control = XtVaAppCreateShell("control", "Tess",
                                     topLevelShellWidgetClass,
                                     XtDisplay(u->toplevel),
-                                    XmNtitle, "Tess control",
+                                    XmNtitle, "Tess control " TESS_VERSION,
                                     XmNx, u->ctrl_x,
                                     XmNy, u->ctrl_y,
                                     XmNwidth, TESS_CTRL_W,
@@ -2153,11 +2170,21 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "-w") == 0 && i + 1 < argc) {
             u.width = atoi(argv[++i]);
             width_given = 1;
-        } else if (strcmp(argv[i], "-h") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "-height") == 0 && i + 1 < argc) {
             u.height = atoi(argv[++i]);
             height_given = 1;
+        } else if (strcmp(argv[i], "-version") == 0) {
+            printf("tess-ui %s\n", TESS_VERSION_LINE);
+            return 0;
+        } else if (strcmp(argv[i], "-h") == 0 ||
+                   strcmp(argv[i], "-help") == 0) {
+            /* -h was the height once, and "-h lucy,arthur" quietly became a
+               zero-height window with the default hosts. Now it is help. */
+            usage(argv[0]);
+            return 0;
         }
     }
+    fprintf(stderr, "tess-ui %s\n", TESS_VERSION_LINE);
 
     /*
      * Open the display by hand rather than through XtVaAppInitialize, because
@@ -2175,6 +2202,7 @@ int main(int argc, char **argv)
     pick_visual(&u);
     u.toplevel = XtVaAppCreateShell((String)0, "Tess",
                                     applicationShellWidgetClass, u.dpy,
+                                    XmNtitle, "Tess " TESS_VERSION,
                                     XtNvisual, u.visual,
                                     XmNdepth, u.depth,
                                     XmNcolormap, u.canvas_cmap,
@@ -2417,6 +2445,7 @@ int main(int argc, char **argv)
 
     job_to_values(&u);
     build_control(&u);
+    ui_log(&u, "Tess " TESS_VERSION_LINE);
     if (u.pending_log[0]) {
         ui_log(&u, u.pending_log);
     }

@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "tess_inventory.h"
+#include "tess_version.h"
 
 int main(int argc, char **argv)
 {
@@ -29,8 +30,11 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
             verbose = 1;
+        } else if (strcmp(argv[i], "-version") == 0) {
+            printf("tess-probe %s\n", TESS_VERSION_LINE);
+            return 0;
         } else {
-            fprintf(stderr, "usage: %s [-v]\n", argv[0]);
+            fprintf(stderr, "usage: %s [-v] [-version]\n", argv[0]);
             return 2;
         }
     }
@@ -41,6 +45,7 @@ int main(int argc, char **argv)
 
     if (verbose) {
         printf("\n");
+        printf("tess-probe    %s\n", TESS_VERSION_LINE);
         printf("host          %s\n", inv.host);
         printf("cpus          %d configured, %d online\n", inv.cpus, inv.online);
         printf("clock         %d MHz\n", inv.mhz);
