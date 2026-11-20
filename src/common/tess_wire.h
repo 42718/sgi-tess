@@ -29,7 +29,7 @@ int tess_get_job(const tess_u8 *p, TessJob *j);
 int tess_put_tilehdr(tess_u8 *p, const TessTileHdr *t);
 int tess_get_tilehdr(const tess_u8 *p, TessTileHdr *t);
 
-#define TESS_JOB_WIRE      44
+#define TESS_JOB_WIRE      80     /* 44, plus module id and 4 doubles */
 #define TESS_TILEHDR_WIRE  36
 
 /*

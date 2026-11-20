@@ -44,6 +44,7 @@
 #include <Xm/DrawingA.h>
 #include <Xm/Label.h>
 #include <Xm/PushB.h>
+#include <Xm/Protocols.h>
 #include <Xm/RowColumn.h>
 #include <Xm/Text.h>
 
@@ -51,7 +52,7 @@
 #include "tess_cluster.h"
 #include "tess_startcheck.h"
 
-#define TESS_CTRL_W 296      /* control window width: 40 more for "free" */
+#define TESS_CTRL_W 324      /* View and Colour side by side; 432 was too wide */
 #define TESS_GAP    8
 #define TESS_DECOR  14       /* window manager border and frame, per window */
 #define TESS_USE    0.90     /* share of the screen width both windows take */
@@ -60,6 +61,7 @@
 #include "tess_proto.h"
 #include "tess_wire.h"
 #include "tess_mandel.h"
+#include "tess_module.h"
 
 /*
  * Everything the panes edit. The descriptor tables below point into this by
@@ -77,6 +79,8 @@ typedef struct UiValues {
     int    interior;
     int    by_owner;
     int    hud;
+    int    module;         /* index into tess_module_at() */
+    TessModValues modv;    /* the current module's own parameters */
 } UiValues;
 
 typedef struct Ui {
@@ -89,6 +93,15 @@ typedef struct Ui {
     Widget     clusterframe;
     TessCluster *cl;
     Widget     elapsed;
+    Widget     fractalframe;
+    Widget     fractalwork;    /* inside the frame, holds the menu */
+    Widget     fractalopt;
+    Widget     fractal_btn[TESS_MAX_ENUM];   /* the menu's entries */
+    TessParamPane *mod_pane[TESS_MAX_ENUM];  /* per module, NULL if none */
+    int        quitting;
+    int        quit_ticks;
+    Widget     modbox;         /* holds whichever mod_pane is current */
+    Widget     modnone;        /* shown for a module with no parameters */
     TessParamPane *view_pane;
     TessParamPane *colour_pane;
     UiValues   val;
@@ -168,7 +181,7 @@ static const TessParamDesc view_params[] = {
     { "centre im",  TESS_P_DOUBLE, XtOffsetOf(UiValues, cy),       0.0, 0.0,
       TESS_CLUSTER, { 0 } },
     { "scale",      TESS_P_DOUBLE, XtOffsetOf(UiValues, scale),    1e-15, 1.0,
-      TESS_CLUSTER, { 0 } },
+      TESS_CLUSTER, { 0 }, 4 },   /* 4 digits: the centre needs them, not this */
     { "iterations", TESS_P_INT,    XtOffsetOf(UiValues, max_iter), 16.0, 65535.0,
       TESS_CLUSTER, { 0 } },
     { "auto iters", TESS_P_BOOL,   XtOffsetOf(UiValues, auto_iter), 0.0, 1.0,
@@ -596,6 +609,7 @@ static void blit(Ui *u, int x, int y, int w, int h)
 }
 
 static void reshade_all(Ui *u);
+static void module_home(Ui *u);
 
 /*
  * A readout on the picture itself.
@@ -755,7 +769,12 @@ static void auto_iters(Ui *u)
     if (!u->val.auto_iter) {
         return;
     }
-    home = 3.2 / (double)(u->width > 0 ? u->width : 1024);
+    {
+        double cx, cy, span;
+
+        tess_module_at(u->val.module)->home(&u->val.modv, &cx, &cy, &span);
+        home = span / (double)(u->width > 0 ? u->width : 1024);
+    }
     if (u->job.scale <= 0.0) {
         return;
     }
@@ -780,6 +799,8 @@ static void values_to_job(Ui *u)
     u->job.cy = u->val.cy;
     u->job.scale = u->val.scale;
     u->job.max_iter = (tess_u32)u->val.max_iter;
+    u->job.module = tess_module_at(u->val.module)->id;
+    memcpy((char *)u->job.mp, (const char *)u->val.modv.mp, sizeof u->job.mp);
     u->pal.ramp = u->val.ramp;
     u->pal.cycles = u->val.cycles;
     u->pal.rotate = u->val.rotate;
@@ -792,6 +813,9 @@ static void job_to_values(Ui *u)
     u->val.cy = u->job.cy;
     u->val.scale = u->job.scale;
     u->val.max_iter = (int)u->job.max_iter;
+    u->val.module = tess_module_index(u->job.module);
+    memcpy((char *)u->val.modv.mp, (const char *)u->job.mp,
+           sizeof u->val.modv.mp);
 }
 
 static void send_render(Ui *u)
@@ -852,7 +876,22 @@ static void param_applied(void *ctx, const TessParamDesc *d)
 {
     Ui *u = (Ui *)ctx;
     char msg[160];
+    const TessModule *m = tess_module_at(u->val.module);
 
+    /* One of the module's own parameters: let it set any others that follow
+       from it, as a Julia preset sets c, before the job is built. */
+    if (m->changed && m->nparams > 0 &&
+        d >= m->params && d < m->params + m->nparams) {
+        int how = m->changed(d, &u->val.modv);
+
+        if ((how & TESS_MOD_PANE) && u->val.module < TESS_MAX_ENUM &&
+            u->mod_pane[u->val.module]) {
+            tess_params_refresh(u->mod_pane[u->val.module]);
+        }
+        if (how & TESS_MOD_HOME) {
+            module_home(u);
+        }
+    }
     values_to_job(u);
     if (d->where == TESS_LOCAL) {
         reshade_all(u);
@@ -1426,16 +1465,178 @@ static void render_cb(Widget w, XtPointer cd, XtPointer cb)
     }
 }
 
+/*
+ * The view that frames what the current module's values make, into the View
+ * pane. The values themselves stay: Home on a Julia preset frames that preset.
+ */
+static void module_home(Ui *u)
+{
+    double span;
+
+    tess_module_at(u->val.module)->home(&u->val.modv, &u->val.cx, &u->val.cy,
+                                        &span);
+    u->val.scale = span / (double)(u->width > 0 ? u->width : 1024);
+    u->val.max_iter = 1000;
+    if (u->view_pane) {
+        tess_params_refresh(u->view_pane);
+    }
+}
+
+/* A module just chosen: its opening values, then the view that frames them. */
+static void module_start(Ui *u)
+{
+    int m = u->val.module;
+
+    tess_module_at(m)->defaults(&u->val.modv);
+    if (m < TESS_MAX_ENUM && u->mod_pane[m]) {
+        tess_params_refresh(u->mod_pane[m]);
+    }
+    module_home(u);
+}
+
+/*
+ * Every module's pane sits in the same place beside the Fractal menu, all
+ * managed, and only the current one is mapped. Managing and unmanaging them
+ * asked the control window to change height; on lucy it grew a few pixels and
+ * the pane never appeared. Mapping changes nothing about geometry: the box is
+ * always as big as its biggest pane and the window never resizes.
+ */
+static void show_module_pane(Ui *u)
+{
+    int i, m = u->val.module, any = 0;
+
+    for (i = 0; i < tess_module_count() && i < TESS_MAX_ENUM; i++) {
+        if (u->mod_pane[i]) {
+            XtSetMappedWhenManaged(XtParent(u->mod_pane[i]->form), i == m);
+            if (i == m) {
+                any = 1;
+            }
+        }
+    }
+    XtSetMappedWhenManaged(u->modnone, !any);
+}
+
+/*
+ * A different fractal starts from its own opening view: the Mandelbrot set's
+ * centre is nowhere useful for a Julia set. Every worker has every module, so
+ * this is a new epoch, never a relaunch.
+ */
+static void fractal_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+    char msg[96];
+    int i;
+
+    for (i = 0; i < tess_module_count() && i < TESS_MAX_ENUM; i++) {
+        if (u->fractal_btn[i] == w) {
+            break;
+        }
+    }
+    if (i >= tess_module_count() || i >= TESS_MAX_ENUM ||
+        i == u->val.module) {
+        return;
+    }
+    u->val.module = i;
+    module_start(u);
+    show_module_pane(u);
+    values_to_job(u);
+    sprintf(msg, "fractal: %s, new epoch", tess_module_at(i)->name);
+    ui_log(u, msg);
+    if (u->fd >= 0) {
+        send_render(u);
+    }
+}
+
+/*
+ * Quit, tidily. BYE first, because the master already treats it as "finish
+ * and exit": it stops the workers and MPI_Finalize ends the job the clean
+ * way. If mpirun is still there after three seconds, the same interrupt,
+ * terminate, kill and sweep that Stop uses. Fifteen seconds is the limit,
+ * after which this exits anyway and says so.
+ *
+ * Closing either window comes here too. Letting the window manager destroy
+ * the widgets instead left timers firing into freed memory.
+ */
+static void quit_poll_cb(XtPointer cd, XtIntervalId *id)
+{
+    Ui *u = (Ui *)cd;
+
+    u->quit_ticks++;
+    if (!u->cl || !tess_cluster_alive(u->cl)) {
+        if (u->cl) {
+            tess_cluster_stop(u->cl);     /* nothing running: just the sweep */
+        }
+        exit(0);
+    }
+    if (u->quit_ticks == 12) {
+        ui_log(u, "quit: the job did not end on BYE, stopping it");
+        tess_cluster_shutdown(u->cl);
+    }
+    if (u->quit_ticks > 60) {
+        fprintf(stderr, "tess-ui: the job would not stop; check for "
+                "leftover tess-node ranks\n");
+        exit(1);
+    }
+    XtAppAddTimeOut(u->app, 250, quit_poll_cb, (XtPointer)u);
+}
+
+static void quit_cb(Widget w, XtPointer cd, XtPointer cb)
+{
+    Ui *u = (Ui *)cd;
+
+    if (u->quitting) {
+        return;
+    }
+    u->quitting = 1;
+    u->quit_ticks = 0;
+    set_status(u, "quitting: stopping the cluster");
+    ui_log(u, "quit: asking the master to finish");
+    if (u->fd >= 0) {
+        (void)tess_frame_write(u->fd, TESS_MSG_BYE, (tess_u8 *)"", 0);
+        if (u->input_id) {
+            XtRemoveInput(u->input_id);
+            u->input_id = 0;
+        }
+        close(u->fd);
+        u->fd = -1;
+    }
+    XtAppAddTimeOut(u->app, 250, quit_poll_cb, (XtPointer)u);
+}
+
+/*
+ * Centre the Fractal menu in its frame. The frame is stretched to the height
+ * of the module box beside it, which is only known once the window is
+ * realized, and Motif has no setting that centres a frame's work area
+ * vertically. So measure once and set the menu's top offset.
+ */
+static void centre_fractal_menu(Ui *u)
+{
+    Dimension wh = 0, mh = 0;
+    int off;
+
+    XtVaGetValues(u->fractalwork, XmNheight, &wh, NULL);
+    XtVaGetValues(u->fractalopt, XmNheight, &mh, NULL);
+    off = ((int)wh - (int)mh) / 2;
+    if (off > 0) {
+        XtVaSetValues(u->fractalopt, XmNtopOffset, off, NULL);
+    }
+}
+
+/* The window manager's close button, on either window, means Quit. */
+static void catch_wm_close(Ui *u, Widget shell)
+{
+    Atom del = XmInternAtom(XtDisplay(shell), "WM_DELETE_WINDOW", False);
+
+    XtVaSetValues(shell, XmNdeleteResponse, XmDO_NOTHING, NULL);
+    XmAddWMProtocolCallback(shell, del, quit_cb, (XtPointer)u);
+}
+
 static void home_cb(Widget w, XtPointer cd, XtPointer cb)
 {
     Ui *u = (Ui *)cd;
 
-    u->val.cx = -0.6;
-    u->val.cy = 0.0;
-    u->val.scale = 3.2 / (double)(u->width > 0 ? u->width : 1024);
-    u->val.max_iter = 1000;
+    module_home(u);
     values_to_job(u);
-    tess_params_refresh(u->view_pane);
     ui_log(u, "home");
     if (u->fd >= 0) {
         send_render(u);
@@ -1512,7 +1713,7 @@ static void wm_frame_geom(Display *d, Window w, int *fx, int *fy,
 /* The second top-level shell: same app context, no MPI, no blocking. */
 static void build_control(Ui *u)
 {
-    Widget form, buttons, b;
+    Widget form, band, buttons, b;
 
     u->control = XtVaAppCreateShell("control", "Tess",
                                     topLevelShellWidgetClass,
@@ -1525,17 +1726,129 @@ static void build_control(Ui *u)
     form = XtVaCreateManagedWidget("cform", xmFormWidgetClass, u->control,
                                    NULL);
 
-    u->view_pane = tess_params_build(form, "View",
-                                     view_params,
-                                     (int)(sizeof view_params /
-                                           sizeof view_params[0]),
-                                     (void *)&u->val, param_applied,
-                                     (void *)u);
-    XtVaSetValues(XtParent(u->view_pane->form),
-                  XmNtopAttachment, XmATTACH_FORM,
-                  XmNleftAttachment, XmATTACH_FORM,
-                  XmNrightAttachment, XmATTACH_FORM,
-                  NULL);
+    /*
+     * Two columns, then full-width rows:
+     *
+     *     Fractal | <module>
+     *     View    | Colour
+     *     Status
+     *     Render Home Save Tile            Quit
+     *     Cluster
+     *     log
+     *
+     * The left frames are stretched to the right ones' height so each band
+     * reads as one row. The module's own settings sit beside the Fractal menu
+     * because they belong to it, and side by side costs no height.
+     */
+    /*
+     * The top band gets a form of its own. Both boxes attach to its top and
+     * bottom, which makes them the same height, and only the module box
+     * refers to the Fractal frame. Done in cform directly, the frame's bottom
+     * had to follow the module box while the box's left followed the frame,
+     * and Motif counts that as a circular dependency: it does not separate
+     * horizontal attachments from vertical ones.
+     */
+    band = XtVaCreateManagedWidget("band", xmFormWidgetClass, form,
+                                   XmNtopAttachment, XmATTACH_FORM,
+                                   XmNleftAttachment, XmATTACH_FORM,
+                                   XmNrightAttachment, XmATTACH_FORM,
+                                   XmNmarginWidth, 0,
+                                   XmNmarginHeight, 0,
+                                   NULL);
+    {
+        Widget pull;
+        XmString empty;
+        int i;
+
+        /*
+         * A bare option menu, not a generated pane: the pane reserves a label
+         * column and a fixed-width control, which ran over the border of the
+         * box beside it. The frame title says what it is. The frame takes its
+         * natural width and the module's box gets the rest, which a preset
+         * menu with its values spelled out needs.
+         */
+        u->fractalframe = XtVaCreateManagedWidget(
+            "fractalframe", xmFrameWidgetClass, band,
+            XmNshadowType, XmSHADOW_ETCHED_IN,
+            XmNtopAttachment, XmATTACH_FORM,
+            XmNbottomAttachment, XmATTACH_FORM,
+            XmNleftAttachment, XmATTACH_FORM,
+            NULL);
+        XtVaCreateManagedWidget("Fractal", xmLabelWidgetClass,
+                                u->fractalframe,
+                                XmNchildType, XmFRAME_TITLE_CHILD, NULL);
+        /* A form to hold the menu, so it can be centred vertically once the
+           frame's height is known: see centre_fractal_menu(). */
+        u->fractalwork = XtVaCreateManagedWidget("fractalwork",
+                                                 xmFormWidgetClass,
+                                                 u->fractalframe,
+                                                 XmNmarginWidth, 0,
+                                                 XmNmarginHeight, 0,
+                                                 NULL);
+        pull = XmCreatePulldownMenu(u->fractalwork, "fractalpull",
+                                    (ArgList)0, 0);
+        for (i = 0; i < tess_module_count() && i < TESS_MAX_ENUM; i++) {
+            u->fractal_btn[i] = XtVaCreateManagedWidget(
+                tess_module_at(i)->name, xmPushButtonWidgetClass, pull, NULL);
+            XtAddCallback(u->fractal_btn[i], XmNactivateCallback, fractal_cb,
+                          (XtPointer)u);
+        }
+        u->fractalopt = XmCreateOptionMenu(u->fractalwork, "fractalopt",
+                                           (ArgList)0, 0);
+        empty = XmStringCreateLocalized("");
+        XtVaSetValues(u->fractalopt,
+                      XmNsubMenuId, pull,
+                      XmNlabelString, empty,
+                      XmNmenuHistory, u->fractal_btn[u->val.module],
+                      XmNleftAttachment, XmATTACH_FORM,
+                      XmNrightAttachment, XmATTACH_FORM,
+                      XmNtopAttachment, XmATTACH_FORM,
+                      NULL);
+        XmStringFree(empty);
+        XtUnmanageChild(XmOptionLabelGadget(u->fractalopt));
+        XtManageChild(u->fractalopt);
+    }
+    u->modbox = XtVaCreateManagedWidget("modbox", xmFormWidgetClass, band,
+                                        XmNtopAttachment, XmATTACH_FORM,
+                                        XmNbottomAttachment, XmATTACH_FORM,
+                                        XmNleftAttachment, XmATTACH_WIDGET,
+                                        XmNleftWidget, u->fractalframe,
+                                        XmNleftOffset, TESS_SECTION_GAP,
+                                        XmNrightAttachment, XmATTACH_FORM,
+                                        XmNmarginWidth, 0,
+                                        XmNmarginHeight, 0,
+                                        NULL);
+    {
+        int i;
+
+        for (i = 0; i < tess_module_count() && i < TESS_MAX_ENUM; i++) {
+            const TessModule *m = tess_module_at(i);
+
+            if (m->nparams <= 0) {
+                continue;
+            }
+            u->mod_pane[i] = tess_params_build(u->modbox, m->name,
+                                               m->params, m->nparams,
+                                               (void *)&u->val.modv,
+                                               param_applied, (void *)u);
+            XtVaSetValues(XtParent(u->mod_pane[i]->form),
+                          XmNtopAttachment, XmATTACH_FORM,
+                          XmNleftAttachment, XmATTACH_FORM,
+                          XmNrightAttachment, XmATTACH_FORM,
+                          XmNbottomAttachment, XmATTACH_FORM,
+                          NULL);
+        }
+        u->modnone = XtVaCreateManagedWidget("no settings",
+                                             xmLabelWidgetClass, u->modbox,
+                                             XmNtopAttachment, XmATTACH_FORM,
+                                             XmNleftAttachment, XmATTACH_FORM,
+                                             XmNrightAttachment,
+                                             XmATTACH_FORM,
+                                             XmNbottomAttachment,
+                                             XmATTACH_FORM,
+                                             NULL);
+    }
+    show_module_pane(u);
 
     u->colour_pane = tess_params_build(form, "Colour",
                                        colour_params,
@@ -1546,38 +1859,29 @@ static void build_control(Ui *u)
     XtVaSetValues(XtParent(u->colour_pane->form),
                   XmNtopAttachment, XmATTACH_WIDGET,
                   XmNtopOffset, TESS_SECTION_GAP,
-                  XmNtopWidget, XtParent(u->view_pane->form),
-                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNtopWidget, band,
+                  XmNleftAttachment, XmATTACH_POSITION,
+                  XmNleftPosition, 50,
+                  XmNleftOffset, TESS_SECTION_GAP / 2,
                   XmNrightAttachment, XmATTACH_FORM,
                   NULL);
-
-    buttons = XtVaCreateManagedWidget("buttons", xmRowColumnWidgetClass, form,
-                                      XmNorientation, XmHORIZONTAL,
-                                      XmNpacking, XmPACK_COLUMN,
-                                      XmNnumColumns, 1,
-                                      XmNspacing, 4,
-                                      XmNtopAttachment, XmATTACH_WIDGET,
-                                      XmNtopOffset, TESS_SECTION_GAP,
-                                      XmNtopWidget,
-                                      XtParent(u->colour_pane->form),
-                                      XmNleftAttachment, XmATTACH_FORM,
-                                      NULL);
-    b = XtVaCreateManagedWidget("Render", xmPushButtonWidgetClass, buttons,
-                                NULL);
-    XtAddCallback(b, XmNactivateCallback, render_cb, (XtPointer)u);
-    paint_ui_button(b, "#d9a441");
-    b = XtVaCreateManagedWidget("Home", xmPushButtonWidgetClass, buttons,
-                                NULL);
-    XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
-    paint_ui_button(b, "#c3cad0");
-    b = XtVaCreateManagedWidget("Save", xmPushButtonWidgetClass, buttons,
-                                NULL);
-    XtAddCallback(b, XmNactivateCallback, save_cb, (XtPointer)u);
-    paint_ui_button(b, "#a8b4bc");
-    b = XtVaCreateManagedWidget("Tile", xmPushButtonWidgetClass, buttons,
-                                NULL);
-    XtAddCallback(b, XmNactivateCallback, tile_cb, (XtPointer)u);
-    paint_ui_button(b, "#a8b4bc");
+    u->view_pane = tess_params_build(form, "View",
+                                     view_params,
+                                     (int)(sizeof view_params /
+                                           sizeof view_params[0]),
+                                     (void *)&u->val, param_applied,
+                                     (void *)u);
+    XtVaSetValues(XtParent(u->view_pane->form),
+                  XmNtopAttachment, XmATTACH_WIDGET,
+                  XmNtopOffset, TESS_SECTION_GAP,
+                  XmNtopWidget, band,
+                  XmNleftAttachment, XmATTACH_FORM,
+                  XmNrightAttachment, XmATTACH_POSITION,
+                  XmNrightPosition, 50,
+                  XmNrightOffset, TESS_SECTION_GAP / 2,
+                  XmNbottomAttachment, XmATTACH_OPPOSITE_WIDGET,
+                  XmNbottomWidget, XtParent(u->colour_pane->form),
+                  NULL);
 
     {
         Widget cframe;
@@ -1586,7 +1890,8 @@ static void build_control(Ui *u)
                                          XmNshadowType, XmSHADOW_ETCHED_IN,
                                          XmNtopAttachment, XmATTACH_WIDGET,
                                          XmNtopOffset, TESS_SECTION_GAP,
-                                         XmNtopWidget, buttons,
+                                         XmNtopWidget,
+                                         XtParent(u->colour_pane->form),
                                          XmNleftAttachment, XmATTACH_FORM,
                                          XmNrightAttachment, XmATTACH_FORM,
                                          NULL);
@@ -1619,13 +1924,52 @@ static void build_control(Ui *u)
                                          XmNrightAttachment, XmATTACH_FORM,
                                          NULL);
 
+    buttons = XtVaCreateManagedWidget("buttons", xmRowColumnWidgetClass, form,
+                                      XmNorientation, XmHORIZONTAL,
+                                      XmNpacking, XmPACK_COLUMN,
+                                      XmNnumColumns, 1,
+                                      XmNspacing, 4,
+                                      XmNtopAttachment, XmATTACH_WIDGET,
+                                      XmNtopOffset, TESS_SECTION_GAP,
+                                      XmNtopWidget, u->elapsed,
+                                      XmNleftAttachment, XmATTACH_FORM,
+                                      NULL);
+    b = XtVaCreateManagedWidget("Render", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, render_cb, (XtPointer)u);
+    paint_ui_button(b, "#d9a441");
+    b = XtVaCreateManagedWidget("Home", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, home_cb, (XtPointer)u);
+    paint_ui_button(b, "#c3cad0");
+    b = XtVaCreateManagedWidget("Save", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, save_cb, (XtPointer)u);
+    paint_ui_button(b, "#a8b4bc");
+    b = XtVaCreateManagedWidget("Tile", xmPushButtonWidgetClass, buttons,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, tile_cb, (XtPointer)u);
+    paint_ui_button(b, "#a8b4bc");
+
+    /* Red, and on its own at the far right, so it is not hit on the way to
+       Tile. */
+    b = XtVaCreateManagedWidget("Quit", xmPushButtonWidgetClass, form,
+                                XmNtopAttachment, XmATTACH_OPPOSITE_WIDGET,
+                                XmNtopWidget, buttons,
+                                XmNbottomAttachment, XmATTACH_OPPOSITE_WIDGET,
+                                XmNbottomWidget, buttons,
+                                XmNrightAttachment, XmATTACH_FORM,
+                                NULL);
+    XtAddCallback(b, XmNactivateCallback, quit_cb, (XtPointer)u);
+    paint_ui_button(b, "#d9534f");
+
     u->cl = tess_cluster_create(form, u->tree, u->hostlist, u->port,
                                 cluster_ready_cb, (void *)u,
                                 ui_log_cb, (void *)u);
     XtVaSetValues(tess_cluster_widget(u->cl),
                   XmNtopAttachment, XmATTACH_WIDGET,
                   XmNtopOffset, TESS_SECTION_GAP,
-                  XmNtopWidget, u->elapsed,
+                  XmNtopWidget, buttons,
                   XmNleftAttachment, XmATTACH_FORM,
                   XmNrightAttachment, XmATTACH_FORM,
                   NULL);
@@ -1647,7 +1991,10 @@ static void build_control(Ui *u)
                   NULL);
     XtManageChild(u->log);
 
+    catch_wm_close(u, u->control);
+    catch_wm_close(u, u->toplevel);
     XtRealizeWidget(u->control);
+    centre_fractal_menu(u);
 }
 
 /* ----------------------------------------------------------------- main */
@@ -1706,9 +2053,16 @@ int main(int argc, char **argv)
     u.job.epoch = 0;
     u.job.max_iter = 1000;
     u.job.tile = TESS_TILE;
-    u.job.cx = -0.6;
-    u.job.cy = 0.0;
-    u.job.scale = 3.2 / 1024.0;
+    {
+        double span;
+        TessModValues mv;
+
+        u.job.module = tess_module_at(0)->id;
+        tess_module_at(0)->defaults(&mv);
+        tess_module_at(0)->home(&mv, &u.job.cx, &u.job.cy, &span);
+        memcpy((char *)u.job.mp, (const char *)mv.mp, sizeof u.job.mp);
+        u.job.scale = span / 1024.0;
+    }
     tess_palette_default(&u.pal);
     strcpy(u.tree, "/cluster/dev/sgi-tess");
     strcpy(u.savedir, ".");
@@ -1825,7 +2179,14 @@ int main(int argc, char **argv)
          * a hardcoded 1024: 3.2 units across whatever width this is, so the set
          * sits in the frame at any aspect or screen size.
          */
-        u.job.scale = 3.2 / (double)u.width;
+        {
+            double cx, cy, span;
+            TessModValues mv;
+
+            tess_module_at(0)->defaults(&mv);
+            tess_module_at(0)->home(&mv, &cx, &cy, &span);
+            u.job.scale = span / (double)u.width;
+        }
     }
 
     form = XtVaCreateManagedWidget("form", xmFormWidgetClass, u.toplevel,

@@ -94,6 +94,7 @@ double tess_get_f64(const tess_u8 *p)
 int tess_put_job(tess_u8 *p, const TessJob *j)
 {
     int n = 0;
+    int k;
 
     n += tess_put_u32(p + n, j->epoch);
     n += tess_put_u32(p + n, j->width);
@@ -103,12 +104,17 @@ int tess_put_job(tess_u8 *p, const TessJob *j)
     n += tess_put_f64(p + n, j->cx);
     n += tess_put_f64(p + n, j->cy);
     n += tess_put_f64(p + n, j->scale);
+    n += tess_put_u32(p + n, j->module);
+    for (k = 0; k < TESS_MOD_NPARAM; k++) {
+        n += tess_put_f64(p + n, j->mp[k]);
+    }
     return n;
 }
 
 int tess_get_job(const tess_u8 *p, TessJob *j)
 {
     int n = 0;
+    int k;
 
     j->epoch    = tess_get_u32(p + n); n += 4;
     j->width    = tess_get_u32(p + n); n += 4;
@@ -118,6 +124,10 @@ int tess_get_job(const tess_u8 *p, TessJob *j)
     j->cx       = tess_get_f64(p + n); n += 8;
     j->cy       = tess_get_f64(p + n); n += 8;
     j->scale    = tess_get_f64(p + n); n += 8;
+    j->module   = tess_get_u32(p + n); n += 4;
+    for (k = 0; k < TESS_MOD_NPARAM; k++) {
+        j->mp[k] = tess_get_f64(p + n); n += 8;
+    }
     return n;
 }
 

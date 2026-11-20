@@ -40,9 +40,13 @@ INVENTORY_SRC = $(COMMON)/tess_inventory.c
 CHECK_SRC     = $(COMMON)/tess_check.c
 WIRE_SRC      = $(COMMON)/tess_wire.c
 MANDEL_SRC    = $(COMMON)/tess_mandel.c
-COMMON_SRCS   = $(WIRE_SRC) $(MANDEL_SRC)
+# Compute modules: one tess_mod_<name>.c each, picked up by wildcard, so
+# adding one never touches this file. The list is in tess_modules.c.
+MODULE_SRCS   = $(COMMON)/tess_modules.c $(wildcard $(COMMON)/tess_mod_*.c)
+COMMON_SRCS   = $(WIRE_SRC) $(MANDEL_SRC) $(MODULE_SRCS)
 COMMON_HDRS   = $(COMMON)/tess_types.h $(COMMON)/tess_proto.h \
-                $(COMMON)/tess_wire.h $(COMMON)/tess_mandel.h
+                $(COMMON)/tess_wire.h $(COMMON)/tess_mandel.h \
+                $(COMMON)/tess_module.h $(COMMON)/tess_paramdesc.h
 
 ifeq ($(findstring IP,$(ARCH)),IP)
 # ---- IRIX, MIPSpro. The authoritative build. DESIGN.md section 8. ----
@@ -178,6 +182,10 @@ gate:
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(MANDEL_SRC) -o /dev/null
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(INVENTORY_SRC) -o /dev/null
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(CHECK_SRC) -o /dev/null
+	@for f in $(MODULE_SRCS); do \
+	  echo "$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $$f -o /dev/null"; \
+	  $(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $$f -o /dev/null || exit 1; \
+	done
 	@echo "gate: portable sources are C89 clean"
 
 clean:

@@ -927,6 +927,29 @@ int tess_cluster_running(TessCluster *c)
     return c->child > 0;
 }
 
+/*
+ * For Quit: is mpirun still there? Reaps it if it has gone, which nothing
+ * else does while no launch or stop is in progress, so a job that exited on
+ * the GUI's BYE is noticed here.
+ */
+int tess_cluster_alive(TessCluster *c)
+{
+    int status;
+
+    if (c->child > 0 && waitpid(c->child, &status, WNOHANG) == c->child) {
+        c->child = 0;
+    }
+    return c->child > 0;
+}
+
+/* Stop for good: the same escalation as Stop, with any pending relaunch
+   cancelled, since nothing is coming back. */
+void tess_cluster_shutdown(TessCluster *c)
+{
+    c->relaunch = 0;
+    tess_cluster_stop(c);
+}
+
 Widget tess_cluster_widget(TessCluster *c)
 {
     return c->frame;

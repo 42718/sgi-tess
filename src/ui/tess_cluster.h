@@ -72,6 +72,8 @@ void tess_cluster_set_load(TessCluster *c, int rank, double load);
 int  tess_cluster_dirty(TessCluster *c);
 void tess_cluster_launch(TessCluster *c);
 void tess_cluster_stop(TessCluster *c);
+int  tess_cluster_alive(TessCluster *c);     /* reaps mpirun if it exited */
+void tess_cluster_shutdown(TessCluster *c);  /* stop, and no relaunch */
 int  tess_cluster_running(TessCluster *c);
 Widget tess_cluster_widget(TessCluster *c);
 

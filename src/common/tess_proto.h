@@ -17,11 +17,12 @@
 #include "tess_types.h"
 
 #define TESS_MAGIC        0x54455353u    /* "TESS" */
-#define TESS_PROTO_VER    3
+#define TESS_PROTO_VER    4              /* 4: module id and parameters */
 #define TESS_DEFAULT_PORT 7333
 #define TESS_TILE         64             /* default tile edge, DESIGN.md 3 */
 #define TESS_MAX_TILE     256
 #define TESS_BYTES_PER_PX 3              /* u16 iters + u8 fraction */
+#define TESS_MOD_NPARAM   4              /* module parameters per job */
 
 /* GUI -> master */
 #define TESS_MSG_HELLO    1              /* client version handshake */
@@ -47,6 +48,8 @@ typedef struct TessJob {
     double   cx;          /* centre, complex plane */
     double   cy;
     double   scale;       /* units per pixel */
+    tess_u32 module;      /* TessModule id, tess_module.h */
+    double   mp[TESS_MOD_NPARAM];  /* that module's own parameters */
 } TessJob;
 
 typedef struct TessTileHdr {
@@ -113,6 +116,8 @@ typedef struct TessAssign {
     double   cx;
     double   cy;
     double   scale;
+    tess_u32 module;
+    double   mp[TESS_MOD_NPARAM];
 } TessAssign;
 
 typedef struct TessResultHdr {

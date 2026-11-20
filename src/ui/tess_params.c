@@ -155,6 +155,7 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
     Binding *b;
     int i, j;
 
+    row = (Widget)0;
     p = (TessParamPane *)calloc(1, sizeof(TessParamPane));
     if (!p) {
         return (TessParamPane *)0;
@@ -178,6 +179,22 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
 
     for (i = 0; i < p->n; i++) {
         Widget lab;
+        int half, nolabel, ctl_left;
+
+        /*
+         * Where this parameter goes in its row: 0 the whole row, 1 the left
+         * half of a shared row, 2 the right half. Only numeric fields share,
+         * which is what beside is for: two numbers that belong together, such
+         * as the two parts of Julia's c.
+         */
+        half = 0;
+        if (descs[i].beside && i > 0) {
+            half = 2;
+        } else if (i + 1 < p->n && descs[i + 1].beside) {
+            half = 1;
+        }
+        nolabel = descs[i].label[0] == '\0';
+        ctl_left = half == 1 ? 21 : half == 2 ? 72 : nolabel ? 0 : 45;
 
         /*
          * One form per row, all sharing a fraction base, so the labels line up
@@ -185,23 +202,36 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
          * RowColumn of label/widget pairs cannot do that: each row sizes
          * itself, which is what made the panel look hand-assembled.
          */
-        row = XtVaCreateManagedWidget("row", xmFormWidgetClass, rc,
-                                      XmNfractionBase, 100,
-                                      XmNshadowThickness, 0,
-                                      XmNmarginHeight, 0,
-                                      XmNmarginWidth, 0,
-                                      NULL);
+        if (half != 2) {          /* the right half reuses the left's row */
+            row = XtVaCreateManagedWidget("row", xmFormWidgetClass, rc,
+                                          XmNfractionBase, 100,
+                                          XmNshadowThickness, 0,
+                                          XmNmarginHeight, 0,
+                                          XmNmarginWidth, 0,
+                                          NULL);
+        }
         /* Left-aligned in a fixed column: right-aligned labels left a wide
-           empty gutter down the left of the panel and read as misaligned. */
-        lab = XtVaCreateManagedWidget(descs[i].label, xmLabelWidgetClass, row,
-                                      XmNalignment, XmALIGNMENT_BEGINNING,
-                                      XmNleftAttachment, XmATTACH_FORM,
-                                      XmNrightAttachment, XmATTACH_POSITION,
-                                      XmNrightPosition, 44,
-                                      XmNtopAttachment, XmATTACH_FORM,
-                                      XmNbottomAttachment, XmATTACH_FORM,
-                                      NULL);
-        (void)lab;
+           empty gutter down the left of the panel and read as misaligned.
+           No label at all when the table gives "": the control says enough,
+           as a preset menu whose entries are their own description does. */
+        if (!nolabel) {
+            lab = XtVaCreateManagedWidget(descs[i].label, xmLabelWidgetClass,
+                                          row,
+                                          XmNalignment, XmALIGNMENT_BEGINNING,
+                                          XmNleftAttachment,
+                                          half == 2 ? XmATTACH_POSITION :
+                                                      XmATTACH_FORM,
+                                          XmNleftPosition, 51,
+                                          XmNrightAttachment,
+                                          XmATTACH_POSITION,
+                                          XmNrightPosition,
+                                          half == 1 ? 20 :
+                                          half == 2 ? 71 : 44,
+                                          XmNtopAttachment, XmATTACH_FORM,
+                                          XmNbottomAttachment, XmATTACH_FORM,
+                                          NULL);
+            (void)lab;
+        }
 
         b = (Binding *)calloc(1, sizeof(Binding));
         b->pane = p;
@@ -300,17 +330,42 @@ TessParamPane *tess_params_build(Widget parent, const char *title,
                           (XtPointer)b);
             XtAddCallback(p->w[i], XmNdragCallback, scale_cb, (XtPointer)b);
         } else {
+            /*
+             * Stretched to the row's right edge from a small minimum, rather
+             * than a fixed 18 columns. Fixed, the field asked for the same
+             * width in every pane, which fitted the full-width View pane and
+             * ran out of the half-width module pane beside the Fractal menu,
+             * where the frame clipped it.
+             */
             p->w[i] = XtVaCreateManagedWidget("f", xmTextFieldWidgetClass, row,
-                                              XmNcolumns, 18,
+                                              XmNcolumns, 8,
                                               XmNleftAttachment,
                                               XmATTACH_POSITION,
                                               XmNleftPosition, 45,
+                                              XmNrightAttachment,
+                                              XmATTACH_FORM,
                                               XmNtopAttachment, XmATTACH_FORM,
                                               XmNbottomAttachment,
                                               XmATTACH_FORM,
                                               NULL);
             XtAddCallback(p->w[i], XmNactivateCallback, text_cb,
                           (XtPointer)b);
+        }
+
+        /* Each branch above places its control for a whole, labelled row.
+           Shared or unlabelled rows move it. */
+        if (half != 0 || nolabel) {
+            XtVaSetValues(p->w[i],
+                          XmNleftAttachment,
+                          ctl_left > 0 ? XmATTACH_POSITION : XmATTACH_FORM,
+                          XmNleftPosition, ctl_left,
+                          NULL);
+            if (half == 1) {
+                XtVaSetValues(p->w[i],
+                              XmNrightAttachment, XmATTACH_POSITION,
+                              XmNrightPosition, 49,
+                              NULL);
+            }
         }
     }
 
@@ -339,7 +394,8 @@ void tess_params_refresh(TessParamPane *p)
             XmScaleSetValue(p->w[i], (int)v);
         } else {
             if (p->descs[i].type == TESS_P_DOUBLE) {
-                sprintf(buf, "%.12g", v);
+                sprintf(buf, "%.*g", p->descs[i].digits > 0 ?
+                        p->descs[i].digits : 12, v);
             } else {
                 sprintf(buf, "%d", (int)v);
             }

@@ -20,26 +20,7 @@
 
 #include <Xm/Xm.h>
 
-typedef enum {
-    TESS_P_DOUBLE,
-    TESS_P_INT,
-    TESS_P_BOOL,
-    TESS_P_ENUM
-} TessParamType;
-
-#define TESS_CLUSTER 0      /* changing it means a new epoch */
-#define TESS_LOCAL   1      /* changing it re-shades, and costs no network */
-
-#define TESS_MAX_ENUM 8
-
-typedef struct TessParamDesc {
-    const char   *label;
-    TessParamType type;
-    int           offset;            /* byte offset into the values struct */
-    double        lo, hi;            /* clamp; ignored for BOOL */
-    int           where;             /* TESS_CLUSTER or TESS_LOCAL */
-    const char   *names[TESS_MAX_ENUM];  /* ENUM only, NULL-terminated */
-} TessParamDesc;
+#include "tess_paramdesc.h"
 
 /* Called after a value has been written back into the values struct. */
 typedef void (*TessParamApply)(void *ctx, const TessParamDesc *d);

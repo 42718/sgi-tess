@@ -37,6 +37,7 @@
 #include "tess_proto.h"
 #include "tess_wire.h"
 #include "tess_mandel.h"
+#include "tess_module.h"
 #include "tess_inventory.h"
 
 static int verbose = 0;
@@ -223,7 +224,19 @@ static void worker_loop(int rank)
         VLOG(rank, "got tile at (%d,%d)", (int)a.x, (int)a.y);
 
         t0 = now_sec();
-        tess_mandel_tile(&a, buf);
+        {
+            /* Every worker has every module linked in, so switching module
+               is a new epoch, never a relaunch. An id this build does not
+               know draws as interior rather than crashing the rank. */
+            const TessModule *m = tess_module_find(a.module);
+
+            if (m) {
+                m->compute(&a, buf);
+            } else {
+                memset((char *)buf, 0,
+                       (size_t)TESS_SAMPLES(a) * TESS_BYTES_PER_PX);
+            }
+        }
 
         rh.epoch = a.epoch;
         rh.x = a.x;
@@ -320,6 +333,8 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
             a.cx = job->cx;
             a.cy = job->cy;
             a.scale = job->scale;
+            a.module = job->module;
+            memcpy((char *)a.mp, (const char *)job->mp, sizeof a.mp);
             MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, i,
                      TESS_TAG_ASSIGN, MPI_COMM_WORLD);
             next++;
@@ -373,6 +388,8 @@ static int run_epoch(const TessJob *job, int nranks, int *parked,
                 a.cx = job->cx;
                 a.cy = job->cy;
                 a.scale = job->scale;
+                a.module = job->module;
+                memcpy((char *)a.mp, (const char *)job->mp, sizeof a.mp);
                 MPI_Send((void *)&a, (int)sizeof a, MPI_BYTE, src,
                          TESS_TAG_ASSIGN, MPI_COMM_WORLD);
                 next++;
@@ -752,6 +769,18 @@ replay:
                 tess_u8 wb[12];
                 int n = 0;
 
+                /* The job layout changed in version 4. A GUI from another
+                   build would send a job this cannot read, so say why and
+                   hang up rather than render garbage. */
+                if (len < 4 || tess_get_u32(buf) != TESS_PROTO_VER) {
+                    fprintf(stderr, "tess-node: client speaks protocol %u, "
+                            "this is %u: rebuild both with gmake fresh\n",
+                            len < 4 ? 0u : (unsigned)tess_get_u32(buf),
+                            (unsigned)TESS_PROTO_VER);
+                    fflush(stderr);
+                    break;
+                }
+
                 if (nonce) {
                     char got[64];
                     int glen = len - 4;
@@ -915,6 +944,8 @@ int main(int argc, char **argv)
     job.cx = -0.6;
     job.cy = 0.0;
     job.scale = 3.2 / 1024.0;
+    job.module = tess_module_at(0)->id;
+    memset((char *)job.mp, 0, sizeof job.mp);
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-listen") == 0) {
