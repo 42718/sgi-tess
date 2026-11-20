@@ -17,6 +17,9 @@
 #include <string.h>
 
 #include <Xm/Xm.h>
+/* after Xm.h, which pulls in Intrinsic.h: Shell.h needs externalref */
+#include <X11/Shell.h>
+#include <Xm/DialogS.h>
 #include <Xm/Form.h>
 #include <Xm/Label.h>
 #include <Xm/PushB.h>
@@ -63,9 +66,12 @@ static void sc_append(const char *text)
 static void sc_summary(const char *text, const char *colour)
 {
     Display *d = XtDisplay(sc.summary);
-    Colormap cm = DefaultColormap(d, DefaultScreen(d));
+    Colormap cm;
     XColor want, exact;
     XmString s;
+
+    /* the dialog's own colormap, which is not the default one on arthur */
+    XtVaGetValues(sc.summary, XmNcolormap, &cm, NULL);
 
     s = XmStringCreateLocalized((char *)text);
     XtVaSetValues(sc.summary, XmNlabelString, s, NULL);
@@ -225,8 +231,11 @@ void tess_startcheck_run(Widget parent, const char *tree, int port,
 {
     Arg args[4];
     int n;
-    Widget buttons, recheck, close, quit;
+    Widget buttons, recheck, close, quit, shell, top;
     XmString title;
+    Visual *vis;
+    int depth;
+    Colormap cmap;
 
     if (sc.dialog) {
         sc_start();
@@ -245,7 +254,25 @@ void tess_startcheck_run(Widget parent, const char *tree, int port,
     XtSetArg(args[n], XmNautoUnmanage, False); n++;
     XtSetArg(args[n], XmNhorizontalSpacing, 6); n++;
     XtSetArg(args[n], XmNverticalSpacing, 6); n++;
-    sc.dialog = XmCreateFormDialog(parent, "preflight", args, n);
+    /*
+     * XmCreateFormDialog, by hand, so the shell can be told its visual. The
+     * parent is the render window, which on arthur is not on the default
+     * visual; a dialog shell takes its parent's depth and colormap but the
+     * root window's visual, and that mismatch fails when it is mapped.
+     */
+    for (top = parent; top && !XtIsShell(top); top = XtParent(top)) {
+        ;
+    }
+    XtVaGetValues(top ? top : parent, XtNvisual, &vis, XmNdepth, &depth,
+                  XmNcolormap, &cmap, NULL);
+    shell = XtVaCreatePopupShell("preflight_popup", xmDialogShellWidgetClass,
+                                 parent,
+                                 XtNvisual, vis,
+                                 XmNdepth, depth,
+                                 XmNcolormap, cmap,
+                                 XmNallowShellResize, True,
+                                 NULL);
+    sc.dialog = XmCreateForm(shell, "preflight", args, n);
     title = XmStringCreateLocalized("Tess preflight");
     XtVaSetValues(sc.dialog, XmNdialogTitle, title, NULL);
     XmStringFree(title);

@@ -707,7 +707,11 @@ static void poll_cb(XtPointer cd, XtIntervalId *id)
     }
     if (c->tries > 100) {
         set_state(c, "master never answered");
-        clog(c, "gave up waiting for the master%s%d", "", 0);
+        clog1(c, "gave up waiting for the master: mpirun is still");
+        clog1(c, "running but no master is listening. Its own output is");
+        clog1(c, "in the terminal tess-ui was started from. Stop, then");
+        clog1(c, "check each host: csh -c true must print nothing, and");
+        clog1(c, "every host needs setenv MPI_USE_TCP 1 in /.cshrc.");
         return;
     }
     c->poll = XtAppAddTimeOut(c->app, 300, poll_cb, (XtPointer)c);
@@ -730,7 +734,7 @@ void tess_cluster_launch(TessCluster *c)
      */
     if (c->child > 0) {
         c->relaunch = 1;
-        clog(c, "restarting to apply the new cluster%s%d", "", 0);
+        clog1(c, "restarting to apply the new cluster");
         tess_cluster_stop(c);
         return;
     }
@@ -832,6 +836,20 @@ void tess_cluster_launch(TessCluster *c)
     }
     if (c->child == 0) {
         setpgid(0, 0);          /* own group, so Stop can take the job down */
+        /*
+         * With no MPI_USE_* set, MPT probes the interconnects at startup and
+         * a multi-host job can hang there: every rank spinning, no error, and
+         * no master ever listening (doc/MPI-HELLO.md, trap 6). It first hit a
+         * new host, arthur, whose shell had not been given the variable. So
+         * pin TCP unless the user chose a transport. This covers the ranks on
+         * this host only; MPT does not reliably pass it on, which is why every
+         * host's /.cshrc still needs it.
+         */
+        if (!getenv("MPI_USE_TCP") && !getenv("MPI_USE_GM") &&
+            !getenv("MPI_USE_HIPPI") && !getenv("MPI_USE_GSN") &&
+            !getenv("MPI_USE_XPMEM")) {
+            putenv("MPI_USE_TCP=1");
+        }
         execvp("mpirun", argv);
         _exit(127);
     }
@@ -867,7 +885,7 @@ static void stop_sweep(TessCluster *c)
         sprintf(cmd, "arshell %s killall tess-node >/dev/null 2>&1",
                 c->host[i].name);
         system(cmd);
-        clog(c, "swept leftover ranks on %s%d", c->host[i].name, 0);
+        clog(c, "swept leftover ranks on %s", c->host[i].name, 0);
     }
 }
 
@@ -880,7 +898,7 @@ void tess_cluster_stop(TessCluster *c)
     c->stopstage = 0;
     kill(-c->child, SIGINT);
     set_state(c, "stopping...");
-    clog(c, "sent SIGINT to the job%s%d", "", 0);
+    clog1(c, "sent SIGINT to the job");
     c->stopt = XtAppAddTimeOut(c->app, 1500, stop_step, (XtPointer)c);
 }
 
@@ -907,10 +925,10 @@ static void stop_step(XtPointer cd, XtIntervalId *id)
     c->stopstage++;
     if (c->stopstage == 1) {
         kill(-c->child, SIGTERM);
-        clog(c, "still there: sent SIGTERM%s%d", "", 0);
+        clog1(c, "still there: sent SIGTERM");
     } else if (c->stopstage == 2) {
         kill(-c->child, SIGKILL);
-        clog(c, "still there: sent SIGKILL%s%d", "", 0);
+        clog1(c, "still there: sent SIGKILL");
     } else {
         c->child = 0;
         set_state(c, "stopped (forced)");
@@ -1015,6 +1033,68 @@ static void rank_cb(Widget w, XtPointer cd, XtPointer cb)
     }
 }
 
+/* A host name without its domain, for comparing "arthur" with
+   "arthur.local". */
+static void short_name(const char *in, char *out, int len)
+{
+    int i;
+
+    for (i = 0; i < len - 1 && in[i] && in[i] != '.'; i++) {
+        out[i] = in[i];
+    }
+    out[i] = '\0';
+}
+
+/*
+ * The first host is where the master goes, and the master listens on loopback
+ * for the GUI, so the first host has to be the one the GUI runs on. Whatever
+ * order -hosts gave, move this host to the front, or add it there if the list
+ * left it out. Started on arthur with "lucy,arthur", the master went to lucy
+ * and the GUI on arthur waited on its own loopback for a master that was never
+ * coming.
+ */
+static void local_first(TessCluster *c)
+{
+    char self[64], name[64];
+    TessHost h;
+    int i, at = -1;
+
+    if (gethostname(self, sizeof self) != 0) {
+        return;
+    }
+    self[sizeof self - 1] = '\0';
+    short_name(self, self, (int)sizeof self);
+    for (i = 0; i < c->nhosts; i++) {
+        short_name(c->host[i].name, name, (int)sizeof name);
+        if (strcmp(name, self) == 0) {
+            at = i;
+            break;
+        }
+    }
+    if (at == 0) {
+        return;
+    }
+    if (at < 0) {
+        if (c->nhosts >= TESS_MAX_HOSTS) {
+            c->nhosts = TESS_MAX_HOSTS - 1;
+        }
+        at = c->nhosts++;
+        memset((char *)&c->host[at], 0, sizeof c->host[at]);
+        strncpy(c->host[at].name, self, sizeof c->host[at].name - 1);
+        strcpy(c->host[at].note, "not scanned");
+        fprintf(stderr, "tess-ui: %s added to the hosts: the master runs "
+                "where the UI does\n", self);
+    } else {
+        fprintf(stderr, "tess-ui: %s moved to the front of the hosts: the "
+                "master runs where the UI does\n", self);
+    }
+    h = c->host[at];
+    for (i = at; i > 0; i--) {
+        c->host[i] = c->host[i - 1];
+    }
+    c->host[0] = h;
+}
+
 TessCluster *tess_cluster_create(Widget parent, const char *tree,
                                  const char *hostlist, int port,
                                  TessClusterReady ready, void *ctx,
@@ -1049,10 +1129,13 @@ TessCluster *tess_cluster_create(Widget parent, const char *tree,
         }
         strncpy(c->host[c->nhosts].name, p,
                 sizeof c->host[0].name - 1);
-        c->host[c->nhosts].ranks = c->nhosts == 0 ? 1 : 0;
         strcpy(c->host[c->nhosts].note, "not scanned");
         c->nhosts++;
         p = q ? q + 1 : (char *)0;
+    }
+    local_first(c);
+    for (i = 0; i < c->nhosts; i++) {
+        c->host[i].ranks = i == 0 ? 1 : 0;
     }
 
     c->frame = XtVaCreateManagedWidget("clframe", xmFrameWidgetClass, parent,

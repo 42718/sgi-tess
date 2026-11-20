@@ -36,6 +36,7 @@
 #include <sys/time.h>
 
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <Xm/Xm.h>
 /* after Xm.h, which pulls in Intrinsic.h: Shell.h needs externalref */
 #include <X11/Shell.h>
@@ -120,7 +121,8 @@ typedef struct Ui {
     GC         statsgc;
     GC         hudgc;
     XFontStruct *statsfont;
-    Colormap   cmap;          /* XOR, for the rubber band */
+    Colormap   cmap;          /* the panel's: the default colormap */
+    Colormap   canvas_cmap;   /* the render window's, for its visual */
     int        screen_w, screen_h;
     int        origin_x;
     int        ctrl_x;
@@ -572,6 +574,24 @@ static tess_u32 to_visual(Ui *u, tess_u32 rgb)
                       ((b >> (8 - u->bbits)) << u->bshift));
 }
 
+/*
+ * A named colour on the render window. That window may not be on the default
+ * visual (see pick_visual), so a pixel from the default colormap means nothing
+ * there; on TrueColor the pixel is just the colour packed by the visual's
+ * masks, with nothing to allocate.
+ */
+static unsigned long cpix(Ui *u, const char *spec)
+{
+    XColor c;
+
+    if (!XParseColor(u->dpy, u->canvas_cmap, (char *)spec, &c)) {
+        return (unsigned long)to_visual(u, 0);
+    }
+    return (unsigned long)to_visual(u, ((tess_u32)(c.red >> 8) << 16) |
+                                       ((tess_u32)(c.green >> 8) << 8) |
+                                       (tess_u32)(c.blue >> 8));
+}
+
 static void recreate_ximage(Ui *u)
 {
     if (u->ximg) {
@@ -584,6 +604,9 @@ static void recreate_ximage(Ui *u)
                            (unsigned)u->height, 32, 0);
     if (!u->ximg) {
         die("XCreateImage failed");
+    }
+    if (u->ximg->bits_per_pixel != 32) {
+        die("the render window's visual does not store 32 bits per pixel");
     }
 }
 
@@ -637,7 +660,7 @@ static void hud_draw(Ui *u)
     if (!u->hudgc) {
         XGCValues gcv;
 
-        gcv.foreground = BlackPixel(d, DefaultScreen(d));
+        gcv.foreground = cpix(u, "black");
         u->hudgc = XCreateGC(d, win, (unsigned long)GCForeground, &gcv);
         if (u->statsfont) {
             XSetFont(d, u->hudgc, u->statsfont->fid);
@@ -649,15 +672,15 @@ static void hud_draw(Ui *u)
     x = 12;
     y = 12;
 
-    XSetForeground(d, u->hudgc, pix(u, "#101519"));
+    XSetForeground(d, u->hudgc, cpix(u, "#101519"));
     XFillRectangle(d, win, u->hudgc, x, y, (unsigned)wdt, (unsigned)hgt);
-    XSetForeground(d, u->hudgc, pix(u, "#6fc0d4"));
+    XSetForeground(d, u->hudgc, cpix(u, "#6fc0d4"));
     XDrawRectangle(d, win, u->hudgc, x, y, (unsigned)wdt, (unsigned)hgt);
 
     dt = u->epoch_t0 > 0.0 ? now_secs() - u->epoch_t0 :
          u->last_msec / 1000.0;
 
-    XSetForeground(d, u->hudgc, pix(u, "#e6eaed"));
+    XSetForeground(d, u->hudgc, cpix(u, "#e6eaed"));
     sprintf(line, "epoch %u", u->job.epoch);
     XDrawString(d, win, u->hudgc, x + 8, y + 16, line, (int)strlen(line));
     sprintf(line, "%d/%d tiles   %.2f s", u->tiles_in, u->tiles_expected, dt);
@@ -681,7 +704,7 @@ static void hud_draw(Ui *u)
             bw = wdt - 16;
         }
         XSetForeground(d, u->hudgc,
-                       pix(u, tess_cluster_rank_colour(u->cl, i)));
+                       cpix(u, tess_cluster_rank_colour(u->cl, i)));
         XFillRectangle(d, win, u->hudgc, x + 8 + (i - 1) * 4, y + 52,
                        3, (unsigned)(bw / 8 + 1));
     }
@@ -2006,6 +2029,42 @@ static void build_control(Ui *u)
  * app-defaults file under /usr/lib/X11/app-defaults/Tess overrides all of it,
  * which is the point of the resource class being the framework, not the module.
  */
+/*
+ * The render window's visual: 24-bit TrueColor, which is what the framebuffer
+ * is written for, one 32-bit pixel per point packed by the visual's masks.
+ *
+ * lucy's V12 offers that by default, so this used to just take the default.
+ * arthur's InfiniteReality defaults to something narrower, and the frame came
+ * out as diagonal smears: four bytes a pixel read as fewer, so every row
+ * landed off its own start. Only the render window moves to the 24-bit
+ * visual. The control panel is an ordinary Motif window and stays on the
+ * default, along with everything that allocates colours there.
+ */
+static void pick_visual(Ui *u)
+{
+    Display *d = u->dpy;
+    int scr = DefaultScreen(d);
+    XVisualInfo vi;
+
+    u->visual = DefaultVisual(d, scr);
+    u->depth = DefaultDepth(d, scr);
+    u->canvas_cmap = DefaultColormap(d, scr);
+    if (u->visual->class == TrueColor && u->depth >= 24) {
+        return;
+    }
+    if (!XMatchVisualInfo(d, scr, 24, TrueColor, &vi)) {
+        die("this display has no 24-bit TrueColor visual for the render "
+            "window (xdpyinfo lists what it has)");
+    }
+    u->visual = vi.visual;
+    u->depth = vi.depth;
+    u->canvas_cmap = XCreateColormap(d, RootWindow(d, scr), vi.visual,
+                                     AllocNone);
+    fprintf(stderr, "tess-ui: the default visual is not 24-bit TrueColor; "
+            "the render window uses visual 0x%lx\n",
+            (unsigned long)vi.visualid);
+}
+
 static String fallbacks[] = {
     "*sgiMode: True",
     "*useSchemes: none",
@@ -2100,8 +2159,26 @@ int main(int argc, char **argv)
         }
     }
 
-    u.toplevel = XtVaAppInitialize(&app, "Tess", (XrmOptionDescList)0, 0,
-                                  &argc, argv, fallbacks, NULL);
+    /*
+     * Open the display by hand rather than through XtVaAppInitialize, because
+     * the render window's visual has to be chosen before its shell exists:
+     * Xt fixes a widget's depth and colormap when it is created.
+     */
+    XtToolkitInitialize();
+    app = XtCreateApplicationContext();
+    XtAppSetFallbackResources(app, fallbacks);
+    u.dpy = XtOpenDisplay(app, (String)0, (String)0, "Tess",
+                          (XrmOptionDescList)0, 0, &argc, argv);
+    if (!u.dpy) {
+        die("cannot open the display: is DISPLAY set?");
+    }
+    pick_visual(&u);
+    u.toplevel = XtVaAppCreateShell((String)0, "Tess",
+                                    applicationShellWidgetClass, u.dpy,
+                                    XtNvisual, u.visual,
+                                    XmNdepth, u.depth,
+                                    XmNcolormap, u.canvas_cmap,
+                                    NULL);
     u.app = app;
 
     /*
@@ -2345,9 +2422,6 @@ int main(int argc, char **argv)
     }
     u.tick = XtAppAddTimeOut(app, 200, tick_cb, (XtPointer)&u);
 
-    u.dpy = XtDisplay(u.toplevel);
-    u.visual = DefaultVisual(u.dpy, DefaultScreen(u.dpy));
-    u.depth = DefaultDepth(u.dpy, DefaultScreen(u.dpy));
     u.cmap = DefaultColormap(u.dpy, DefaultScreen(u.dpy));
     u.statsfont = XLoadQueryFont(u.dpy,
                                  "-*-screen-medium-r-normal--10-*-*-*-*-*-iso8859-1");
@@ -2372,8 +2446,8 @@ int main(int argc, char **argv)
         XGCValues gcv;
 
         gcv.function = GXxor;
-        gcv.foreground = WhitePixel(u.dpy, DefaultScreen(u.dpy)) ^
-                         BlackPixel(u.dpy, DefaultScreen(u.dpy));
+        gcv.foreground = (unsigned long)(to_visual(&u, 0xffffffUL) ^
+                                         to_visual(&u, 0));
         gcv.line_width = 0;
         gcv.subwindow_mode = IncludeInferiors;
         u.bandgc = XCreateGC(u.dpy, XtWindow(u.canvas),

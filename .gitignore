@@ -10,3 +10,9 @@ build/
 
 # a captured tess-preflight run, scratch
 preflight.out
+
+# per-host notes from scripts/tess-sysinfo, for setup
+sysinfo/
+
+# AppleDouble metadata macOS writes beside files it edits over the share
+._*

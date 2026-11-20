@@ -1,0 +1,81 @@
+#!/bin/sh
+#
+# tess-sysinfo - write down what this host is, for setting up the cluster.
+#
+# One file per host in sysinfo/ at the top of the tree, so the setup can be
+# planned from the files rather than from pasted terminal output. Read-only:
+# it changes nothing on the host. Run it as root on each SGI:
+#
+#   sh /cluster/dev/sgi-tess/scripts/tess-sysinfo
+#
+# arrayd.auth holds the array's keys under AUTHENTICATION SIMPLE. Only the
+# AUTHENTICATION lines are copied, with any key replaced, so the file is safe
+# to leave on the share.
+#
+# Bourne shell: IRIX /bin/sh, no GNU tools.
+
+DIR=`cd \`dirname $0\`/.. 2>/dev/null && pwd`
+HOST=`hostname | sed 's/\..*//'`
+OUT=$DIR/sysinfo
+mkdir -p $OUT || exit 1
+F=$OUT/$HOST.txt
+
+section() {
+    echo ""
+    echo "=== $*"
+}
+
+{
+    section "when, who, what"
+    date -u
+    hostname
+    uname -a
+    id
+    section "hinv"
+    hinv
+    section "the share"
+    mount | grep cluster
+    df -k $DIR
+    section "software"
+    versions -b | egrep -i 'arraysvcs|mpt|motif|c_dev|compiler|swpkg|gmake|x_eoe|irix_dev|dev\.sw\.lib'
+    section "commands"
+    for c in cc gmake mpirun arshell ainfo ascheck arrayconfig gendist swpkg inst; do
+        which $c 2>&1
+    done
+    ls -l /usr/Motif-2.1/lib64/libXm.so 2>&1
+    section "array services"
+    chkconfig | egrep 'array|timeslave'
+    grep sgi-arrayd /etc/services
+    echo "--- ainfo arrays"
+    ainfo arrays 2>&1
+    echo "--- ainfo dfltarray"
+    ainfo dfltarray 2>&1
+    echo "--- ainfo machines"
+    ainfo machines 2>&1
+    echo "--- ascheck"
+    ascheck 2>&1
+    echo "--- arrayd.conf, without comments"
+    egrep -v '^[ 	]*(#|$)' /usr/lib/array/arrayd.conf 2>&1
+    echo "--- arrayd.auth, AUTHENTICATION lines only, keys hidden"
+    egrep -i '^[ 	]*#?[ 	]*authentication' /usr/lib/array/arrayd.auth 2>&1 |
+        sed 's/\([Kk][Ee][Yy][ 	]*\)[^ 	]*/\1<hidden>/g'
+    section "names"
+    egrep 'lucy|arthur|aurora' /etc/hosts
+    section "time"
+    ps -e | grep timeslave
+    cat /etc/config/timeslave.options 2>&1
+} > $F 2>&1
+
+# The manual pages the setup and packaging depend on, once, from whichever
+# host has them. Plain text so they can be read off the share.
+for m in arrayconfig arrayd.conf gendist swpkg; do
+    if [ ! -s $OUT/man-$m.txt ]; then
+        man $m 2>/dev/null | col -b > $OUT/man-$m.txt
+        if [ ! -s $OUT/man-$m.txt ]; then
+            rm -f $OUT/man-$m.txt
+        fi
+    fi
+done
+
+echo "wrote $F"
+ls $OUT
