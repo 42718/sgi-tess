@@ -40,6 +40,8 @@ VPATH    = $(COMMON):src/probe:src/preflight:src/node:src/ui
 
 INVENTORY_SRC = $(COMMON)/tess_inventory.c
 CHECK_SRC     = $(COMMON)/tess_check.c
+# sgi-tess.config, read by tess-ui and tess-preflight. libc only.
+CONFIG_SRC    = $(COMMON)/tess_config.c
 WIRE_SRC      = $(COMMON)/tess_wire.c
 MANDEL_SRC    = $(COMMON)/tess_mandel.c
 # Compute modules: one tess_mod_<name>.c each, picked up by wildcard, so
@@ -124,10 +126,10 @@ $(PROBE): src/probe/tess_probe.c $(INVENTORY_SRC) $(COMMON)/tess_inventory.h \
 preflight: $(PREFLT)
 
 $(PREFLT): src/preflight/tess_preflight.c $(CHECK_SRC) $(INVENTORY_SRC) \
-           $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h \
-           $(COMMON)/tess_version.h | $(BUILD)
+           $(CONFIG_SRC) $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h \
+           $(COMMON)/tess_config.h $(COMMON)/tess_version.h | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/preflight/tess_preflight.c $(CHECK_SRC) \
-	  $(INVENTORY_SRC)
+	  $(INVENTORY_SRC) $(CONFIG_SRC)
 
 # ---- tess-tiler: milestone 0. The 2001 row tiler, C89 corrected, kept
 #      buildable so there is always a working MPI backend to test the cluster
@@ -172,9 +174,10 @@ endif
 endif
 
 $(UI): $(UI_SRCS) $(COMMON_SRCS) $(COMMON_HDRS) $(CHECK_SRC) $(INVENTORY_SRC) \
-       $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h | $(BUILD)
+       $(CONFIG_SRC) $(COMMON)/tess_check.h $(COMMON)/tess_inventory.h \
+       $(COMMON)/tess_config.h | $(BUILD)
 	$(CC) $(UI_CFLAGS) -o $@ $(UI_SRCS) $(COMMON_SRCS) $(CHECK_SRC) \
-	  $(INVENTORY_SRC) $(UI_LIBS)
+	  $(INVENTORY_SRC) $(CONFIG_SRC) $(UI_LIBS)
 
 fresh:
 	@$(MAKE) clean
@@ -188,6 +191,7 @@ gate:
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(MANDEL_SRC) -o /dev/null
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(INVENTORY_SRC) -o /dev/null
 	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(CHECK_SRC) -o /dev/null
+	$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $(CONFIG_SRC) -o /dev/null
 	@for f in $(MODULE_SRCS); do \
 	  echo "$(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $$f -o /dev/null"; \
 	  $(CC) -std=c89 -pedantic -Wall -I$(COMMON) -c $$f -o /dev/null || exit 1; \

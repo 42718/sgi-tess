@@ -20,6 +20,7 @@
 
 #include "tess_check.h"
 #include "tess_version.h"
+#include "tess_config.h"
 
 #define MAXRESULTS 64
 
@@ -27,15 +28,17 @@ static void usage(const char *me)
 {
     fprintf(stderr,
             "usage: %s [-tree <path>] [-port <n>] [-compute] [-q] [-1]\n"
-            "          [-only <id>] [-version]\n"
-            "  -tree <path>  the shared tree (default /cluster/dev/sgi-tess)\n"
+            "          [-only <id>] [-config <file>] [-version]\n"
+            "  -config <f>   the settings file (default: sgi-tess.config, found\n"
+            "                from where this program is)\n"
+            "  -tree <path>  the shared tree (default: from the config)\n"
             "  -port <n>     the master's loopback port (default 7333)\n"
             "  -compute      skip the display-host checks: Motif, X, root, port\n"
-            "  -q            one line per check, no remedies\n"
-            "  -1            a single summary line, for a caller that wants a light\n",
+            "  -q            one line per check, no remedies\n",
             me);
     /* in two parts: C89 promises string literals of 509 characters only */
     fprintf(stderr,
+            "  -1            a single summary line, for a caller that wants a light\n"
             "  -only <id>    run just one check, stopping as soon as it has run.\n"
             "                Cheap enough to loop: -only clock\n"
             "  -version      print the version and exit\n");
@@ -57,14 +60,39 @@ int main(int argc, char **argv)
     char *p;
     char *nl;
     const char *only;
+    const char *cfgfile;
+    TessConfig cfg;
+    char cfgerr[600];
 
     tess_check_ctx_default(&ctx);
     quiet = 0;
     oneline = 0;
     only = (const char *)0;
 
+    /* The config first, so the switches below override it. */
+    cfgfile = (const char *)0;
+    for (i = 1; i + 1 < argc; i++) {
+        if (strcmp(argv[i], "-config") == 0) {
+            cfgfile = argv[i + 1];
+        }
+    }
+    if (tess_config_load(&cfg, cfgfile, argv[0], cfgerr,
+                         (int)sizeof cfgerr) != 0) {
+        fprintf(stderr, "%s: %s\n", argv[0], cfgerr);
+        return 2;
+    }
+    if (cfg.tree[0]) {
+        strncpy(ctx.tree, cfg.tree, sizeof ctx.tree - 1);
+        ctx.tree[sizeof ctx.tree - 1] = '\0';
+    }
+    if (cfg.port) {
+        ctx.port = cfg.port;
+    }
+
     for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-tree") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "-config") == 0 && i + 1 < argc) {
+            i++;                /* read above */
+        } else if (strcmp(argv[i], "-tree") == 0 && i + 1 < argc) {
             i++;
             strncpy(ctx.tree, argv[i], sizeof ctx.tree - 1);
             ctx.tree[sizeof ctx.tree - 1] = '\0';
@@ -146,6 +174,8 @@ int main(int argc, char **argv)
     }
 
     printf("tess-preflight %s\n", TESS_VERSION_LINE);
+    printf("config  %s\n", cfg.path[0] ? cfg.path :
+           "none found, built-in defaults");
     for (i = 0; i < n; i++) {
         printf("%-4s  %-12s %s\n", tess_check_status_name(r[i].status),
                r[i].id, r[i].detail);

@@ -64,6 +64,7 @@
 #include "tess_mandel.h"
 #include "tess_module.h"
 #include "tess_version.h"
+#include "tess_config.h"
 
 /*
  * Everything the panes edit. The descriptor tables below point into this by
@@ -164,6 +165,7 @@ typedef struct Ui {
     char       nonce[TESS_NONCE_LEN];
     char       tree[512];
     char       hostlist[256];
+    char       cfgnote[256];   /* which config was read, for the log */
 
     /* per-rank accounting, straight out of the tile headers */
     int        rank_tiles[64];
@@ -268,15 +270,46 @@ static void wm_metrics_save(const WmMetrics *m)
     fclose(f);
 }
 
+/*
+ * The machines in Array Services' default array, comma-separated, for when
+ * the config names none. ainfo prints them as "MACHINE lucy"; the launch
+ * script once looked for "machine" and found nothing.
+ */
+static void hosts_from_array(char *out, int len)
+{
+    char line[256], key[64], name[64];
+    FILE *f;
+    int n;
+
+    out[0] = '\0';
+    f = popen("ainfo machines 2>/dev/null", "r");
+    if (!f) {
+        return;
+    }
+    while (fgets(line, sizeof line, f)) {
+        if (sscanf(line, " %63s %63s", key, name) == 2 &&
+            (strcmp(key, "MACHINE") == 0 || strcmp(key, "machine") == 0)) {
+            n = (int)strlen(out);
+            if (n + (int)strlen(name) + 2 < len) {
+                if (n > 0) {
+                    strcat(out, ",");
+                }
+                strcat(out, name);
+            }
+        }
+    }
+    pclose(f);
+}
+
 static void usage(const char *me)
 {
     fprintf(stderr,
             "usage: %s [-hosts host,host,...] [-tree <path>] [-port <n>]\n"
             "          [-savedir <dir>] [-w <px>] [-height <px>] [-attach]\n"
-            "          [-host <name>] [-version] [-help]\n"
-            "  -hosts    the machines to offer in the Cluster pane. This one\n"
-            "            is always first: the master runs where the UI does\n"
+            "          [-host <name>] [-config <file>] [-version] [-help]\n"
+            "  -hosts    the machines for the Cluster pane, this one first\n"
             "  -tree     the shared tree, the same path on every host\n"
+            "  -config   settings file; default sgi-tess.config in the tree\n"
             "  -w        render window width, -height its height\n"
             "  -attach   connect to a master already running, start nothing\n",
             me);
@@ -2142,8 +2175,41 @@ int main(int argc, char **argv)
     tess_palette_default(&u.pal);
     strcpy(u.tree, "/cluster/dev/sgi-tess");
     strcpy(u.savedir, ".");
-    strcpy(u.hostlist, "lucy,aurora");
     u.port = TESS_DEFAULT_PORT;
+
+    /* sgi-tess.config, then the switches below override it. */
+    {
+        const char *cfgfile = (const char *)0;
+        TessConfig cfg;
+        char err[600];
+
+        for (i = 1; i + 1 < argc; i++) {
+            if (strcmp(argv[i], "-config") == 0) {
+                cfgfile = argv[i + 1];
+            }
+        }
+        if (tess_config_load(&cfg, cfgfile, argv[0], err,
+                             (int)sizeof err) != 0) {
+            die(err);
+        }
+        if (cfg.tree[0]) {
+            strncpy(u.tree, cfg.tree, sizeof u.tree - 1);
+        }
+        if (cfg.savedir[0]) {
+            strncpy(u.savedir, cfg.savedir, sizeof u.savedir - 1);
+        }
+        if (cfg.port) {
+            port = cfg.port;
+        }
+        if (cfg.hosts[0]) {
+            strncpy(u.hostlist, cfg.hosts, sizeof u.hostlist - 1);
+            sprintf(u.cfgnote, "config: %.200s", cfg.path);
+        } else {
+            hosts_from_array(u.hostlist, (int)sizeof u.hostlist);
+            sprintf(u.cfgnote, "config: %.150s; hosts from ainfo",
+                    cfg.path[0] ? cfg.path : "none found");
+        }
+    }
     u.val.ramp = u.pal.ramp;
     u.val.cycles = u.pal.cycles;
     u.val.rotate = u.pal.rotate;
@@ -2155,7 +2221,9 @@ int main(int argc, char **argv)
     wm_metrics_load(&wm);
 
     for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-host") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "-config") == 0 && i + 1 < argc) {
+            i++;                /* read above */
+        } else if (strcmp(argv[i], "-host") == 0 && i + 1 < argc) {
             host = argv[++i];
         } else if (strcmp(argv[i], "-port") == 0 && i + 1 < argc) {
             port = atoi(argv[++i]);
@@ -2185,6 +2253,7 @@ int main(int argc, char **argv)
         }
     }
     fprintf(stderr, "tess-ui %s\n", TESS_VERSION_LINE);
+    u.port = port;              /* before the Cluster pane copies it */
 
     /*
      * Open the display by hand rather than through XtVaAppInitialize, because
@@ -2446,6 +2515,7 @@ int main(int argc, char **argv)
     job_to_values(&u);
     build_control(&u);
     ui_log(&u, "Tess " TESS_VERSION_LINE);
+    ui_log(&u, u.cfgnote);
     if (u.pending_log[0]) {
         ui_log(&u, u.pending_log);
     }

@@ -21,7 +21,7 @@
 # shebang. No loops in the caller's shell, no GNU tools.
 
 ARRAY=          # empty: use arrayd.conf's default array. -a names another.
-MASTER=lucy
+MASTER=`hostname | sed 's/\..*//'`   # the master runs where this does; -m names another
 HOSTS=
 DIR=`cd \`dirname $0\`/.. 2>/dev/null && pwd`
 BIN=
@@ -57,9 +57,20 @@ done
 # given the real flags.
 ARGS="$*"
 
-# Host list: what the array says, unless told otherwise.
+# Host list and array: -H and -a, else sgi-tess.config, else what the array
+# says. ainfo prints "MACHINE lucy"; this used to look for "machine" and
+# found nothing.
+CFG=$DIR/sgi-tess.config
+if [ -f "$CFG" ]; then
+    if [ -z "$HOSTS" ]; then
+        HOSTS=`sed -n -e 's/#.*//' -e 's/^[ 	]*hosts[ 	][ 	]*//p' $CFG | tr ',' ' '`
+    fi
+    if [ -z "$ARRAY" ]; then
+        ARRAY=`sed -n -e 's/#.*//' -e 's/^[ 	]*array[ 	][ 	]*\([^ 	]*\).*/\1/p' $CFG`
+    fi
+fi
 if [ -z "$HOSTS" ]; then
-    HOSTS=`ainfo machines 2>/dev/null | sed -n 's/^[ 	]*machine[ 	][ 	]*\([^ 	]*\).*/\1/p'`
+    HOSTS=`ainfo machines 2>/dev/null | sed -n 's/^[ 	]*[Mm][Aa][Cc][Hh][Ii][Nn][Ee][ 	][ 	]*\([^ 	]*\).*/\1/p'`
     if [ -z "$HOSTS" ]; then
         echo "$0: ainfo machines gave nothing. Is arrayd running?" >&2
         echo "$0: pass -H host,host,... to go anyway." >&2

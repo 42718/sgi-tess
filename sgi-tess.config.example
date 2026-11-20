@@ -1,0 +1,36 @@
+# sgi-tess.config - this site's settings for Tess.
+#
+# Copy to sgi-tess.config at the top of the tree, or let scripts/tess-setup
+# write one for you. Every machine reads the same file over the share, so it
+# is set once for the whole cluster. tess-ui and tess-preflight find it from
+# where they are installed; switches on their command lines still win.
+#
+# One setting per line: a key, then its value. "#" starts a comment.
+
+# The shared tree: the same path on every machine, where each machine's
+# build/<arch> directory is. Leave it out and the tree is wherever this file
+# is.
+tree      /cluster/dev/sgi-tess
+
+# The machines in the cluster, by the names Array Services uses. tess-ui
+# offers these in its Cluster pane, and puts the machine it runs on first,
+# because the master runs there. Leave it out to use every machine in the
+# array, from "ainfo machines".
+hosts     lucy arthur aurora
+
+# The Array Services array they are in, as "ainfo arrays" names it. Leave it
+# out to use the default array.
+array     42718
+
+# The loopback port the master listens on for tess-ui.
+port      7333
+
+# Where Save writes images. Leave it out for the directory tess-ui started in.
+# savedir   /cluster/images
+
+# Addresses, for tess-setup only: when a machine cannot resolve one of the
+# hosts, tess-setup -apply offers to add this line to its /etc/hosts. Plain
+# names, as Array Services and mpirun use them.
+# address   lucy    192.0.2.8
+# address   arthur  192.0.2.17
+# address   aurora  192.0.2.16

@@ -16,3 +16,6 @@ sysinfo/
 
 # AppleDouble metadata macOS writes beside files it edits over the share
 ._*
+
+# this site's settings; sgi-tess.config.example is the template
+sgi-tess.config

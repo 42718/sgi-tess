@@ -164,18 +164,21 @@ cd /cluster/dev/sgi-tess
 ./build/IP30/tess-ui
 ```
 
-The defaults match a standard layout, so that bare form is the same as spelling out
-`-hosts lucy,aurora -tree /cluster/dev/sgi-tess -port 7333`.
+The defaults come from `sgi-tess.config` at the top of the tree (see
+`sgi-tess.config.example`), so the bare form runs the cluster the config describes. Without
+a config, the hosts are every machine in the array and the tree is
+`/cluster/dev/sgi-tess`.
 
 | Switch | Default | What it does |
 |---|---|---|
-| `-hosts a,b,c` | `lucy,aurora` | the cluster. The machine the UI runs on is always moved to the front, or added if missing: the master runs there |
-| `-tree <path>` | `/cluster/dev/sgi-tess` | where the binaries live, on every machine |
+| `-hosts a,b,c` | the config's `hosts`, else every machine `ainfo machines` lists | the cluster. The machine the UI runs on is always moved to the front, or added if missing: the master runs there |
+| `-tree <path>` | the config's `tree`, else where the config is | where the binaries live, on every machine |
 | `-port <n>` | `7333` | loopback port the master listens on |
 | `-savedir <path>` | `.` | where saved images go |
 | `-w <px>` / `-height <px>` | fitted to the screen | fixed frame size, for reproducible output |
 | `-attach` | off | attach to a job already running instead of launching one |
 | `-host <name>` | `localhost` | attach to a master somewhere else |
+| `-config <file>` | `sgi-tess.config` in the tree | the settings file. Found from where `tess-ui` is; the switches here override it |
 | `-version` | | print the version and exit |
 | `-h` / `-help` | | print the switches and exit |
 
