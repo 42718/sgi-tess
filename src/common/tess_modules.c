@@ -15,9 +15,11 @@
 #include "tess_module.h"
 
 extern const TessModule tess_mod_mandel;
+extern const TessModule tess_mod_julia;
 
 static const TessModule *const modules[] = {
     &tess_mod_mandel,
+    &tess_mod_julia
 };
 
 #define NMODULES ((int)(sizeof modules / sizeof modules[0]))
