@@ -294,8 +294,13 @@ aurora# netstat -an | grep SYN_SENT
                                                           <- nothing
 ```
 
-Forcing the transport fixes it, set **on every host** — do not rely on it propagating
-from the launching host:
+Forcing the transport fixes it. This was first written as "set it on every host, do not
+rely on it propagating from the launching host". A later run did not bear that out: on
+20 November a `tess-ui` job launched from arthur, with `MPI_USE_TCP=1` in `mpirun`'s
+environment only, ran with ranks on lucy whose shells do not set it, and no host sets
+it in `/.cshrc`. Without it in `mpirun`'s environment the same job hung. `tess-ui` now
+sets it for every `mpirun` it starts, unless another `MPI_USE_*` is set. For a job you
+start by hand, set it in the launching shell:
 
 ```sh
 setenv MPI_USE_TCP 1

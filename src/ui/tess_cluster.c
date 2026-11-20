@@ -710,8 +710,8 @@ static void poll_cb(XtPointer cd, XtIntervalId *id)
         clog1(c, "gave up waiting for the master: mpirun is still");
         clog1(c, "running but no master is listening. Its own output is");
         clog1(c, "in the terminal tess-ui was started from. Stop, then");
-        clog1(c, "check each host: csh -c true must print nothing, and");
-        clog1(c, "every host needs setenv MPI_USE_TCP 1 in /.cshrc.");
+        clog1(c, "check each host: csh -c true must print nothing. Then");
+        clog1(c, "try mpi-hello across the same hosts: doc/MPI-HELLO.md.");
         return;
     }
     c->poll = XtAppAddTimeOut(c->app, 300, poll_cb, (XtPointer)c);
@@ -841,9 +841,9 @@ void tess_cluster_launch(TessCluster *c)
          * a multi-host job can hang there: every rank spinning, no error, and
          * no master ever listening (doc/MPI-HELLO.md, trap 6). It first hit a
          * new host, arthur, whose shell had not been given the variable. So
-         * pin TCP unless the user chose a transport. This covers the ranks on
-         * this host only; MPT does not reliably pass it on, which is why every
-         * host's /.cshrc still needs it.
+         * pin TCP unless the user chose a transport. Set here, for mpirun, it
+         * was enough: on 20 November a job from arthur ran with lucy's ranks
+         * having no MPI_USE_TCP of their own, and no host sets it in /.cshrc.
          */
         if (!getenv("MPI_USE_TCP") && !getenv("MPI_USE_GM") &&
             !getenv("MPI_USE_HIPPI") && !getenv("MPI_USE_GSN") &&

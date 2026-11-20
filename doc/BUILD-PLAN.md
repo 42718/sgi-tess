@@ -213,7 +213,21 @@ memory and CPU figures against `tess-probe -v` on each host.
 
 ---
 
-## Build 6 — Prove it is a framework, and cut the seam
+## Build 6 — Prove it is a framework, and cut the seam — **module half CLOSED 20 November 2026; the seam is open**
+
+**Where it stands.** The module half is done. Julia went in as `bfe7d81`:
+`git diff --stat` shows `src/common/tess_mod_julia.c` plus two lines in
+`tess_modules.c`, nothing else. The module contract it needed (opening values,
+a home view, one parameter setting others) went in the commit before, with only
+the Mandelbrot set using it. Switching Fractal at runtime starts a new epoch on
+the running job, no relaunch. Rendered on lucy and aurora, then on arthur.
+
+The link seam has not been started: the transport is still MPI calls inline in
+`tess_node.c`. Tagged `v1.0-beta` with this half open, which the tag message
+overstates as "builds 1 to 6".
+
+### Original definition
+
 
 **Do.** Add a second compute module — Julia sets are the cheapest honest choice,
 orbit traps the prettiest — implemented **only** as a `TessModule` plus its
@@ -236,7 +250,8 @@ relaunch.
 
 ## After the six
 
-The framework is done and the GM work has somewhere to live:
+The framework is done and the GM work has somewhere to live once the link seam
+is cut:
 
 - **Raw GM behind the seam.** Measured 50.9 MB/s against MPT-over-GM's 10.1, on
   the same wire, with our protocol. `doc/GM-MPT-INTEROP.md` has the numbers.
@@ -246,5 +261,14 @@ The framework is done and the GM work has somewhere to live:
 - **Tess reading PCP.** Dropped from build 5. PCP already gathers from the
   array on its own; a reason to read it back here would be history or
   `pmlogger` graphs in the panel, not current figures.
+
+- **A fixed image size, independent of the window.** Asked for on 20 November:
+  set the frame to 800×500 and keep it, or to 10000×10000 for a print, with
+  the window scaling to fit and saying that it does. Sizing to think about
+  first: at 10000×10000 the GUI would hold about 800 MB (3 bytes of iteration
+  data, 4 of shaded pixel and 1 of owner per point) and each frame moves about
+  300 MB of tiles to the master. So large frames probably stream their tiles
+  to a file as they arrive and show a scaled preview, rather than living in
+  the window's framebuffer. The cluster gets a proper workout either way.
 
 Any of them is a good winter project. None blocks anything above.
